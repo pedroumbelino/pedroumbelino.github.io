@@ -2581,7 +2581,11 @@ const UNAME=Object.fromEntries(UMOD);
 const UMODTIP={circ:"Saída nova no barramento, já com disjuntor",dj:"Disjuntor (curva B, C ou D); pode ter proteção diferencial incorporada",dif:"Interruptor diferencial; largado num barramento cria um grupo com barramento próprio",int:"Interruptor, seccionador ou interruptor-seccionador",ct:"Contactor com bobina",bot:"Botoneira de corte de emergência; atua sobre a bobina de disparo do aparelho de cima",rel:"Interruptor horário (relógio)",tr:"Transformador",fus:"Fusível ou interruptor-seccionador fusível"};
 const UPOLN={"1P":1,"1P+N":2,"2P":2,"3P":3,"3P+N":4,"4P":4};
 const UPOLS=["1P","1P+N","2P","3P","3P+N","4P"];
-const UCW=24, UGAP=5;
+let UCW=24; const UGAP=5;
+// aspeto da folha do esquema (por quadro em q.st): tamanhos de letra, larguras, alinhamentos e linhas da tabela
+const UST_DEF={fd:1.9,ft:2,cw:24,dor:"v",da:"b",hd:40,hc:22,hide:{}};
+let UST={...UST_DEF};
+function uStyle(q){const s=q&&q.st||{}; return {...UST_DEF,...s,hide:{...(s.hide||{})}}}
 const uEsc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const uN=v=>{const x=parseFloat(String(v==null?"":v).replace(",",".")); return isFinite(x)?x:0};
 const uF=(v,d)=>String(+(+v).toFixed(d==null?2:d)).replace(".",",");
@@ -2731,10 +2735,10 @@ function uParFactor(q){const P=q.root&&q.root.par||[]; if(!P.length)return 1; co
  const grp=[]; for(let i=0;i<NS;i++){const k=P.findIndex((pn,kk)=>S[kk+1]===i&&pn.ib&&pn.ib.on); grp[i]=i>0&&k>=0&&P[k].ib.est==="NF"?grp[i-1]:i}
  const G={}; ys.forEach((y,j)=>{const g=grp[S[j]]; G[g]=(G[g]||0)+y}); return Math.max(1,Math.max(...Object.values(G))/y1)}
 function uLx(d){let r=0; try{uDevPrims(d).forEach(p=>{const xs=p.k==="l"?[p.x1,p.x2]:p.k==="pl"?p.pts.map(q=>q[0]):p.k==="c"?[p.x+p.r]:p.k==="t"?[]:[p.x]; xs.forEach(x=>r=Math.max(r,x))})}catch(e){} return Math.max(3.4,r+1.4)}
-function uLayout(q){ const NET=netCalc(), NQ=NET.q[q.nome];
+function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.q[q.nome];
  const LM=new Map(), P=[], hits=[], slots=[]; const tri=q.ph==="3F";
  const need=devs=>{let l=5,r=6; devs.forEach(d=>{uDevPrims(d).forEach(p=>{const xs=p.k==="l"?[p.x1,p.x2]:p.k==="pl"?p.pts.map(q=>q[0]):p.k==="c"?[p.x-p.r,p.x+p.r]:[p.x]; xs.forEach(x=>{l=Math.max(l,-x+2); r=Math.max(r,x+2)})});
-   {const lx=uLx(d); uDevLabels(d).forEach(t=>r=Math.max(r,lx+String(t).length*1.9*.58+2))}}); return {l,r}};
+   {const lx=uLx(d); uDevLabels(d).forEach(t=>r=Math.max(r,lx+String(t).length*UST.fd*.58+2))}}); return {l,r}};
  const W=n=>{let w=UCW, nd=null; if(n.kids&&n.kids.length){w=0; n.kids.forEach(k=>w+=W(k)); w=Math.max(UCW,w)} else {nd=need(n.devs); w=Math.max(UCW,nd.l+nd.r)} LM.set(n,{w,nd}); return w};
  W(q.root);
  const X=(n,x0)=>{const m=LM.get(n); m.x0=x0; if(n.kids&&n.kids.length){let x=x0; n.kids.forEach(k=>{X(k,x); x+=LM.get(k).w}); m.cx=(LM.get(n.kids[0]).cx+LM.get(n.kids[n.kids.length-1]).cx)/2} else m.cx=m.nd?x0+m.nd.l+(m.w-m.nd.l-m.nd.r)/2:x0+UCW/2};
@@ -2781,7 +2785,7 @@ function uLayout(q){ const NET=netCalc(), NQ=NET.q[q.nome];
   L(cx,m.y0,cx,m.y0+UGAP,{ex:exW});
   n.devs.forEach((d,i)=>{const y=m.dy[i], pv=i?n.devs[i-1]:null;
    uDevPrims(d,pv&&pv.t,pv?uH(pv):0).forEach(p=>{ if(p.k==="l"){p.x1+=cx;p.x2+=cx;p.y1+=y;p.y2+=y} else if(p.k==="pl"){p.pts=p.pts.map(q=>[q[0]+cx,q[1]+y])} else {p.x+=cx;p.y+=y} add(p)});
-   uDevLabels(d).forEach((s,j)=>T(cx+uLx(d),y+4.4+j*2.7,s,{h:1.9,ex:!!d.ex,b:j===0&&!!d.tag}));
+   uDevLabels(d).forEach((s,j)=>T(cx+uLx(d),y+4.4+j*UST.fd*1.42,s,{h:UST.fd,ex:!!d.ex,b:j===0&&!!d.tag}));
    hits.push({k:"dev",nid:n.id,i,x:cx-11.5,y,w:23,h:uH(d)});
   });
   for(let i=0;i<=n.devs.length;i++)slots.push({k:"chain",nid:n.id,i,x:cx,y:i<n.devs.length?m.dy[i]:m.ye});
@@ -2804,28 +2808,35 @@ function uLayout(q){ const NET=netCalc(), NQ=NET.q[q.nome];
  // entradas em paralelo (por exemplo, dois transformadores para o mesmo barramento)
  PAR.forEach((pn,k)=>{const cx=PARX[k], rmm=LM.get(q.root); let y=TOP+UGAP; L(cx,TOP-9,cx,TOP+UGAP); add({k:"pl",pts:[[cx-1,TOP-10.8],[cx+1,TOP-10.8],[cx,TOP-9]],cl:true,fill:true,lay:"EQ"});
   pn.devs.forEach((d,i)=>{const pv=i?pn.devs[i-1]:null; uDevPrims(d,pv&&pv.t,pv?uH(pv):0).forEach(p=>{ if(p.k==="l"){p.x1+=cx;p.x2+=cx;p.y1+=y;p.y2+=y} else if(p.k==="pl"){p.pts=p.pts.map(q=>[q[0]+cx,q[1]+y])} else {p.x+=cx;p.y+=y} add(p)});
-   uDevLabels(d).forEach((t,j)=>T(cx+uLx(d),y+4.4+j*2.7,t,{h:1.9,ex:!!d.ex,b:j===0&&!!d.tag})); hits.push({k:"dev",nid:pn.id,i,x:cx-11.5,y,w:23,h:uH(d)}); slots.push({k:"chain",nid:pn.id,i,x:cx,y}); y+=uH(d)});
+   uDevLabels(d).forEach((t,j)=>T(cx+uLx(d),y+4.4+j*UST.fd*1.42,t,{h:UST.fd,ex:!!d.ex,b:j===0&&!!d.tag})); hits.push({k:"dev",nid:pn.id,i,x:cx-11.5,y,w:23,h:uH(d)}); slots.push({k:"chain",nid:pn.id,i,x:cx,y}); y+=uH(d)});
   slots.push({k:"chain",nid:pn.id,i:pn.devs.length,x:cx,y}); L(cx,y,cx,rmm.by); add({k:"c",x:cx,y:rmm.by,r:.55,fill:true,lay:"BR"}); T(cx+2.5,TOP-9.4,"Entrada "+(k+2),{h:2,b:true}); hits.push({k:"par",nid:pn.id,x:cx-2,y:TOP-13,w:24,h:6})});
  // entrada
  const rm=LM.get(q.root);
  L(rm.cx,TOP-9,rm.cx,TOP); add({k:"pl",pts:[[rm.cx-1,TOP-10.8],[rm.cx+1,TOP-10.8],[rm.cx,TOP-9]],cl:true,fill:true,lay:"EQ"});
  const al=[]; if(q.alim)al.push("Alimentação: "+q.alim); if(q.orig)al.push("Origem: "+q.orig); if(PAR.length)al.unshift("Entrada 1"); al.forEach((s,j)=>T(rm.cx+2.5,TOP-9.4+j*2.8,s,{h:2,b:PAR.length&&!j}));
  // quadro de circuitos (tabela)
- const rows=[["Circuito",8],["Designação",40],["Cabo",22],["Comprimento (m)",8],["Potência (kW)",8],["ΔU total (%)",8]]; if(tri)rows.push(["Fase",8]);
- const HW=30, X0=rm.x0, XR=rm.x0+rm.w; let y=yt; const ry=[y]; rows.forEach(r=>{y+=r[1]; ry.push(y)}); const yb=y;
+ const ft=+UST.ft||2, rh0=Math.max(8,ft*3.6);
+ const rows=[["c","Circuito",rh0],["d","Designação",+UST.hd||40],["k","Cabo",+UST.hc||22],["L","Comprimento (m)",rh0],["p","Potência (kW)",rh0],["u","ΔU total (%)",rh0],...(tri?[["f","Fase",rh0]]:[])].filter(r=>r[0]==="c"||!UST.hide[r[0]]);
+ const RI={}; rows.forEach((r,i)=>RI[r[0]]=i);
+ const HW=Math.max(30,ft*15), X0=rm.x0, XR=rm.x0+rm.w; let y=yt; const ry=[y]; rows.forEach(r=>{y+=r[2]; ry.push(y)}); const yb=y; const mid=k=>(ry[RI[k]]+ry[RI[k]+1])/2;
  ry.forEach(yy=>L(X0-HW,yy,XR,yy,{lay:"TB"}));
  L(X0-HW,yt,X0-HW,yb,{lay:"TB"});
  const vx=new Set([X0,XR]); cols.forEach(c=>{const m=LM.get(c); vx.add(+m.x0.toFixed(3)); vx.add(+(m.x0+m.w).toFixed(3))}); vx.forEach(x=>L(x,yt,x,yb,{lay:"TB"}));
- rows.forEach((r,i)=>T(X0-HW+1.5,(ry[i]+ry[i+1])/2,r[0],{h:2,v:"m",lay:"TB"}));
+ rows.forEach((r,i)=>T(X0-HW+1.5,(ry[i]+ry[i+1])/2,r[1],{h:ft,v:"m",lay:"TB"}));
  cols.forEach(c=>{ if(!c.circ)return; const m=LM.get(c), cx=m.cx, ci=c.circ, ex=!!ci.ex, k=leaves.indexOf(c);
-  T(cx,(ry[0]+ry[1])/2,ci.ref||("C"+(k+1)),{a:"m",v:"m",h:2.2,ex,b:true,lay:"TB"});
-  const vert=(txt,row,max,lines)=>{const ls=uWrap(txt,max,lines); ls.forEach((s,j)=>T(cx+(j-(ls.length-1)/2)*3,ry[row+1]-1.5,s,{rot:-90,v:"m",h:2,ex,lay:"TB"}))};
-  vert(ci.des,1,26,3); vert(String(ci.cabo||"").replace(/\+(?=\S)/g,"+ "),2,13,3);
-  const nr=NET.leaf[c.id];
-  if(nr&&nr.L)T(cx,(ry[3]+ry[4])/2,uF(nr.L,1),{a:"m",v:"m",h:2,ex,lay:"TB"});
-  if(nr&&nr.feed)T(cx,(ry[4]+ry[5])/2,uF(uLeafP(c)),{a:"m",v:"m",h:2,ex,lay:"TB"}); else if(ci.p!==""&&ci.p!=null)T(cx,(ry[4]+ry[5])/2,uF(uN(ci.p)),{a:"m",v:"m",h:2,ex,lay:"TB"});
-  if(nr&&!nr.feed&&nr.L)T(cx,(ry[5]+ry[6])/2,uF(nr.dT),{a:"m",v:"m",h:2,ex,lay:"TB",err:nr.dT>nr.lim&&uN(ci.p)>0,b:nr.dT>nr.lim&&uN(ci.p)>0});
-  if(tri)T(cx,(ry[6]+ry[7])/2,fases.get(c.id)||"",{a:"m",v:"m",h:2,ex,lay:"TB"});
+  T(cx,mid("c"),ci.ref||("C"+(k+1)),{a:"m",v:"m",h:ft*1.1,ex,b:true,lay:"TB"});
+  // texto comprido (designação, cabo): na vertical ou na horizontal, em baixo, ao centro ou em cima
+  const cell=(key,txt)=>{const i=RI[key]; if(i==null)return; const top=ry[i], bot=ry[i+1], H=bot-top, h=ft, da=UST.da||"b";
+   if(UST.dor==="h"){const lh=h*1.35, maxc=Math.max(4,Math.floor((m.w-2.5)/(h*.74))), nl=Math.max(1,Math.floor((H-2)/lh)), ls=uWrap(txt,maxc,nl);
+    const y0=da==="t"?top+1.2+h*.8:da==="m"?(top+bot)/2-(ls.length-1)*lh/2+h*.35:bot-1.4-(ls.length-1)*lh; ls.forEach((t,j)=>T(cx,y0+j*lh,t,{a:"m",h,ex,lay:"TB"}))}
+   else {const maxc=Math.max(4,Math.floor((H-3)/(h*.66))), nl=Math.max(1,Math.min(4,Math.floor((m.w-2)/(h*1.5)))), ls=uWrap(txt,maxc,nl), yy=da==="t"?top+1.5:da==="m"?(top+bot)/2:bot-1.5, a=da==="t"?"e":da==="m"?"m":"s";
+    ls.forEach((t,j)=>T(cx+(j-(ls.length-1)/2)*h*1.5,yy,t,{rot:-90,v:"m",a,h,ex,lay:"TB"}))}};
+  cell("d",ci.des); cell("k",String(ci.cabo||"").replace(/\+(?=\S)/g,"+ "));
+  const nr=NET.leaf[c.id], tx=(key,v,o)=>{ if(RI[key]!=null)T(cx,mid(key),v,{a:"m",v:"m",h:ft,ex,lay:"TB",...(o||{})})};
+  if(nr&&nr.L)tx("L",uF(nr.L,1));
+  if(nr&&nr.feed)tx("p",uF(uLeafP(c))); else if(ci.p!==""&&ci.p!=null)tx("p",uF(uN(ci.p)));
+  if(nr&&!nr.feed&&nr.L){const bad=nr.dT>nr.lim&&uN(ci.p)>0; tx("u",uF(nr.dT),{err:bad,b:bad})}
+  if(tri)tx("f",fases.get(c.id)||"");
   hits.push({k:"node",nid:c.id,x:m.x0,y:m.ye,w:m.w,h:yb-m.ye});
  });
  // enquadramento na folha: formato A3…A0 (ou maior), moldura como nas plantas, coluna da VR à direita
@@ -3075,6 +3086,11 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
   else h+=`<div class="small">Alimentado pelo quadro «${uEsc(r.parent)}». A origem, o esquema de terra e a RA vêm de «${uEsc(r.root)}».</div>`;
   h+='<div id="ucQ">'+uFields([["ks","Coeficiente de simultaneidade (0 a 1)","num",null,"1"],...(!root&&!Object.values(N.cabInfo).some(ci=>ci.ref==="alimentação de "+q.nome)?[["alimL","Comprimento da alimentação (m)","num"]]:[])],q)+'</div>';
   h+='<div id="unicasc">'+uCascHTML(q)+'</div>'+uBtns([["ubNet","Ver a instalação toda","Todos os quadros em árvore, com potências, quedas de tensão e Icc"]]);}
+ {const st=uStyle(q), sel=(k,l,ops)=>`<div class="row"><label>${l}</label><select data-sk="${k}">${ops.map(o=>{const [v,t]=Array.isArray(o)?o:[o,String(o).replace(".",",")]; return `<option value="${v}" ${String(st[k])===String(v)?"selected":""}>${t}</option>`}).join("")}</select></div>`;
+  h+='<h3>Aspeto da folha</h3><div id="uniSt">'+sel("fd","Letra dos aparelhos (mm)",[1.5,1.7,1.9,2.2,2.5,3])+sel("ft","Letra da tabela (mm)",[1.6,1.8,2,2.3,2.6,3])+sel("cw","Largura mínima das colunas (mm)",[16,20,24,28,32,38,45])
+   +sel("dor","Designação e cabo",[["v","Na vertical"],["h","Na horizontal"]])+sel("da","Alinhamento",[["b","Em baixo"],["m","Ao centro"],["t","Em cima"]])+sel("hd","Altura da linha «Designação» (mm)",[20,25,30,40,50,60,80])+sel("hc","Altura da linha «Cabo» (mm)",[10,14,18,22,28,35])
+   +'<div class="small" style="padding:4px 10px 0">Linhas da tabela</div>'+[["L","Comprimento"],["p","Potência"],["u","ΔU total"],["f","Fase"]].map(([k,l])=>`<div class="row"><label>${l}</label><input type="checkbox" data-sh="${k}" ${st.hide[k]?"":"checked"}></div>`).join("")
+   +uBtns([["ubStAll","Aplicar a todos os quadros"],["ubStRst","Repor"]])+'</div>'}
  h+='<h3>Folha</h3><div class="small" style="padding:4px 10px">O carimbo usa os dados das Peças escritas (promotor, técnico, obra, data), como nas plantas.</div>'+uFields([["dn","Desenho n.º","text",null,"ex.: ELE.02.01"]],q)+uBtns([["ubCb","Editar carimbo…","Mostrar ou retirar secções (promotor, coordenador…) e reescrever os valores só nesta folha"]]);
  h+=`<div class="row" style="display:block"><label for="uf_notas">Notas (uma por parágrafo)</label><textarea id="uf_notas" data-k="notas" rows="4" style="width:100%;margin-top:4px;font:inherit;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:5px">${uEsc(q.notas||"")}</textarea></div>`;
  { const it=uLegItems(q); h+='<h3>Simbologia</h3><div class="small" style="padding:4px 10px">Entram todos os aparelhos usados no esquema. Desmarque para retirar; o texto pode ser reescrito.</div>'+(it.length?'<div class="leglist">'+it.map(i=>`<div class="legit"><input type="checkbox" data-ulk="${uEsc(i.key)}" ${i.hidden?"":"checked"}><input type="text" data-ult="${uEsc(i.key)}" value="${uEsc(i.s)}" placeholder="${uEsc(i.def)}"></div>`).join("")+'</div>':'<div class="small" style="padding:4px 10px">(sem aparelhos)</div>')}
@@ -3083,6 +3099,11 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
   box.querySelectorAll("[data-ulk]").forEach(c=>c.onchange=()=>{uPush(); const L=cf(); if(c.checked)delete L.hide[c.dataset.ulk]; else L.hide[c.dataset.ulk]=1; uRender(); saveLocal()});
   box.querySelectorAll("[data-ult]").forEach(t=>t.onchange=()=>{uPush(); const L=cf(), v=t.value.trim(); if(!v||v===t.placeholder)delete L.txt[t.dataset.ult]; else L.txt[t.dataset.ult]=v; uRender(); saveLocal()})}
  uOn("ubAdd",()=>uAddCirc(q.root.id)); uOn("ubImp",uImportCables);
+ { const sb=$("uniSt"); if(sb){const st=()=>{q.st=q.st||{}; return q.st};
+  sb.querySelectorAll("[data-sk]").forEach(el=>el.onchange=()=>{uPush(); const k=el.dataset.sk; st()[k]=/^(dor|da)$/.test(k)?el.value:+el.value; uRender(); saveLocal()});
+  sb.querySelectorAll("[data-sh]").forEach(el=>el.onchange=()=>{uPush(); const S2=st(); S2.hide=S2.hide||{}; if(el.checked)delete S2.hide[el.dataset.sh]; else S2.hide[el.dataset.sh]=1; uRender(); saveLocal()});
+  uOn("ubStAll",()=>{uPush(); uDoc().qs.forEach(o=>{o.st=JSON.parse(JSON.stringify(q.st||{}))}); uRender(); saveLocal(); toast("Aspeto aplicado a todos os esquemas.",2500)});
+  uOn("ubStRst",()=>{uPush(); delete q.st; uRender(); uProps(); saveLocal()})}}
  uOn("ubCb",()=>{const L=uLayout(q); uPush(); cbDialog(uCbHolder(q,L.W,L.H),{title:"Esquema unifilar\n"+(q.nome||"")},null,()=>{uRender(); saveLocal()})});
  uOn("ubPar",()=>{uPush(); const c=JSON.parse(JSON.stringify(q.root.devs)); (q.root.par=q.root.par||[]).push({id:uId(),devs:c}); uDone(); toast("Entrada em paralelo criada. Clique em «Entrada N» no esquema para lhe dar barramento próprio com interbarras.",4500)}); uOn("ubParDel",()=>{uPush(); uParDel(q,q.root.par.length-1); uDone()}); uOn("ubNet",uNetDialog);
  if($("ucSrc"))uBind($("ucSrc"),q.src,k=>{ if(k==="tipo")setTimeout(uProps,0)}); if($("ucQ"))uBind($("ucQ"),q); uSum()}
@@ -4542,7 +4563,7 @@ Object.assign(UFD,{
   case "trp":return {t,s:"500",u:"15/0,4",ucc:"4",lig:"Dyn11",iso:"Seco"}; case "ger":return {t,s:"356",u:"400/230 V",reg:"Socorro"}; case "ups":return {t,s:"10",u:"400/400 V",aut:"10 min"};
   case "ti":return {t,rel:"1000/5",cl:"0,5",n:"3"}; case "kwh":return {t,tipo:"ti",txt:""}; case "ana":return {t,txt:"Analisador de energia",com:"Modbus RTU"};
   case "dst":return {t,tipo:"T1+T2",imax:"25",up:"1,5",prot:"gG 125 A"}; case "sin":return {t,n:"3",cor:""}; case "bc":return {t,q:"50",esc:"5"}} return _d(t,ph)}}
-{const _h=uH; const base=d=>({trp:22,ger:16,ups:16,mtim:18,mtqm:20,mtdm:18,mtcm:16,ats:18,ib:16,ti:10,kwh:10,ana:10,dst:12,sin:12,bc:14})[d.t]||_h(d); uH=function(d){let n=0; try{n=uDevLabels(d).length}catch(e){} return Math.max(base(d),Math.ceil(5.6+n*2.7))}}
+{const _h=uH; const base=d=>({trp:22,ger:16,ups:16,mtim:18,mtqm:20,mtdm:18,mtcm:16,ats:18,ib:16,ti:10,kwh:10,ana:10,dst:12,sin:12,bc:14})[d.t]||_h(d); uH=function(d){let n=0; try{n=uDevLabels(d).length}catch(e){} return Math.max(base(d),Math.ceil(5.6+n*(typeof UST!=="undefined"?UST.fd*1.42:2.7)))}}
 {const _p=uDevPrims; uDevPrims=function(d,prevT,prevH){const t=d.t; if(!UFD[t]||["dj","dif","int","ct","bot","rel","tr","fus"].includes(t))return _p(d,prevT,prevH);
  const o=[], ex=!!d.ex, H=uH(d); const L=(x1,y1,x2,y2,dash)=>o.push({k:"l",x1,y1,x2,y2,dash,lay:"EQ",ex}), PL=(pts,cl,fill,dash)=>o.push({k:"pl",pts,cl,fill,dash,lay:"EQ",ex}), C=(x,y,r,fill)=>o.push({k:"c",x,y,r,fill,lay:"EQ",ex}), T=(x,y,s,h,a)=>o.push({k:"t",x,y,s,h:h||2.2,a:a||"m",v:"m",lay:"EQ",ex});
  const blade=(x,y0,y1)=>L(x,y1,x-3.4,y0+.4), earth=(x,y)=>{L(x,y,x,y+1.4); L(x-1.4,y+1.4,x+1.4,y+1.4); L(x-.9,y+2,x+.9,y+2); L(x-.4,y+2.6,x+.4,y+2.6)};
