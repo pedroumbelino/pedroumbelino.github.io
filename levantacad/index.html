@@ -1086,12 +1086,12 @@ function onDown(x,y,btn,ev){
  if(t==="cable"){const p=snapPt(x,y,S.tmp&&S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]); if(!S.tmp)S.tmp={pts:[p]}; else {const lp=S.tmp.pts[S.tmp.pts.length-1]; if(Math.hypot(p[0]-lp[0],p[1]-lp[1])*S.view.s<4){finishCable();return} S.tmp.pts.push(p)} draw(); return}
  if(t==="select"){
   const lg=!(ev.shiftKey||ev.ctrlKey)&&pickLabelGrip(x,y);
-  if(lg){S.drag={lab:{e:lg.e,o0:[...(lg.e.lbOff||[0,0])],x0:x,y0:y},moved:false}; hint("A mover a etiqueta. Para a repor, use «Repor posição» nas Propriedades."); return}
+  if(lg){S.drag={lab:{e:lg.e,o0:[...(lg.e.lbOff||[0,0])],x0:x,y0:y},moved:false,x0:x,y0:y}; hint("A mover a etiqueta. Para a repor, use «Repor posição» nas Propriedades."); return}
   const mg=!(ev.shiftKey||ev.ctrlKey)&&!pickGrip(x,y)&&pickMidGrip(x,y);
-  if(mg){pushUndo(); insVert(mg.e,mg.i+1,mg.p); const vs=vertsOf(mg.e); S.sel=new Set([mg.e]); S.drag={grip:{e:mg.e,i:mg.i+1},orig:[mg.p[0],mg.p[1]],fix:[vs[mg.i][0],vs[mg.i][1]],moved:true}; hint("Nó novo: arraste para o pôr no sítio."); refreshProps(); draw(); return}
+  if(mg){S.drag={mid:mg,x0:x,y0:y,moved:false}; hint("Arraste para criar um nó novo neste troço."); return}
   const gp=!(ev.shiftKey||ev.ctrlKey)&&pickGrip(x,y);
   if(gp){const vs=vertsOf(gp.e); const o=vs[gp.i]; const fix=gp.e.t==="line"?vs[1-gp.i]:(vs[gp.i-1]||vs[gp.i+1]);
-   S.sel=new Set([gp.e]); S.drag={grip:gp,orig:[o[0],o[1]],fix:[fix[0],fix[1]],moved:false}; hint("A mover a ponta; a outra fica fixa."); refreshProps(); draw(); return}
+   S.sel=new Set([gp.e]); S.drag={grip:gp,orig:[o[0],o[1]],fix:[fix[0],fix[1]],moved:false,x0:x,y0:y}; hint("A mover a ponta; a outra fica fixa."); refreshProps(); draw(); return}
   const e=pick(x,y);
   if(e){ if(ev.shiftKey||ev.ctrlKey){S.sel.has(e)?S.sel.delete(e):S.sel.add(e)} else if(!S.sel.has(e)){S.sel=new Set([e])}
    const bp=snapPt(x,y); S.drag={move:true,x0:bp[0],y0:bp[1],lx:bp[0],ly:bp[1],moved:false}; }
@@ -1128,6 +1128,9 @@ function onDown(x,y,btn,ev){
 }
 function onMove(x,y,ev){
  S.mouse.x=x;S.mouse.y=y; $("sx").textContent=(x).toFixed(2); $("sy").textContent=(y).toFixed(2);
+ // só começa a arrastar depois de o dedo ou o rato andar um pouco (toques e cliques não mexem nos objetos)
+ if(S.tool==="select"&&S.drag&&!S.drag.moved&&!S.drag.box&&S.drag.x0!=null){const thr=((ev&&ev.pointerType==="touch")?14:5)/S.view.s; if(Math.hypot(x-S.drag.x0,y-S.drag.y0)<thr){draw(); return}
+  if(S.drag.mid){const mg=S.drag.mid; pushUndo(); insVert(mg.e,mg.i+1,mg.p); const vs=vertsOf(mg.e); S.sel=new Set([mg.e]); S.drag={grip:{e:mg.e,i:mg.i+1},orig:[mg.p[0],mg.p[1]],fix:[vs[mg.i][0],vs[mg.i][1]],moved:true}; hint("Nó novo: largue onde o quer."); refreshProps()}}
  if(S.tool==="select"&&S.drag&&S.drag.grip){const d=S.drag; S.gripSkip=d.orig; let p=snapPt(x,y,d.fix); S.gripSkip=null; $("sSnap").textContent=S.hover?("Snap: "+S.hover[2]):"";
   S.cons=null; if(ev&&ev.ctrlKey){const c=gripConstrain(d,p,x,y); if(c){p=c.p; S.cons=c; $("sSnap").textContent=c.label}}
   if(!d.moved){pushUndo(); d.moved=true} setVert(d.grip.e,d.grip.i,p); draw(); return}
@@ -1153,7 +1156,7 @@ function evW(ev){const r=cv.getBoundingClientRect(); return S2W(ev.clientX-r.lef
 cv.addEventListener("contextmenu",e=>e.preventDefault());
 cv.addEventListener("dblclick",ev=>{const [x,y]=evW(ev); onDblEdit(x,y)});
 cv.addEventListener("pointerdown",ev=>{cv.setPointerCapture(ev.pointerId); S.pointers.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
- if(S.pointers.size===2){S.drag=null; S.tmpPinchCancel=true; const [a,b]=[...S.pointers.values()]; S.pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2}; return}
+ if(S.pointers.size===2){ if(S.drag&&S.drag.moved&&(S.drag.grip||S.drag.move||S.drag.lab)){S.drag=null; undo(); toast("Dois dedos: zoom. O que se tinha mexido foi anulado.",2500)} S.drag=null; S.tmpPinchCancel=true; const [a,b]=[...S.pointers.values()]; S.pinch={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2}; return}
  if(ev.button===1||(ev.button===0&&ev.altKey)||S.space){ if(S.space)S.spaceUsed=true; S.pan={x:ev.clientX,y:ev.clientY}; return}
  if(ev.pointerType==="touch"){S.touchStart={x:ev.clientX,y:ev.clientY,t:Date.now(),ev}; S.longT=setTimeout(()=>{const st=S.touchStart; S.touchStart=null; if(!st)return; const [x0,y0]=evW(st.ev); onDown(x0,y0,2,st.ev)},650); return}
  const [x,y]=evW(ev); onDown(x,y,ev.button,ev)});
