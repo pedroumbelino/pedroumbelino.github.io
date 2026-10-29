@@ -495,7 +495,7 @@ async function flushLocal(why){clearTimeout(saveT); saveT=null; if(!PROJ)return;
   if(why==="file"||ts-LC_HISTTS>LC_HISTGAP||why==="before"){LC_HISTTS=ts; const h=(await idbGet(LC_DOCKEY+":hist"))||[]; h.unshift({ts,json,st,why:why||"auto"}); let tot=h.reduce((a,v)=>a+v.json.length,0); while(h.length>1&&(h.length>LC_HISTN||tot>150e6)){tot-=h.pop().json.length} await idbPut(LC_DOCKEY+":hist",h)}
   saveStatus()}
  catch(e){console.error(e); LC_STORE_OK=false; saveStatus(); if(!S._warnStore){S._warnStore=1; toast("Atenção: este navegador não está a deixar guardar automaticamente ("+(e&&e.message||e)+"). Use «Guardar» com frequência.",9000)}}}
-function saveLocal(){LC_DIRTY=true; clearTimeout(saveT); saveT=setTimeout(flushLocal,400); saveStatus()}
+function saveLocal(){LC_VER++; LC_DIRTY=true; clearTimeout(saveT); saveT=setTimeout(flushLocal,400); saveStatus()}
 window.addEventListener("pagehide",()=>flushLocal()); document.addEventListener("visibilitychange",()=>{if(document.hidden)flushLocal()});
 function loadLocal(){try{const t=localStorage.getItem(LC_DOCKEY); if(t){const d=JSON.parse(t); if(d&&(d.v===1||d.v===2))return projWrap(d)}}catch(e){} return null}
 // no arranque: se a cópia em IndexedDB for mais recente (ou o localStorage não tinha espaço), usa-a
@@ -773,7 +773,7 @@ function entLen(e){ if(e.t==="line")return Math.hypot(e.x2-e.x1,e.y2-e.y1)*S.doc
 
 /* ================= Índice espacial (snap, parede, seleção) ================= */
 let IDX=null;
-function rebuildIndex(){
+function rebuildIndex(){ if(typeof LC_VER!=="undefined")LC_VER++;
  const cell=2*U(); const segs=[], pts=[], circs=[];
  const addCirc=(x,y,r,a0,a1,quad)=>{ if(!(r>0))return; circs.push([x,y,r,a0,a1]); if(quad)[0,90,180,270].forEach(a=>{ if(a0==null||angIn(a,a0,a1))pts.push([x+r*Math.cos(a*Math.PI/180),y+r*Math.sin(a*Math.PI/180),"quadrante"])})};
  const addSeg=(ax,ay,bx,by,src)=>segs.push([ax,ay,bx,by,src]);
@@ -890,6 +890,7 @@ function render(){
   if(e.t==="sym"){const L=labelOf(e); if(L)drawText(L,G.strokeStyle)}
   G.globalAlpha=1;
  }
+ riserDrawNotes(light?"#6b21a8":"#c4b5fd");
  wcMarks();
  // pegas das pontas
  if(S.tool==="select"){G.fillStyle="#3b82f6"; S.sel.forEach(e=>vertsOf(e).forEach(v=>{const [a,b]=W2S(v[0],v[1]); G.fillRect(a-4,b-4,8,8)}));
@@ -1101,7 +1102,7 @@ function onDown(x,y,btn,ev){
  if(t==="line"){lineAdd(snapPt(x,y,S.tmp&&S.tmp.p)); return}
  if(t==="circle"){const p=snapPt(x,y); if(!S.tmp){S.tmp={c:p}} else {const r=Math.hypot(p[0]-S.tmp.c[0],p[1]-S.tmp.c[1]); if(r>0){pushUndo(); addEnt({t:"circle",x:S.tmp.c[0],y:S.tmp.c[1],r}); rebuildIndex()} S.tmp=null} draw(); return}
  if(t==="text"){const p=snapPt(x,y); ask("Texto",[{k:"s",l:"Texto (Enter = nova linha com \\n)",v:""}],o=>{ if(!o.s)return; pushUndo(); addEnt({t:"text",x:p[0],y:p[1],h:S.doc.textH*U(),s:o.s.replace(/\\n/g,"\n"),rot:Math.round(VR()*180/Math.PI*100)/100}); refreshQty(); draw()}); return}
- if(t==="sym"&&S.sym){const p=symPlacement(x,y); pushUndo(); noteSymCmd(); addEnt({t:"sym",sym:S.sym,x:p.x,y:p.y,rot:p.rot,scale:1,...(S.symFlip?{flip:true}:{}),...(symOptList(S.sym)&&Object.keys(symCurOpt()).length?{opt:{...symCurOpt()}}:{}),layer:(SYM[S.sym].lay&&S.autoLayer)?ensureLayer(SYM[S.sym].lay):curLayer(),label:""}); rebuildIndex(); refreshQty(); draw(); return}
+ if(t==="sym"&&S.sym){const p=symPlacement(x,y); pushUndo(); noteSymCmd(); addEnt({t:"sym",sym:S.sym,x:p.x,y:p.y,rot:p.rot,scale:1,...(S.symFlip?{flip:true}:{}),...(symOptList(S.sym)&&Object.keys(symCurOpt()).length?{opt:{...symCurOpt()}}:{}),layer:(SYM[S.sym].lay&&S.autoLayer)?ensureLayer(SYM[S.sym].lay):curLayer(),label:S.sym==="subida"?nextRiserRef():""}); if(S.sym==="subida")toast("Subida «"+S.doc.ents[S.doc.ents.length-1].label+"». Ponha outra com a mesma referência na planta do outro piso para ligar os cabos.",4000); rebuildIndex(); refreshQty(); draw(); return}
  if(t==="circ"){ if(!S.tmp||!S.tmp.list)S.tmp={list:[],edit:null}; const e=pickSym(x,y);
   if(e){const i=S.tmp.list.indexOf(e); if(i>=0)S.tmp.list.splice(i,1); else S.tmp.list.push(e); circHint(); draw(); return}
   S.cbox={x0:x,y0:y}; return}
@@ -1385,7 +1386,7 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  ch("pTx",el=>one.s=el.value.replace(/\\n/g,"\n")); ch("pTh",el=>one.h=(parseFloat(el.value)||.15)*U()); ch("pR",el=>one.r=(parseFloat(el.value)||.1)*U());
 }
 function quantities(){const rows=new Map(); const lens=new Map(); const cabs=new Map(); const bad=[]; const esps=new Map();
- S.doc.ents.forEach(e=>{ if(e.t==="cable"){const r=cabCalc(e); if(!r.ok)bad.push(e); const k=r.desig+(e.exist?" (existente)":""); const o=cabs.get(k)||{L:0,n:0,cond:CTYPES[r.c.type].multi?0:cabCond(r.c),s:r.s}; o.L+=r.L; o.n++; cabs.set(k,o); return}
+ S.doc.ents.forEach(e=>{ if(e.t==="cable"){const r=cabCalc(e); if(!r.ok)bad.push(e); const k=r.desig+(e.exist?" (existente)":""); const o=cabs.get(k)||{L:0,n:0,cond:CTYPES[r.c.type].multi?0:cabCond(r.c),s:r.s}; o.L+=cabLenQty(e); o.n++; cabs.set(k,o); return}
   if(e.t==="sym"){const k=e.layer+"|"+symName(e)+(e.exist?" (existente)":""); rows.set(k,(rows.get(k)||0)+1)}
   else if(e.t==="pl"&&e.esp){const k=espTipoN(e.esp.tipo); const o=esps.get(k)||{n:0,A:0}; o.n++; o.A+=espArea(e); esps.set(k,o)}
   else if(e.t==="line"||e.t==="arc"||(e.t==="pl"||e.t==="cable")){const k=e.layer+(e.exist?" (existente)":""); lens.set(k,(lens.get(k)||0)+entLen(e))}});
@@ -1664,7 +1665,51 @@ function cabDesig(c,s){const t=CTYPES[c.type], n=cabCond(c), S=fmtS(s);
  if(!t.multi)return (s<=6?"H07V-U":"H07V-R")+" "+n+"x"+S;
  const nm={VV:"VV",XV:"XV",XZ1:"XZ1",H05VVF:"H05VV-F"}[c.type]; return nm+" "+n+(c.comp==="pe"?"G":"x")+S}
 function num(v){const x=parseFloat(String(v==null?"":v).replace(",",".")); return isFinite(x)?x:0}
-function cabLen(e){let L=0; for(let i=1;i<e.pts.length;i++)L+=Math.hypot(e.pts[i][0]-e.pts[i-1][0],e.pts[i][1]-e.pts[i-1][1]); return L*((plantaOf(e)||S.doc).unit||1)+Math.max(0,num(e.c.extra))}
+/* ================= Circuitos entre pisos: subidas / descidas ligadas pela referência ================= */
+// Duas «Chegada / subida de cabos» com a mesma etiqueta (S1, S2…) em plantas diferentes ligam o cabo de um piso ao do outro.
+// O circuito passa a ter o comprimento dos troços dos vários pisos mais a diferença de cotas.
+let LC_VER=0; const RISER_CACHE=new Map();
+function isRiser(e){return e&&e.t==="sym"&&e.sym==="subida"}
+function riserRef(e){return String(e.label||"").trim().toUpperCase()}
+function plFloor(pl){return plantaRefSrc(pl)} // plantas que partilham a planta de fundo são o mesmo piso
+function plCota(pl){const f=plFloor(pl); return f.cota!=null&&f.cota!==""?+f.cota:null}
+function floorDelta(a,b){ if(plFloor(a)===plFloor(b))return {d:0,known:true}; const ca=plCota(a), cb=plCota(b); if(ca!=null&&cb!=null)return {d:Math.abs(cb-ca),known:true,up:cb>ca}; return {d:3,known:false,up:null}}
+function riserTol(pl){return .3*(pl.symScale||1)/(pl.unit||1)}
+function risersOf(pl){return pl.ents.filter(e=>isRiser(e)&&riserRef(e))}
+function endRiser(c,pl,end){const p=end?c.pts[c.pts.length-1]:c.pts[0], t=riserTol(pl); return risersOf(pl).find(r=>Math.hypot(r.x-p[0],r.y-p[1])<=t)||null}
+// percorre o circuito pelas subidas: devolve os troços, a parte vertical e o comprimento total
+function cabChain(e){const k=e.id+":"+LC_VER; if(RISER_CACHE.has(k))return RISER_CACHE.get(k); if(RISER_CACHE.size>4000)RISER_CACHE.clear();
+ let R=cabWalk(e,plantaOf(e)||S.doc); if(R.multi){ // começa sempre no troço que sai do quadro (ou no mais antigo), para a parte vertical ficar sempre no mesmo troço
+  const h=R.segs.find(x=>[x.c.pts[0],x.c.pts[x.c.pts.length-1]].some(q=>quadroAt(q,x.pl)))||R.segs.slice().sort((a,b)=>a.c.id-b.c.id)[0]; if(h.c!==e)R=cabWalk(h.c,h.pl)}
+ R.segs.forEach(x=>RISER_CACHE.set(x.c.id+":"+LC_VER,R)); return R}
+function cabWalk(e,pl0){ const segs=[], links=[], seen=new Set([e]); const own=(c,pl)=>{let L=0; for(let i=1;i<c.pts.length;i++)L+=Math.hypot(c.pts[i][0]-c.pts[i-1][0],c.pts[i][1]-c.pts[i-1][1]); return L*(pl.unit||1)+Math.max(0,num(c.c.extra))};
+ const Q=[{c:e,pl:pl0}];
+ while(Q.length){const {c,pl}=Q.shift(); segs.push({c,pl,L:own(c,pl)}); if(!PROJ)continue;
+  [false,true].forEach(end=>{const r=endRiser(c,pl,end); if(!r)return; const ref=riserRef(r);
+   PROJ.plantas.forEach(p2=>{ if(p2===pl||p2.diag)return; risersOf(p2).filter(x=>riserRef(x)===ref).forEach(r2=>{const t=riserTol(p2);
+     const cand=p2.ents.filter(x=>x.t==="cable"&&!seen.has(x)&&x.pts.length>1&&[x.pts[0],x.pts[x.pts.length-1]].some(q=>Math.hypot(q[0]-r2.x,q[1]-r2.y)<=t));
+     const same=cand.filter(x=>(x.c.circ||"")&&(x.c.circ||"")===(c.c.circ||"")), pick=same.length?same:(cand.length===1?cand:[]);
+     pick.forEach(x=>{seen.add(x); const fd=floorDelta(pl,p2); links.push({a:c,b:x,ref,pa:pl,pb:p2,d:fd.d,known:fd.known,up:fd.up}); Q.push({c:x,pl:p2})})})})})}
+ const vert=links.reduce((a,l)=>a+l.d,0), total=segs.reduce((a,s)=>a+s.L,0)+vert;
+ return {segs,links,vert,total,multi:segs.length>1}}
+// comprimento usado no cálculo: o circuito inteiro (todos os pisos e as subidas)
+function cabLen(e){return cabChain(e).total}
+// comprimento para as quantidades da planta: o troço desta planta e, no troço que chega à subida vindo do quadro, a parte vertical
+function cabLenQty(e){const R=cabChain(e), s=R.segs.find(x=>x.c===e); let L=s?s.L:0; R.links.forEach(l=>{ if(l.a===e)L+=l.d}); return L}
+function nextRiserRef(){const used=new Set(); (PROJ?PROJ.plantas:[S.doc]).forEach(p=>p.ents.forEach(e=>{ if(isRiser(e))used.add(riserRef(e))})); let i=1; while(used.has("S"+i))i++; return "S"+i}
+// texto junto de cada subida: para onde vai
+function riserNote(r,pl){ if(!PROJ)return ""; const ref=riserRef(r); if(!ref)return ""; const out=[];
+ PROJ.plantas.forEach(p2=>{ if(p2===pl||p2.diag||plFloor(p2)===plFloor(pl))return; if(risersOf(p2).some(x=>riserRef(x)===ref)){const fd=floorDelta(pl,p2); out.push((fd.up===true?"↑ sobe para ":fd.up===false?"↓ desce para ":"↕ liga a ")+(plFloor(p2).pname||p2.pname||"outro piso"))}});
+ return [...new Set(out)].join(" · ")}
+function riserDrawNotes(col){const pl=S.doc; risersOf(pl).forEach(r=>{ if(!layerOf(r).visible)return; const n=riserNote(r,pl); if(!n)return; const k=(S.doc.symScale||1)*U()*(r.scale||1); drawText({x:r.x+.18*k,y:r.y-.22*k,h:.075*k,s:n,rot:VR()*180/Math.PI},col)})}
+function cabChainHTML(e){const R=cabChain(e); if(!R.multi&&!endRiser(e,plantaOf(e)||S.doc,false)&&!endRiser(e,plantaOf(e)||S.doc,true))return "";
+ if(!R.multi)return `<div class="small" style="color:#f59e0b">⚠ Este cabo acaba numa subida, mas não encontrei a mesma referência noutro piso (ou há vários cabos lá e nenhum com o mesmo nome de circuito).</div>`;
+ const nm=p=>uEsc(p.pname||"planta"); let h='<div class="small" style="margin:4px 0"><b>Circuito entre pisos</b> · '+R.segs.length+' troços</div><table class="q">';
+ R.segs.forEach(s=>{h+=`<tr><td>${nm(s.pl)}${s.c===e?" (este)":""}</td><td class="n">${s.L.toFixed(1)} m</td></tr>`});
+ R.links.forEach(l=>{h+=`<tr><td>Subida ${uEsc(l.ref)}: ${nm(plFloor(l.pa))} → ${nm(plFloor(l.pb))}${l.known?"":" (cota por definir: 3 m)"}</td><td class="n">${l.d.toFixed(1)} m</td></tr>`});
+ h+=`<tr><td><b>Total do circuito</b></td><td class="n"><b>${R.total.toFixed(1)} m</b></td></tr></table>`;
+ if(R.links.some(l=>!l.known))h+='<div class="small">Defina a cota de cada piso em «⋯» junto ao nome da planta.</div>';
+ return h}
 function cabCalc(e){const c={...CAB_DEF,...e.c}; const t=CTYPES[c.type]||CTYPES.XV; const ins=t.ins, nl=c.ph==="3F"?3:2, meth=cabMethod(c);
  const L=cabLen(e), cos=Math.min(1,Math.max(.1,num(c.cos)||.9)), sin=Math.sqrt(1-cos*cos);
  let Ib=num(c.ib); const P=num(c.p); if(!(Ib>0)&&P>0)Ib=c.ph==="3F"?P*1000/(Math.sqrt(3)*400*cos):P*1000/(230*cos);
@@ -1767,12 +1812,12 @@ function cabLabelPos(e){let bi=1,bl=-1; for(let i=1;i<e.pts.length;i++){const l=
  const h=S.doc.textH*U()*.8, r0=ang*Math.PI/180, L=Math.hypot(b[0]-a[0],b[1]-a[1]), tw=h*.6*cabLabel(e).length;
  const ux=Math.cos(r0),uy=Math.sin(r0); const mx=(a[0]+b[0])/2-ux*Math.min(tw,L)/2, my=(a[1]+b[1])/2-uy*Math.min(tw,L)/2;
  return {x:mx-Math.sin(r0)*h*.5,y:my+Math.cos(r0)*h*.5,h,ang}}
-function cabPropsHTML(e){const r=cabCalc(e);
+function cabPropsHTML(e){const r=cabCalc(e), chainH=cabChainHTML(e);
  const ln=(k,v)=>`<tr><td>${k}</td><td class="n">${v}</td></tr>`; const ci=S.net&&S.net.cabInfo&&S.net.cabInfo[e.id];
  let h=`<div class="small"><b>${cabLabel(e,r)}</b>${e.c.sec==="auto"?" (secção automática)":""}</div>`+(ci?`<div class="small" style="color:var(--acc)">Circuito ${uEsc(ci.ref)} do quadro «${uEsc(ci.q)}» · queda a montante ${uF(S.net.cab[e.id])} % (automática, da cascata)</div>`:"")+`<table class="q">`+
-  ln("Comprimento",r.L.toFixed(1)+" m")+ln("Ib",r.Ib>0?r.Ib.toFixed(1)+" A":"-")+ln("In",r.In+" A "+(r.c.prot==="gG"?"gG":"DJ"))+
+  ln(cabChain(e).multi?"Comprimento (todos os pisos)":"Comprimento",r.L.toFixed(1)+" m")+ln("Ib",r.Ib>0?r.Ib.toFixed(1)+" A":"-")+ln("In",r.In+" A "+(r.c.prot==="gG"?"gG":"DJ"))+
   ln("Iz ("+r.meth+")",r.Iz?r.Iz+" A":"-")+ln("Iz corrigida",r.Izc?r.Izc.toFixed(1)+" A":"-")+ln("Queda de tensão",r.Ib>0?r.dU.toFixed(2)+" % (total "+r.dT.toFixed(2)+" %)":"-")+"</table>";
- h+=r.errs.map(x=>`<div class="small" style="color:var(--danger)">⚠ ${x}</div>`).join("")+r.notes.map(x=>`<div class="small">ℹ ${x}</div>`).join("");
+ h+=chainH; h+=r.errs.map(x=>`<div class="small" style="color:var(--danger)">⚠ ${x}</div>`).join("")+r.notes.map(x=>`<div class="small">ℹ ${x}</div>`).join("");
  if(r.ok&&r.Ib>0)h+=`<div class="small" style="color:var(--ok)">✓ Ib ≤ In ≤ Iz e queda de tensão dentro do limite (${r.lim} %).</div>`;
  return h+`<div class="small">A seta indica o sentido: o cabo sai da ponta com o ponto.</div><div class="row"><button id="pCirc" style="flex:1" title="Acrescentar ou tirar objetos (tomadas, pontos de luz) e voltar a traçar o cabo">Objetos do circuito…</button><button id="pRetr" title="Traçar de novo pelos mesmos objetos, com as regras atuais">Voltar a traçar</button></div><div class="row"><button id="pCab" style="flex:1">Editar cabo…</button><button id="pRev" title="Trocar a origem e o destino do cabo">Inverter sentido</button></div>`}
 
@@ -3632,12 +3677,14 @@ function newDialog(){ ask("Novo",[{k:"m",l:"O que quer começar",type:"select",v
   if(o.m==="pl")return newPlantaDialog();
   if(!window.confirm("Começar um projeto novo? O atual não guardado perde-se."))return; FILEH=null; S.img=null; setProject(projWrap(newDoc())); toast("Projeto novo.")})}
 function plantaOpts(){const p=S.doc, n=PROJ.plantas.length;
- ask("Planta «"+(p.pname||"")+"»",[{k:"n",l:"Nome",v:p.pname||""},{k:"esp",l:"Especialidade",type:"select",v:p.esp||"",opts:[["","Geral (todas as especialidades)"],...p.layers.filter(l=>l.name!=="Notas").map(l=>[l.name,l.name])]},
+ const fl=plantaRefSrc(p);
+ ask("Planta «"+(p.pname||"")+"»",[{k:"n",l:"Nome",v:p.pname||""},{k:"cota",l:"Cota do pavimento deste piso (m)"+(fl!==p?" (partilhada com «"+(fl.pname||"")+"», a mesma planta de fundo)":""),v:fl.cota!=null?String(fl.cota).replace(".",","):""},{k:"esp",l:"Especialidade",type:"select",v:p.esp||"",opts:[["","Geral (todas as especialidades)"],...p.layers.filter(l=>l.name!=="Notas").map(l=>[l.name,l.name])]},
   ...(n>1?[{k:"del",l:"Apagar esta planta (os desenhos dela perdem-se; a planta de fundo e os esquemas ficam)",type:"check",v:false}]:[])],o=>{
   if(o.del){ if(!confirm("Apagar a planta «"+p.pname+"»?"))return; const i=PROJ.plantas.indexOf(p);
    PROJ.plantas.forEach(q=>{ if(q.refOf===p.id){ q.refOf=undefined; delete q.refOf; q.ref=p.ref; q.bg=p.bg; q.refLayers=p.refLayers;
      PROJ.plantas.forEach(r=>{ if(r!==q&&r.refOf===p.id)r.refOf=q.id})}});
    PROJ.plantas.splice(i,1); UNDOS.delete(p.id); S.doc=null; projLink(PROJ); activatePlanta(Math.max(0,i-1)); return}
+  {const c=String(o.cota||"").trim().replace(",","."); if(c==="")delete fl.cota; else if(isFinite(+c))fl.cota=+c}
   p.pname=o.n||p.pname; p.esp=o.esp||""; if(p.esp&&layerByName(p.esp))p.active=p.esp; buildPalette(); refreshUI(); updPlantaUI(); saveLocal()})}
 function palEspOk(s){ if(!S.doc||!S.doc.esp||S.palAll)return true; return s.lay===S.doc.esp||s.lay==="Quadros"}
 // memória dos circuitos: próximo número livre num quadro, olhando para o esquema e para os cabos de todas as plantas
@@ -4216,6 +4263,7 @@ function plDraw(ctx,p,pageLayers,pageTitle){const P=plPaper(p), F=plFrame(p), V=
    ctx.beginPath(); drawGeom(e,false); ctx.stroke(); ctx.setLineDash([]);
    if(e.t==="cable"){drawCableLabel(e,col); drawTaps(e,col)}
    if(e.t==="sym"){const L=labelOf(e,true); if(L)drawText(L,col)} ctx.globalAlpha=1}
+  if(typeof riserDrawNotes==="function"&&S.doc.ents.some(e=>isRiser(e)&&pageLayers.includes(e.layer)))riserDrawNotes(p.col==="layers"?"#6b21a8":"#000");
   ctx.restore();
   // moldura e carimbo
   ctx.setLineDash([]); ctx.strokeStyle="#000"; ctx.lineWidth=5; ctx.beginPath(); ctx.rect(F.x*V,F.y*V,F.w*V,F.h*V); ctx.stroke();
