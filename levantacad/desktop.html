@@ -886,12 +886,13 @@ function render(){
   const dsh=ltDash(ltOf(e)); G.setLineDash(dsh.length?dsh.map(v=>v*3.2):[]);
   G.beginPath(); drawGeom(e,false); G.stroke(); G.setLineDash([]);
   if(e.t==="cable"){drawCableLabel(e,G.strokeStyle); drawTaps(e,G.strokeStyle); if(sel)drawCableDir(e,G.strokeStyle)}
-  if(e.t==="sym"&&e.label){const k=S.doc.symScale*U()*(e.scale||1); drawText({x:e.x+.18*k,y:e.y+.18*k,h:.1*k*1.2,s:e.label,rot:0},G.strokeStyle)}
+  if(e.t==="sym"){const L=labelOf(e); if(L)drawText(L,G.strokeStyle)}
   G.globalAlpha=1;
  }
  wcMarks();
  // pegas das pontas
  if(S.tool==="select"){G.fillStyle="#3b82f6"; S.sel.forEach(e=>vertsOf(e).forEach(v=>{const [a,b]=W2S(v[0],v[1]); G.fillRect(a-4,b-4,8,8)}));
+  if(S.sel.size<=60){G.fillStyle="#e8742c"; S.sel.forEach(e=>{const L=labelOf(e); if(!L)return; const [a,b]=W2S(L.x,L.y); G.beginPath(); G.moveTo(a,b-5); G.lineTo(a+5,b); G.lineTo(a,b+5); G.lineTo(a-5,b); G.closePath(); G.fill()})}
   if(S.sel.size<=20){G.strokeStyle="#3b82f6"; G.lineWidth=1.3; S.sel.forEach(e=>{ if(!(e.t==="pl"||e.t==="cable")||e.esp)return; const P=e.pts, n=P.length, m=e.closed&&n>2?n:n-1;
    for(let i=0;i<m;i++){const A=P[i], B=P[(i+1)%n]; const [a,b]=W2S((A[0]+B[0])/2,(A[1]+B[1])/2); if(Math.hypot(B[0]-A[0],B[1]-A[1])*S.view.s<=26)continue; G.fillStyle=isLight()?"#fff":"#15181d"; G.fillRect(a-4,b-4,8,8); G.strokeRect(a-4,b-4,8,8); G.beginPath(); G.moveTo(a-2.5,b); G.lineTo(a+2.5,b); G.moveTo(a,b-2.5); G.lineTo(a,b+2.5); G.stroke()}})}}
  // temporários
@@ -1084,6 +1085,8 @@ function onDown(x,y,btn,ev){
  if(t==="legpt"){pushUndo(); const e=addEnt({t:"leg",x,y,scale:1,layer:"Notas"}); S.sel=new Set([e]); setTool("select"); refreshProps(); saveLocal(); draw(); return}
  if(t==="cable"){const p=snapPt(x,y,S.tmp&&S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]); if(!S.tmp)S.tmp={pts:[p]}; else {const lp=S.tmp.pts[S.tmp.pts.length-1]; if(Math.hypot(p[0]-lp[0],p[1]-lp[1])*S.view.s<4){finishCable();return} S.tmp.pts.push(p)} draw(); return}
  if(t==="select"){
+  const lg=!(ev.shiftKey||ev.ctrlKey)&&pickLabelGrip(x,y);
+  if(lg){S.drag={lab:{e:lg.e,o0:[...(lg.e.lbOff||[0,0])],x0:x,y0:y},moved:false}; hint("A mover a etiqueta. Para a repor, use «Repor posição» nas Propriedades."); return}
   const mg=!(ev.shiftKey||ev.ctrlKey)&&!pickGrip(x,y)&&pickMidGrip(x,y);
   if(mg){pushUndo(); insVert(mg.e,mg.i+1,mg.p); const vs=vertsOf(mg.e); S.sel=new Set([mg.e]); S.drag={grip:{e:mg.e,i:mg.i+1},orig:[mg.p[0],mg.p[1]],fix:[vs[mg.i][0],vs[mg.i][1]],moved:true}; hint("Nó novo: arraste para o pôr no sítio."); refreshProps(); draw(); return}
   const gp=!(ev.shiftKey||ev.ctrlKey)&&pickGrip(x,y);
@@ -1128,6 +1131,7 @@ function onMove(x,y,ev){
  if(S.tool==="select"&&S.drag&&S.drag.grip){const d=S.drag; S.gripSkip=d.orig; let p=snapPt(x,y,d.fix); S.gripSkip=null; $("sSnap").textContent=S.hover?("Snap: "+S.hover[2]):"";
   S.cons=null; if(ev&&ev.ctrlKey){const c=gripConstrain(d,p,x,y); if(c){p=c.p; S.cons=c; $("sSnap").textContent=c.label}}
   if(!d.moved){pushUndo(); d.moved=true} setVert(d.grip.e,d.grip.i,p); draw(); return}
+ if(S.tool==="select"&&S.drag&&S.drag.lab){const d=S.drag, L=d.lab; if(!d.moved){pushUndo(); d.moved=true} L.e.lbOff=[L.o0[0]+x-L.x0,L.o0[1]+y-L.y0]; draw(); return}
  if(S.tool==="select"&&S.drag&&S.drag.move){const p=snapPt(x,y); const dx=p[0]-S.drag.lx,dy=p[1]-S.drag.ly; if(dx||dy){ if(!S.drag.moved){pushUndo();S.drag.moved=true} S.sel.forEach(e=>moveEnt(e,dx,dy)); S.drag.lx=p[0];S.drag.ly=p[1]} draw(); return}
  if(["line","circle","measure","calib","sym","text","cable","rotpick","pickpt","paste","viewalign","mv","plotwin"].includes(S.tool)){ if(S.tool!=="sym")snapPt(x,y,S.tmp&&(S.tmp.p||S.tmp.base||(S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]))); else S.hover=null; if((S.tool==="line"||S.tool==="cable")&&S.tmp&&S.ortho&&!S.hover){const p=snapPt(x,y,S.tmp.p||S.tmp.pts[S.tmp.pts.length-1]); S.mouse.x=p[0];S.mouse.y=p[1]} } else S.hover=null;
  $("sSnap").textContent=S.hover?("Snap: "+S.hover[2]):"";
@@ -1304,6 +1308,8 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
   <div class="row"><label>Espessura</label><select id="pLw">${lw===MIX?'<option value="__" selected>(várias)</option>':""}<option value="">Por camada</option>${LWS.map(w=>`<option value="${w}" ${String(w)===lw?"selected":""}>${String(w).replace(".",",")} mm</option>`).join("")}</select></div>`;
  h+=`<div class="row"><label>Transparência</label><select id="pTr">${tr===MIX?'<option value="__" selected>(várias)</option>':""}${[0,25,50,75].map(v=>`<option value="${v}" ${String(v)===tr?"selected":""}>${v} %</option>`).join("")}</select></div>`;
  h+=`<div class="row"><label>Existente (azul)</label><input type="checkbox" id="pEx" ${sel.every(e=>e.exist)?"checked":""}></div>`;
+ { const lab=sel.filter(e=>(e.t==="sym"&&e.label)||e.t==="cable"); if(lab.length){const vis=lab.every(e=>!e.lbHide&&!(e.t==="cable"&&e.c&&e.c.lab===false)), some=lab.some(e=>!e.lbHide&&!(e.t==="cable"&&e.c&&e.c.lab===false));
+  h+=`<div class="row"><label>Etiqueta visível</label><input type="checkbox" id="pLbV" ${vis?"checked":""} data-mix="${!vis&&some?1:""}"></div>`; if(lab.some(e=>e.lbOff))h+=`<div class="pbtns"><button id="pLbR" title="A etiqueta volta ao sítio automático">Repor posição da etiqueta</button></div>`}}
  h+=`<div class="pbtns"><button id="pSim" title="Seleciona todos os objetos do mesmo tipo e da mesma camada (e o mesmo símbolo)">Semelhantes</button>${one?`<button id="pCpP" title="Guarda camada, cor, tipo de linha, espessura e transparência deste objeto">Copiar prop.</button>`:""}${S.propClip?`<button id="pPsP" title="Aplica as propriedades copiadas à seleção">Colar prop.</button>`:""}</div>`;
  if(one){const m=v=>(v*S.doc.unit).toFixed(3), num=(id,l,v,st)=>`<div class="row"><label>${l}</label><input type="number" step="${st||0.01}" id="${id}" value="${v}"></div>`;
   if(one.t!=="leg")h+='<div class="psec">Geometria</div>';
@@ -1337,6 +1343,8 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  if($("pCol"))$("pCol").onclick=()=>colorPop($("pCol"),col===MIX?"":col,c=>{pushUndo(); sel.forEach(e=>{ if(c)e.col=c; else delete e.col}); refreshProps(); saveLocal(); draw()});
  ch("pLt",el=>sel.forEach(e=>{ if(el.value)e.lt=el.value; else delete e.lt})); ch("pLw",el=>sel.forEach(e=>{ if(el.value)e.lw=+el.value; else delete e.lw})); ch("pTr",el=>sel.forEach(e=>{ if(+el.value)e.tr=+el.value; else delete e.tr}));
  if($("pSim"))$("pSim").onclick=()=>selSimilar(sel);
+ { const v=$("pLbV"); if(v){ if(v.dataset.mix)v.indeterminate=true; v.onchange=()=>{pushUndo(); sel.forEach(e=>{ if(!((e.t==="sym"&&e.label)||e.t==="cable"))return; if(v.checked){delete e.lbHide; if(e.t==="cable"&&e.c&&e.c.lab===false)e.c.lab=true} else e.lbHide=true}); saveLocal(); draw()}}
+  if($("pLbR"))$("pLbR").onclick=()=>{pushUndo(); sel.forEach(e=>delete e.lbOff); refreshProps(); saveLocal(); draw()}}
  if($("pCpP"))$("pCpP").onclick=()=>{const e=one; S.propClip={layer:e.layer,col:e.col,lt:e.lt,lw:e.lw,tr:e.tr,exist:e.exist}; toast("Propriedades copiadas. Selecione outros objetos e use «Colar propriedades».",3000); refreshProps()};
  if($("pPsP"))$("pPsP").onclick=()=>propPaste();
  if(one&&one.t==="line"){const L0=()=>Math.hypot(one.x2-one.x1,one.y2-one.y1), A0=()=>Math.atan2(one.y2-one.y1,one.x2-one.x1);
@@ -1483,12 +1491,12 @@ function exportDXF(opts){
   else if((e.t==="pl"||e.t==="cable")){w(0,"POLYLINE");w(8,lay);col(e);w(66,1);w(10,0);w(20,0);w(30,0);w(70,e.closed?1:0); e.pts.forEach(p=>{w(0,"VERTEX");w(8,lay);w(10,p[0]);w(20,p[1]);w(30,0)}); w(0,"SEQEND");w(8,lay)}
   if(e.t==="cable"&&e.taps){const r=tapR(); e.taps.forEach(i=>{const v=e.pts[i]; if(!v||i>=e.pts.length-1)return; w(0,"POLYLINE");w(8,lay);col(e);w(66,1);w(10,0);w(20,0);w(30,0);w(70,1);w(40,r);w(41,r);
    [[v[0]-r/2,v[1]],[v[0]+r/2,v[1]]].forEach(q=>{w(0,"VERTEX");w(8,lay);w(10,q[0]);w(20,q[1]);w(30,0);w(42,1)}); w(0,"SEQEND");w(8,lay)})}
-  if(e.t==="cable"&&e.c.lab!==false){const p=cabLabelPos(e); w(0,"TEXT");w(8,lay);col(e);w(10,p.x);w(20,p.y);w(30,0);w(40,p.h);w(1,dxfStr(cabLabel(e)));w(50,p.ang)}
+  if(e.t==="cable"){const p=labelOf(e,true); if(p){w(0,"TEXT");w(8,lay);col(e);w(10,p.x);w(20,p.y);w(30,0);w(40,p.h);w(1,dxfStr(p.txt));w(50,p.rot)}}
   if(e.t==="circle"){w(0,"CIRCLE");w(8,lay);col(e);w(10,e.x);w(20,e.y);w(30,0);w(40,e.r)}
   else if(e.t==="arc"){w(0,"ARC");w(8,lay);col(e);w(10,e.x);w(20,e.y);w(30,0);w(40,e.r);w(50,((e.a0%360)+360)%360);w(51,((e.a1%360)+360)%360)}
   else if(e.t==="text"){String(e.s).split("\n").forEach((ln,j)=>{const r=(e.rot||0)*Math.PI/180, dy=-j*e.h*1.6; w(0,"TEXT");w(8,lay);col(e);w(10,e.x-Math.sin(r)*dy);w(20,e.y+Math.cos(r)*dy);w(30,0);w(40,e.h);w(1,dxfStr(ln));w(50,e.rot||0)})}
   else if(e.t==="sym"){w(0,"INSERT");w(8,lay);col(e);w(2,"LC_"+symBlk(e));w(10,e.x);w(20,e.y);w(30,0);w(41,(e.scale||1)*(e.flip?-1:1));w(42,e.scale||1);w(43,1);w(50,e.rot||0);
-   if(e.label){const kk=k*(e.scale||1); w(0,"TEXT");w(8,lay);col(e);w(10,e.x+.18*kk);w(20,e.y+.18*kk);w(30,0);w(40,.12*kk);w(1,dxfStr(e.label))}}
+   {const L=labelOf(e,true); if(L){const kk=k*(e.scale||1); w(0,"TEXT");w(8,lay);col(e);w(10,L.x);w(20,L.y);w(30,0);w(40,.12*kk);w(1,dxfStr(e.label))}}}
  });
  w(0,"ENDSEC");w(0,"EOF");
  return o.join("\r\n")+"\r\n"}
@@ -1728,8 +1736,13 @@ function finishCable(){const t=S.tmp; if(!t||!t.pts||t.pts.length<2){S.tmp=null;
  const pts=t.pts.slice(), taps=t.taps; S.tmp=null; draw();
  const kd=cabKindFor(pts); cabDialog({...CAB_LAST,...(kd?cabPreset(kd):{kind:""}),circ:circSuggest(pts)},o=>{pushUndo(); const e=addEnt({t:"cable",pts,c:o}); if(taps&&taps.length)e.taps=taps; S.sel=new Set([e]); rebuildIndex(); refreshUI(); draw();
   const r=cabCalc(e); toast(r.ok?"Cabo criado: "+r.desig+" ("+r.L.toFixed(1)+" m)":"⚠ "+r.errs[0],r.ok?2500:5000)})}
-function drawCableLabel(e,col){ const r=cabCalc(e); if(e.c&&e.c.lab===false&&r.ok)return; const p=cabLabelPos(e);
- drawText({x:p.x,y:p.y,h:p.h,s:(r.ok?"":"⚠ ")+cabLabel(e,r),rot:p.ang,c:0},r.ok?col:"#ef4444")}
+// etiquetas: dos símbolos (e.label) e dos cabos (designação). e.lbHide esconde, e.lbOff=[dx,dy] desloca; S.doc.lbSymOff / lbCabOff escondem todas.
+function labelOf(e,forPlot){const o=e.lbOff||[0,0];
+ if(e.t==="sym"){ if(!e.label||e.lbHide||S.doc.lbSymOff)return null; const k=S.doc.symScale*U()*(e.scale||1); return {x:e.x+.18*k+o[0],y:e.y+.18*k+o[1],h:.1*k*1.2,s:e.label,rot:0,ok:true}}
+ if(e.t==="cable"){const r=cabCalc(e); if(e.lbHide||S.doc.lbCabOff||(e.c&&e.c.lab===false&&(r.ok||forPlot)))return null; const p=cabLabelPos(e); return {x:p.x+o[0],y:p.y+o[1],h:p.h,s:(r.ok?"":"⚠ ")+cabLabel(e,r),rot:p.ang,c:0,ok:r.ok,txt:cabLabel(e,r)}}
+ return null}
+function drawCableLabel(e,col){const L=labelOf(e,S.plotting); if(!L)return; drawText(L,L.ok?col:"#ef4444")}
+function pickLabelGrip(x,y){const tol=8/S.view.s; let best=null, bd=tol; S.sel.forEach(e=>{const L=labelOf(e); if(!L)return; const d=Math.hypot(L.x-x,L.y-y); if(d<bd){bd=d; best={e,L}}}); return best}
 function cabLabelPos(e){let bi=1,bl=-1; for(let i=1;i<e.pts.length;i++){const l=Math.hypot(e.pts[i][0]-e.pts[i-1][0],e.pts[i][1]-e.pts[i-1][1]); if(l>bl){bl=l;bi=i}}
  const a=e.pts[bi-1],b=e.pts[bi]; const vr=VR()*180/Math.PI; let ang=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI-vr; ang=((ang%360)+540)%360-180; if(ang>90)ang-=180; if(ang<=-90)ang+=180; ang+=vr;
  const h=S.doc.textH*U()*.8, r0=ang*Math.PI/180, L=Math.hypot(b[0]-a[0],b[1]-a[1]), tw=h*.6*cabLabel(e).length;
@@ -4068,6 +4081,8 @@ const CMDS=[
  {id:"orto",n:"Orto",g:"Vista",a:["ORTO","ORTHO"],k:"F8",f:()=>toggle("ortho"),chk:()=>S.ortho},
  {id:"snap",n:"Snap a pontos",g:"Vista",a:["SNAP","OSNAP"],k:"F3",f:()=>toggle("snap"),chk:()=>S.snap},
  {id:"parede",n:"Encostar símbolos à parede",g:"Vista",a:["PAREDE"],f:()=>toggle("wall"),chk:()=>S.wall},
+ {id:"lbsym",n:"Etiquetas dos símbolos",g:"Vista",a:["ETIQ"],f:()=>{S.doc.lbSymOff=!S.doc.lbSymOff; saveLocal(); draw()},chk:()=>!S.doc.lbSymOff},
+ {id:"lbcab",n:"Designações dos cabos",g:"Vista",a:["DESIG"],f:()=>{S.doc.lbCabOff=!S.doc.lbCabOff; saveLocal(); draw()},chk:()=>!S.doc.lbCabOff},
  {id:"fundo",n:"Planta de fundo visível",g:"Vista",a:["FUNDO"],f:()=>$("bPlanta").click(),chk:()=>!S.doc.refHidden,sep:true},
  {id:"psim",n:"Painel de símbolos",g:"Vista",a:["PS"],f:()=>$("bL").click(),chk:()=>!$("left").classList.contains("hide")},
  {id:"plat",n:"Painel lateral (camadas, propriedades)",g:"Vista",a:["LA","CAMADAS","LAYER"],f:()=>$("bR").click(),chk:()=>!$("right").classList.contains("hide")},
@@ -4179,7 +4194,7 @@ function plDraw(ctx,p,pageLayers,pageTitle){const P=plPaper(p), F=plFrame(p), V=
    if(e.t==="leg"){ctx.setLineDash([]); legDraw(e,col,true); ctx.globalAlpha=1; continue}
    ctx.beginPath(); drawGeom(e,false); ctx.stroke(); ctx.setLineDash([]);
    if(e.t==="cable"){drawCableLabel(e,col); drawTaps(e,col)}
-   if(e.t==="sym"&&e.label){const k=S.doc.symScale*U()*(e.scale||1); drawText({x:e.x+.18*k,y:e.y+.18*k,h:.1*k*1.2,s:e.label,rot:0},col)} ctx.globalAlpha=1}
+   if(e.t==="sym"){const L=labelOf(e,true); if(L)drawText(L,col)} ctx.globalAlpha=1}
   ctx.restore();
   // moldura e carimbo
   ctx.setLineDash([]); ctx.strokeStyle="#000"; ctx.lineWidth=5; ctx.beginPath(); ctx.rect(F.x*V,F.y*V,F.w*V,F.h*V); ctx.stroke();
