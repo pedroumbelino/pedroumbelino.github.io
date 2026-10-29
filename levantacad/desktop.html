@@ -1293,7 +1293,17 @@ function refreshLayers(){const L=$("layers"); L.innerHTML=""; S.doc.layers.forEa
 const RT={cur:"props",back:null,n:0};
 function rtab(k){RT.cur=k; document.querySelectorAll("#rtabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===k)); document.querySelectorAll("#right .tpane").forEach(p=>p.classList.toggle("on",p.dataset.pane===k)); try{localStorage.setItem("lc_rtab",k)}catch(e){}}
 function selSimilar(sel){const key=e=>e.t+"|"+e.layer+"|"+(e.t==="sym"?e.sym:"")+"|"+(e.t==="pl"&&e.esp?"esp":""); const ks=new Set(sel.map(key)); S.sel=new Set(S.doc.ents.filter(e=>ks.has(key(e))&&layerOf(e).visible&&!layerOf(e).locked)); refreshProps(); draw(); toast(S.sel.size+" objeto(s) selecionados.",2000)}
-function propPaste(){const c=S.propClip; if(!c||!S.sel.size)return; pushUndo(); S.sel.forEach(e=>{ ["col","lt","lw","tr","exist"].forEach(k=>{ if(c[k]==null)delete e[k]; else e[k]=c[k]}); if(c.layer)e.layer=c.layer}); rebuildIndex(); refreshQty(); refreshProps(); saveLocal(); draw()}
+function propCopy(e){const cabLab=e.t==="cable"&&e.c&&e.c.lab===false; S.propClip={layer:e.layer,col:e.col,lt:e.lt,lw:e.lw,tr:e.tr,exist:e.exist,lbHide:e.lbHide||cabLab||undefined,lbOff:e.lbOff?[...e.lbOff]:undefined,label:e.t==="sym"?(e.label||""):undefined,src:e.t}}
+const PP_GROUPS=[["layer","Camada"],["col","Cor"],["lt","Tipo de linha"],["lw","Espessura"],["tr","Transparência"],["exist","Existente (azul)"],["lbv","Etiqueta: visível ou escondida"],["lbp","Etiqueta: posição"],["lbt","Etiqueta: texto (nome do quadro ou do símbolo)"]];
+function propPaste(){const c=S.propClip; if(!c||!S.sel.size)return; let last={}; try{last=JSON.parse(localStorage.getItem("lc_ppSel")||"{}")}catch(e){}
+ const def=k=>last[k]!=null?last[k]:k!=="lbt";
+ ask("Colar propriedades em "+S.sel.size+" objeto(s)",PP_GROUPS.filter(([k])=>k!=="lbt"||c.label!=null).map(([k,l])=>({k,l:l+(k==="lbt"&&c.label?" «"+uEsc(c.label)+"»":""),type:"check",v:def(k)})),o=>{
+  try{localStorage.setItem("lc_ppSel",JSON.stringify(o))}catch(e){}
+  pushUndo(); S.sel.forEach(e=>{ ["col","lt","lw","tr","exist"].forEach(k=>{ if(!o[k])return; if(c[k]==null)delete e[k]; else e[k]=c[k]}); if(o.layer&&c.layer)e.layer=c.layer;
+   if(o.lbv){ if(c.lbHide)e.lbHide=true; else {delete e.lbHide; if(e.t==="cable"&&e.c&&e.c.lab===false)e.c.lab=true}}
+   if(o.lbp){ if(c.lbOff)e.lbOff=[...c.lbOff]; else delete e.lbOff}
+   if(o.lbt&&e.t==="sym"&&c.label!=null)e.label=c.label});
+  rebuildIndex(); refreshQty(); refreshProps(); saveLocal(); draw(); toast("Propriedades coladas em "+S.sel.size+" objeto(s).",2000)},'<div class="small" style="margin-bottom:6px">Escolha o que passar do objeto copiado para a seleção. A escolha fica lembrada.</div>')}
 function refreshProps(){const P=$("props"); const sel=[...S.sel];
  if(sel.length&&!RT.n&&RT.cur!=="props"&&$("rtabs")){RT.back=RT.cur; rtab("props")} else if(!sel.length&&RT.n&&RT.back){rtab(RT.back); RT.back=null} RT.n=sel.length; qpSync();
  if(!sel.length){const c=S.doc.cur||{}; P.innerHTML=`<div class="psec">Nada selecionado</div><div class="small" style="padding:4px 10px 8px">Clique num objeto para ver e mudar a camada, a cor, o tipo de linha, a espessura e a geometria.<br><br>Os objetos novos ficam na camada <b>${uEsc(S.doc.active)}</b>, cor <b>${c.col?c.col.toUpperCase():"por camada"}</b>, linha <b>${c.lt?ltName(c.lt).toLowerCase():"por camada"}</b>, espessura <b>${c.lw?String(c.lw).replace(".",",")+" mm":"por camada"}</b>. Mude-os na faixa de cima, em «Propriedades».</div>`; return}
@@ -1345,7 +1355,7 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  if($("pSim"))$("pSim").onclick=()=>selSimilar(sel);
  { const v=$("pLbV"); if(v){ if(v.dataset.mix)v.indeterminate=true; v.onchange=()=>{pushUndo(); sel.forEach(e=>{ if(!((e.t==="sym"&&e.label)||e.t==="cable"))return; if(v.checked){delete e.lbHide; if(e.t==="cable"&&e.c&&e.c.lab===false)e.c.lab=true} else e.lbHide=true}); saveLocal(); draw()}}
   if($("pLbR"))$("pLbR").onclick=()=>{pushUndo(); sel.forEach(e=>delete e.lbOff); refreshProps(); saveLocal(); draw()}}
- if($("pCpP"))$("pCpP").onclick=()=>{const e=one; S.propClip={layer:e.layer,col:e.col,lt:e.lt,lw:e.lw,tr:e.tr,exist:e.exist}; toast("Propriedades copiadas. Selecione outros objetos e use «Colar propriedades».",3000); refreshProps()};
+ if($("pCpP"))$("pCpP").onclick=()=>{const e=one; propCopy(e); toast("Propriedades copiadas. Selecione outros objetos e use «Colar prop.».",3000); refreshProps()};
  if($("pPsP"))$("pPsP").onclick=()=>propPaste();
  if(one&&one.t==="line"){const L0=()=>Math.hypot(one.x2-one.x1,one.y2-one.y1), A0=()=>Math.atan2(one.y2-one.y1,one.x2-one.x1);
   gch("gX1",el=>one.x1=gv(el)); gch("gY1",el=>one.y1=gv(el)); gch("gX2",el=>one.x2=gv(el)); gch("gY2",el=>one.y2=gv(el));
@@ -4061,7 +4071,7 @@ const CMDS=[
  {id:"alinhar",n:"Alinhar…",g:"Modificar",a:["AL","ALINHAR","ALIGN"],f:()=>needSelThen("Alinhar",alignDialog)},
  {id:"serie",n:"Copiar em série…",g:"Modificar",a:["AR","SERIE","ARRAY"],f:()=>needSelThen("Copiar em série",moveDialog)},
  {id:"selsim",n:"Selecionar semelhantes",g:"Modificar",a:["SELSIM","SELECTSIMILAR"],f:()=>needSelThen("Selecionar semelhantes",()=>selSimilar([...S.sel]))},
- {id:"propcp",n:"Copiar propriedades",g:"Modificar",a:["CP_PROP","MA","MATCHPROP"],f:()=>needSelThen("Copiar propriedades",()=>{const e=[...S.sel][0]; S.propClip={layer:e.layer,col:e.col,lt:e.lt,lw:e.lw,tr:e.tr,exist:e.exist}; toast("Propriedades copiadas. Selecione os outros objetos e escreva PP (colar propriedades).",3500)})},
+ {id:"propcp",n:"Copiar propriedades",g:"Modificar",a:["CP_PROP","MA","MATCHPROP"],f:()=>needSelThen("Copiar propriedades",()=>{const e=[...S.sel][0]; propCopy(e); toast("Propriedades copiadas. Selecione os outros objetos e escreva PP (colar propriedades).",3500)})},
  {id:"proppc",n:"Colar propriedades",g:"Modificar",a:["PP","PASTEPROP"],f:()=>needSelThen("Colar propriedades",propPaste)},
  {id:"props",n:"Propriedades",g:"Vista",a:["PR","PROPRIEDADES","PROPERTIES"],k:"Ctrl+1",f:()=>{ if($("right").classList.contains("hide"))$("bR").click(); rtab("props")}},
  {id:"trim",n:"Cortar (trim)",g:"Modificar",a:["TR","TRIM","CORTAR"],f:()=>teStart(false)},
