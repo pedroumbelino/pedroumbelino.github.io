@@ -231,7 +231,7 @@ button.ic small.badge{font-size:10px;font-weight:600}
       <button data-tool="select" title="Selecionar (S); arrastar da esquerda para a direita: janela; da direita para a esquerda: cruzamento">Selecionar</button>
       <button data-tool="line" title="Reta, em cadeia (L)">Reta</button>
       <button data-tool="circle" title="Círculo: centro e raio (C)">Círculo</button>
-      <button data-tool="circ" title="Circuito (CI): escolha a origem e os objetos pela ordem em que o cabo repica; o cabo é traçado automaticamente. M passa a traçado à mão">Circuito</button>
+      <button data-tool="circ" title="Circuito (CI): clique no quadro e nos objetos do circuito; Enter regista o circuito para o esquema unifilar. Os cabos desenham-se à parte, com a ferramenta Cabo e o nome do circuito. Para o traçado automático use o comando CIA">Circuito</button>
       <button data-tool="text" title="Texto (T)">Texto</button>
       <button data-tool="offset" title="Paralela à distância definida (O)">Paralela</button>
       <button id="bFillet" title="Concordância / fillet (F): une duas retas com canto vivo (raio 0) ou com arco">Concordância…</button>
@@ -474,9 +474,9 @@ function toast(t,ms){const e=$("toast");e.textContent=t;e.style.display="block";
 function hint(t){$("hint").textContent=t||""}
 
 /* ================= Undo ================= */
-function snapshot(){const d=S.doc; return JSON.stringify({ents:d.ents,layers:d.layers,active:d.active,bg:d.bg?{...d.bg,data:undefined}:null,ann:{symScale:d.symScale,textH:d.textH,cabGap:d.cabGap,fxTol:d.fxTol,sc:d.plot?d.plot.sc:undefined}})}
+function snapshot(){const d=S.doc; return JSON.stringify({circs:d.circs||[],ents:d.ents,layers:d.layers,active:d.active,bg:d.bg?{...d.bg,data:undefined}:null,ann:{symScale:d.symScale,textH:d.textH,cabGap:d.cabGap,fxTol:d.fxTol,sc:d.plot?d.plot.sc:undefined}})}
 function pushUndo(){S.undo.push(snapshot()); if(S.undo.length>200)S.undo.shift(); S.redo=[]; saveLocal()}
-function restore(js){const o=JSON.parse(js); S.doc.ents=o.ents; S.doc.layers=o.layers; S.doc.active=o.active;
+function restore(js){const o=JSON.parse(js); S.doc.ents=o.ents; if(o.circs)S.doc.circs=o.circs; LC_VER++; S.doc.layers=o.layers; S.doc.active=o.active;
  if(o.ann){["symScale","textH","cabGap","fxTol"].forEach(k=>{ if(o.ann[k]!=null)S.doc[k]=o.ann[k]; else delete S.doc[k]}); if(o.ann.sc!=null&&S.doc.plot)S.doc.plot.sc=o.ann.sc}
  if(o.bg&&S.doc.bg){Object.assign(S.doc.bg,o.bg,{data:S.doc.bg.data})} S.sel.clear(); rebuildIndex(); refreshUI(); draw()}
 function undo(){if(!S.undo.length)return; S.redo.push(snapshot()); restore(S.undo.pop()); saveLocal()}
@@ -904,7 +904,7 @@ function render(){
   G.globalAlpha=1;
  }
  if(FX)fxDraw(FX,fxCol,e=>2*Math.max(.7,Math.min(4,lwOf(e)/.35)));
- if(typeof sheetDraw==="function")sheetDraw(light);
+ if(typeof sheetDraw==="function")sheetDraw(light); circDrawAll(light);
  riserDrawNotes(light?"#6b21a8":"#c4b5fd");
  wcMarks();
  // pegas das pontas
@@ -932,6 +932,64 @@ function annotRescale(f,doc){doc=doc||S.doc; if(!(f>0)||Math.abs(f-1)<1e-9)retur
 // chamado quando a escala de impressão muda: den0 → den1
 function annotScaleChanged(den0,den1){ if(!annotOn()||!(den0>0)||!(den1>0)||Math.abs(den1/den0-1)<1e-6)return; pushUndo(); annotRescale(den1/den0); rebuildIndex(); refreshUI(); saveLocal(); draw();
  toast("Escala 1:"+Math.round(den0)+" → 1:"+Math.round(den1)+": os símbolos, os textos, as etiquetas e o afastamento entre cabos foram ajustados para ficarem do mesmo tamanho na folha. As medidas não mudam. Os cabos já traçados mantêm o afastamento; para o atualizar, volte a traçá-los. (Ctrl+Z desfaz.)",8000)}
+/* ================= Circuitos sem traçado: o quadro e os objetos registam o circuito; os cabos desenham-se à parte ================= */
+// Cada planta guarda S.doc.circs = [{id, q:id do quadro, objs:[ids], c:{dados do cabo/proteção, circ:nome}, layer}].
+// O comprimento do circuito é a soma dos cabos desenhados com o mesmo circuito (todos os pisos, com as subidas);
+// enquanto não houver cabos, usa-se uma estimativa pelo percurso ortogonal quadro → objetos.
+const CIRC_V=new WeakMap();
+function circsOf(pl){pl=pl||S.doc; if(!pl.circs)pl.circs=[]; return pl.circs}
+function allCircs(){const o=[]; (PROJ?PROJ.plantas:[S.doc]).forEach(pl=>(pl.circs||[]).forEach(ci=>o.push({ci,pl}))); return o}
+function circName(ci){return String(ci.c&&ci.c.circ||"").trim()}
+function circQ(ci,pl){return (pl||S.doc).ents.find(e=>e.id===ci.q)||null}
+function circObjs(ci,pl){const m=new Map((pl||S.doc).ents.map(e=>[e.id,e])); return (ci.objs||[]).map(i=>m.get(i)).filter(Boolean)}
+function circPl(ci){const f=allCircs().find(x=>x.ci===ci); return f?f.pl:S.doc}
+// o circuito a que um cabo pertence: pela ligação guardada (cid) ou, sem ela, pelo nome na mesma planta
+function circOfCable(e,pl){ if(!e||!e.c)return null; const A=allCircs(); if(e.c.cid!=null){const f=A.find(x=>x.ci.id===e.c.cid); if(f)return f}
+ const nm=String(e.c.circ||"").trim().toLowerCase(); if(!nm)return null; pl=pl||plantaOf(e)||S.doc; return A.find(x=>x.pl===pl&&circName(x.ci).toLowerCase()===nm)||null}
+function circCables(ci,pl){pl=pl||circPl(ci); const out=[]; (PROJ?PROJ.plantas:[S.doc]).forEach(p=>p.ents.forEach(e=>{ if(e.t!=="cable")return; const f=circOfCable(e,p); if(f&&f.ci===ci)out.push({e,pl:p})})); return out}
+function circLen(ci,pl){pl=pl||circPl(ci); const C=circCables(ci,pl), set=new Set(C.map(x=>x.e)), extra=Math.max(0,num(ci.c&&ci.c.extra));
+ if(C.length){let L=0; const seen=new Set(); C.forEach(({e,pl:p})=>{let l=0; for(let i=1;i<e.pts.length;i++)l+=Math.hypot(e.pts[i][0]-e.pts[i-1][0],e.pts[i][1]-e.pts[i-1][1]); L+=l*(p.unit||1)+Math.max(0,num(e.c.extra));
+   const R=cabChain(e); R.links.forEach(k=>{ if(set.has(k.a)&&set.has(k.b)){const key=[k.a.id,k.b.id].sort().join("-"); if(!seen.has(key)){seen.add(key); L+=k.d}}})}); return {L:L+extra,est:false,n:C.length}}
+ const q=circQ(ci,pl), objs=circObjs(ci,pl), P=[q,...objs].filter(Boolean).map(connPt); let L=0; for(let i=1;i<P.length;i++)L+=Math.abs(P[i][0]-P[i-1][0])+Math.abs(P[i][1]-P[i-1][1]);
+ return {L:L*(pl.unit||1)+extra,est:true,n:0}}
+// "cabo virtual" que representa o circuito nos cálculos e no esquema unifilar
+function circV(ci,pl){let v=CIRC_V.get(ci); if(!v){v={t:"cable",pts:[],_ci:ci}; CIRC_V.set(ci,v)} v.id=ci.id; v.c=ci.c; v.layer=ci.layer||"Iluminação"; v._pl=pl||circPl(ci); return v}
+function circKindOf(objs){const by=new Map(); objs.forEach(o=>by.set(o.layer,(by.get(o.layer)||0)+1)); const lay=[...by.entries()].sort((a,b)=>b[1]-a[1])[0];
+ return {lay:lay?lay[0]:curLayer(), kind:({"Iluminação":"ilum","Tomadas":"tom","Força motriz":"fm","AVAC":"fm"})[lay&&lay[0]]||""}}
+function circNextName(q,kind){const pre=kind==="ilum"?"IL":kind==="tom"?"T":"C", qn=quadroName(q); let n=0;
+ allCircs().forEach(({ci,pl})=>{const qq=circQ(ci,pl); if(qq&&(qq===q||(qn&&quadroName(qq)===qn))){const m=circName(ci).match(new RegExp("^"+pre+"\\s*(\\d+)","i")); if(m)n=Math.max(n,+m[1])}});
+ return pre+(n+1)}
+// fim da ferramenta Circuito: regista o circuito (sem desenhar o cabo)
+function circRegister(list,editCi){const q=list[0]; if(!isQuadro(q)){toast("O primeiro objeto do circuito tem de ser o quadro de onde sai.",5000); return}
+ const objs=list.slice(1).filter(o=>o!==q&&o.t==="sym"); if(!objs.length){toast("Escolha também os objetos do circuito (luzes, tomadas…).");return}
+ if(editCi){pushUndo(); editCi.q=q.id; editCi.objs=objs.map(o=>o.id); const k=circKindOf(objs); editCi.layer=k.lay; LC_VER++; rebuildIndex(); refreshUI(); draw(); toast("Circuito «"+circName(editCi)+"»: "+objs.length+" objeto(s).",3000); return}
+ const k=circKindOf(objs);
+ cabDialog({...CAB_LAST,...(k.kind?cabPreset(k.kind):{kind:""}),circ:circNextName(q,k.kind)},o=>{pushUndo(); delete o.cid; const ci={id:PROJ.nextId++,q:q.id,objs:objs.map(o=>o.id),c:o,layer:k.lay}; circsOf().push(ci);
+  LC_VER++; rebuildIndex(); refreshUI(); draw(); const r=cabCalc(circV(ci)), Lr=circLen(ci,S.doc);
+  toast("Circuito «"+circName(ci)+"» registado no "+(quadroName(q)||"quadro")+": "+objs.length+" objeto(s), "+r.desig+", "+Lr.L.toFixed(1)+" m (estimado até desenhar os cabos com este circuito).",6000)},{circ:true})}
+// circuitos desenhados a tracejado fino (com a ferramenta Circuito ativa ou ao ver um circuito na lista)
+document.addEventListener("click",ev=>{const b=ev.target&&ev.target.closest&&ev.target.closest('[data-tool="circ"]'); if(b)S.circAuto=false},true);
+function circDrawAll(light){const show=S.tool==="circ"||S.circHL!=null; if(!show)return; const C=circsOf(); if(!C.length)return; G.save();
+ C.forEach(ci=>{const hl=S.circHL===ci.id; if(S.circHL!=null&&!hl&&S.tool!=="circ")return; const q=circQ(ci); if(!q)return; const a=connPt(q), col=(S.doc.layers.find(l=>l.name===ci.layer)||{}).color||"#94a3b8";
+  G.strokeStyle=col; G.globalAlpha=hl?.95:.45; G.lineWidth=hl?2:1; G.setLineDash([5,4]); G.beginPath(); circObjs(ci).forEach(o=>{const b=connPt(o), [x1,y1]=W2S(a[0],a[1]), [x2,y2]=W2S(b[0],b[1]); G.moveTo(x1,y1); G.lineTo(x2,y2)}); G.stroke();
+  G.setLineDash([]); circObjs(ci).forEach(o=>{const [x,y]=W2S(...connPt(o)); G.beginPath(); G.arc(x,y,hl?5:3.5,0,Math.PI*2); G.stroke()});
+  const ob=circObjs(ci); if(ob.length){const cx=ob.reduce((s,o)=>s+connPt(o)[0],0)/ob.length, cy=ob.reduce((s,o)=>s+connPt(o)[1],0)/ob.length, [x,y]=W2S(cx,cy); G.globalAlpha=hl?1:.7; G.fillStyle=col; G.font="bold "+(hl?13:11)+"px Arial"; G.textAlign="center"; G.fillText(circName(ci),x,y-6)}});
+ G.restore()}
+// lista dos circuitos desta planta
+function circListDialog(){const C=circsOf(); const row=(ci,i)=>{const q=circQ(ci), r=cabCalc(circV(ci,S.doc)), L=circLen(ci,S.doc);
+  return `<div class="hrow"><div><b>${uEsc(circName(ci)||"(sem nome)")}</b> · ${uEsc(q?quadroName(q)||"quadro":"⚠ quadro apagado")} · ${circObjs(ci).length} objeto(s)<br><span class="small">${uEsc(r.desig)} · ${L.L.toFixed(1)} m ${L.est?"(estimado: ainda sem cabos desenhados com este circuito)":"("+L.n+" cabo(s) desenhado(s))"}${r.ok?"":" · ⚠ "+uEsc(r.errs[0])}</span></div>
+  <button data-cv="${i}" title="Mostrar no desenho">Ver</button><button data-ce="${i}">Editar</button><button data-co="${i}" title="Voltar a escolher o quadro e os objetos">Objetos</button><button data-cd="${i}" title="Apagar o circuito (os cabos ficam)">✕</button></div>`};
+ ask("Circuitos desta planta",[],()=>{S.circHL=null; draw()},`<div class="small" style="margin-bottom:8px">Os circuitos registam o quadro, os objetos e os dados do cabo e da proteção; é daqui que sai o esquema unifilar. Os cabos desenham-se à parte, com a ferramenta Cabo: dê-lhes o nome do circuito e o comprimento passa a ser o dos cabos.</div>`+(C.length?'<div class="hlist">'+C.map(row).join("")+'</div>':'<div class="small">Ainda não há circuitos. Use a ferramenta Circuito: clique no quadro e depois nos objetos; Enter regista.</div>'));
+ const b=$("mbox");
+ b.querySelectorAll("[data-cv]").forEach(x=>x.onclick=()=>{S.circHL=C[+x.dataset.cv].id; draw()});
+ b.querySelectorAll("[data-ce]").forEach(x=>x.onclick=()=>{const ci=C[+x.dataset.ce], old=circName(ci); $("modal").style.display="none"; cabDialog(ci.c,o=>{pushUndo(); delete o.cid; ci.c=o; const nw=circName(ci);
+   if(nw!==old)(PROJ?PROJ.plantas:[S.doc]).forEach(p=>p.ents.forEach(e=>{ if(e.t==="cable"&&e.c&&(e.c.cid===ci.id||(e.c.cid==null&&p===S.doc&&String(e.c.circ||"").trim()===old))){e.c.circ=nw; e.c.cid=ci.id}}));
+   LC_VER++; rebuildIndex(); refreshUI(); draw(); circListDialog()},{circ:true})});
+ b.querySelectorAll("[data-co]").forEach(x=>x.onclick=()=>{const ci=C[+x.dataset.co]; $("modal").style.display="none"; setTool("circ"); S.tmp={list:[circQ(ci),...circObjs(ci)].filter(Boolean),edit:null,editCi:ci}; circHint(); draw()});
+ b.querySelectorAll("[data-cd]").forEach(x=>x.onclick=()=>{const ci=C[+x.dataset.cd]; if(!confirm("Apagar o circuito «"+circName(ci)+"»? Os cabos desenhados ficam."))return; pushUndo(); C.splice(C.indexOf(ci),1); LC_VER++; refreshUI(); draw(); circListDialog()})}
+// circuitos de um quadro (em todas as plantas), no formato que o esquema unifilar usa
+function circFeedsOf(qe){const nome=quadroName(qe), out=[]; allCircs().forEach(({ci,pl})=>{const q=circQ(ci,pl); if(!q)return; if(!(q===qe||(nome&&quadroName(q)===nome)))return;
+  const objs=circObjs(ci,pl); out.push({c:circV(ci,pl),syms:objs.filter(o=>!isQuadro(o)&&!isRiser(o)),qd:objs.find(isQuadro)||null,in:false,pl})}); return out}
 /* ================= Linhas → circuito: junta retas, polilinhas e arcos ponta a ponta num só cabo ================= */
 function l2cPts(e){ if(e.t==="line")return [[e.x1,e.y1],[e.x2,e.y2]];
  if(e.t==="pl"){const P=e.pts.map(p=>[p[0],p[1]]); if(e.closed&&P.length>2)P.push([P[0][0],P[0][1]]); return P}
@@ -949,14 +1007,32 @@ function l2cChain(list,gapMax){const L=list.map(e=>({e,P:l2cPts(e)})).filter(o=>
  // tira os vértices a meio de troços retos
  const clean=[out[0]]; for(let i=1;i<out.length-1;i++){const a=clean[clean.length-1], b=out[i], c=out[i+1]; const ab=Math.hypot(b[0]-a[0],b[1]-a[1]), bc=Math.hypot(c[0]-b[0],c[1]-b[1]), cr=((b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]))/Math.max(1e-12,ab*bc); if(Math.abs(cr)>1e-4||((b[0]-a[0])*(c[0]-b[0])+(b[1]-a[1])*(c[1]-b[1]))<0)clean.push(b)} if(out.length>1)clean.push(out[out.length-1]);
  return {path:clean,left:0,maxGap}}
+function l2cClean(path){const d=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]), out=[]; path.forEach(p=>{const l=out[out.length-1]; if(!l||d(l,p)>1e-6*U())out.push(p)});
+ const clean=[out[0]]; for(let i=1;i<out.length-1;i++){const a=clean[clean.length-1], b=out[i], c=out[i+1]; const ab=Math.hypot(b[0]-a[0],b[1]-a[1]), bc=Math.hypot(c[0]-b[0],c[1]-b[1]), cr=((b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]))/Math.max(1e-12,ab*bc); if(Math.abs(cr)>1e-4||((b[0]-a[0])*(c[0]-b[0])+(b[1]-a[1])*(c[1]-b[1]))<0)clean.push(b)} if(out.length>1)clean.push(out[out.length-1]); return clean}
+// separa as linhas em troços: corta onde uma linha encosta a meio de outra (T) e junta ponta a ponta entre nós (pontas soltas ou derivações)
+function l2cGraph(sel){const tol=.05*U(), d=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]); let P=sel.map(l2cPts).filter(p=>p&&p.length>1);
+ const ends=P.flatMap(p=>[p[0],p[p.length-1]]);
+ P=P.flatMap(p=>{const cuts=[]; ends.forEach(e=>{ if(d(e,p[0])<tol||d(e,p[p.length-1])<tol)return; for(let i=1;i<p.length;i++){const [dd,qx,qy,t]=dSeg(e[0],e[1],p[i-1][0],p[i-1][1],p[i][0],p[i][1]); if(dd<tol&&t>1e-6&&t<1-1e-6){cuts.push({i,t,pt:[qx,qy]}); break} if(dd<tol&&(t<=1e-6||t>=1-1e-6)&&i>0){ /* encosta num vértice */ const vi=t<=1e-6?i-1:i; if(vi>0&&vi<p.length-1){cuts.push({i:vi,t:0,pt:p[vi].slice(),v:true}); break}}}});
+  if(!cuts.length)return [p]; cuts.sort((a,b)=>a.i-b.i||a.t-b.t); const out=[]; let cur=[p[0]], k=0;
+  for(let i=1;i<p.length;i++){while(k<cuts.length&&cuts[k].i===i&&!cuts[k].v){cur.push(cuts[k].pt); out.push(cur); cur=[cuts[k].pt]; k++} cur.push(p[i]); while(k<cuts.length&&cuts[k].v&&cuts[k].i===i){out.push(cur); cur=[p[i]]; k++}}
+  out.push(cur); return out.filter(q=>q.length>1)});
+ const nodes=[], nid=pt=>{let i=nodes.findIndex(n=>d(n.p,pt)<tol); if(i<0){nodes.push({p:pt,E:[]}); i=nodes.length-1} return i};
+ const E=P.map((pts,k)=>{const a=nid(pts[0]), b=nid(pts[pts.length-1]); const e={pts,a,b,k}; nodes[a].E.push(e); if(b!==a)nodes[b].E.push(e); return e});
+ const used=new Set(), chains=[]; const walk=(n0,e0)=>{let path=[], n=n0, e=e0; while(e&&!used.has(e)){used.add(e); const fw=e.a===n, pts=fw?e.pts:e.pts.slice().reverse(); path=path.length?path.concat(pts.slice(1)):pts.slice(); n=fw?e.b:e.a; const N=nodes[n]; if(N.E.length!==2)break; e=N.E.find(x=>!used.has(x))} return path};
+ nodes.forEach((N,i)=>{ if(N.E.length!==2)N.E.forEach(e=>{ if(!used.has(e))chains.push(walk(i,e))})});
+ E.forEach(e=>{ if(!used.has(e))chains.push(walk(e.a,e))});
+ return {chains:chains.map(l2cClean).filter(c=>c.length>1),branch:nodes.some(N=>N.E.length>2),pieces:P.length}}
 function linesToCable(){const sel=[...S.sel].filter(e=>(e.t==="line"||e.t==="pl"||e.t==="arc")&&!e.esp&&e.layer!==PLANTA_LAY&&!e.locked&&!layerOf(e).locked);
- if(!sel.length){toast("Selecione as linhas (retas, polilinhas ou arcos) que formam o percurso do circuito e volte a usar «Linhas → circuito» (comando LC).",6000); return}
- const R=l2cChain(sel,.5*U()); if(!R||R.path.length<2){toast("Não deu para formar um percurso com estas linhas.",4000); return}
- if(R.left){toast("As linhas selecionadas não formam um só percurso: há "+R.left+" que ficam a mais de 0,5 m das outras. Selecione só um percurso contínuo.",7000); return}
- const pts=R.path, kd=cabKindFor(pts), lays=[...new Set(sel.map(e=>e.layer))], lay=lays.length===1?lays[0]:null;
- cabDialog({...CAB_LAST,...(kd?cabPreset(kd):{kind:""}),circ:circSuggest(pts)},o=>{pushUndo(); const ids=new Set(sel.map(e=>e.id)); S.doc.ents=S.doc.ents.filter(e=>!ids.has(e.id));
-  const e=addEnt({t:"cable",pts,c:o}); if(lay)e.layer=lay; S.sel=new Set([e]); rebuildIndex(); refreshUI(); draw();
-  const r=cabCalc(e); toast((r.ok?"Circuito criado a partir de "+sel.length+" linha(s): "+r.desig+" ("+r.L.toFixed(1)+" m)":"⚠ "+r.errs[0])+(R.maxGap>1e-6*U()?". Havia folgas até "+(R.maxGap*S.doc.unit).toFixed(2)+" m entre linhas, que ficaram ligadas.":""),R.maxGap>1e-6*U()?6000:3500)})}
+ if(!sel.length){toast("Selecione as linhas (retas, polilinhas ou arcos) dos cabos e volte a usar «Linhas → cabos» (comando LC).",6000); return}
+ const Gr=l2cGraph(sel); let chains=Gr.chains, gap=0;
+ // um só percurso com pequenas folgas entre linhas: junta-se num cabo
+ if(chains.length>1&&!Gr.branch){const R=l2cChain(sel,.5*U()); if(R&&!R.left&&R.path.length>1){chains=[R.path]; gap=R.maxGap}}
+ if(!chains.length){toast("Não deu para formar cabos com estas linhas.",4000); return}
+ const lays=[...new Set(sel.map(e=>e.layer))], lay=lays.length===1?lays[0]:null, kd=cabKindFor(chains[0]);
+ cabDialog({...CAB_LAST,...(kd?cabPreset(kd):{kind:""}),circ:circSuggest(chains[0])},o=>{pushUndo(); const ids=new Set(sel.map(e=>e.id)); S.doc.ents=S.doc.ents.filter(e=>!ids.has(e.id));
+  const made=chains.map(pts=>{const e=addEnt({t:"cable",pts,c:{...o}}); if(lay)e.layer=lay; return e}); S.sel=new Set(made); LC_VER++; rebuildIndex(); refreshUI(); draw();
+  const r=cabCalc(made[0]), Lt=made.reduce((a,e)=>a+cabLen(e),0);
+  toast((made.length>1?made.length+" cabos (um por troço entre caixas, derivações ou pontas) criados a partir de "+sel.length+" linha(s), "+Lt.toFixed(1)+" m no total":"Cabo criado a partir de "+sel.length+" linha(s): "+r.desig+" ("+Lt.toFixed(1)+" m)")+(gap>1e-6*U()?". Havia folgas até "+(gap*S.doc.unit).toFixed(2)+" m entre linhas, que ficaram ligadas.":"")+(made.length>1?". Todos ficam com os mesmos dados; ajuste os condutores de cada troço em «Editar cabo».":""),7000)})}
 /* ================= Feixe de cabos: circuitos que seguem o mesmo caminho desenham-se numa só linha ================= */
 // Só muda o desenho (ecrã, folha, PDF e DXF): cada cabo mantém o seu percurso, o seu comprimento e os seus cálculos.
 let FX=null, FXfull=false;
@@ -1679,6 +1755,8 @@ function mergeProject(P,o){o=o||{}; flushLocal("before"); importDocSyms(P);
  const inc=JSON.parse(JSON.stringify(P.plantas));
  inc.forEach(q=>{const nidp="p"+(++PROJ.pseq); plMap.set(q.id,nidp); q.id=nidp; if(o.pre)q.pname=o.pre+" · "+(q.pname||"Planta");
   (q.ents||[]).forEach(e=>{idMap.set(e.id,nid); e.id=nid++})});
+ inc.forEach(q=>(q.circs||[]).forEach(ci=>{const n=nid++; idMap.set(ci.id,n); ci.id=n; if(idMap.has(ci.q))ci.q=idMap.get(ci.q); ci.objs=(ci.objs||[]).map(i=>idMap.has(i)?idMap.get(i):i)}));
+ inc.forEach(q=>(q.ents||[]).forEach(e=>{ if(e.t==="cable"&&e.c&&e.c.cid!=null&&idMap.has(e.c.cid))e.c.cid=idMap.get(e.c.cid)}));
  inc.forEach(q=>{ if(q.refOf)q.refOf=plMap.get(q.refOf)||undefined; if(!q.refOf){delete q.refOf; if(num2(o.cota)!=null)q.cota=num2(o.cota)} PROJ.plantas.push(q)});
  PROJ.nextId=nid; projLink(PROJ);
  // esquemas unifilares: ids novos e nomes sem repetir
@@ -1850,7 +1928,7 @@ function cabWalk(e,pl0){ const segs=[], links=[], seen=new Set([e]); const own=(
  const vert=links.reduce((a,l)=>a+l.d,0), total=segs.reduce((a,s)=>a+s.L,0)+vert;
  return {segs,links,vert,total,multi:segs.length>1}}
 // comprimento usado no cálculo: o circuito inteiro (todos os pisos e as subidas)
-function cabLen(e){return cabChain(e).total}
+function cabLen(e){ if(e&&e._ci)return circLen(e._ci,e._pl).L; return cabChain(e).total}
 // comprimento para as quantidades da planta: o troço desta planta e, no troço que chega à subida vindo do quadro, a parte vertical
 function cabLenQty(e){const R=cabChain(e), s=R.segs.find(x=>x.c===e); let L=s?s.L:0; R.links.forEach(l=>{ if(l.a===e)L+=l.d}); return L}
 function nextRiserRef(){const used=new Set(); (PROJ?PROJ.plantas:[S.doc]).forEach(p=>p.ents.forEach(e=>{ if(isRiser(e))used.add(riserRef(e))})); let i=1; while(used.has("S"+i))i++; return "S"+i}
@@ -1899,7 +1977,8 @@ function cabKindFor(pts){ if(!pts||pts.length<2)return "";
  const tol=.12*U(), cnt={}; S.doc.ents.forEach(e=>{ if(e.t!=="sym"||isQuadro(e))return; const c=connPt(e); let bd=Infinity; for(let i=1;i<pts.length;i++)bd=Math.min(bd,dSeg(c[0],c[1],pts[i-1][0],pts[i-1][1],pts[i][0],pts[i][1])[0]); if(bd<=tol)cnt[e.layer]=(cnt[e.layer]||0)+1});
  const best=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]; const lay=best?best[0]:(S.doc.esp||S.doc.active);
  return {"Iluminação":"ilum","Tomadas":"tom","Força motriz":"fm","AVAC":"fm"}[lay]||""}
-function cabDialog(init,cb){const c={...CAB_DEF,...init};
+let CAB_MODE="cable";
+function cabDialog(init,cb,opt){const c={...CAB_DEF,...init}; CAB_MODE=opt&&opt.circ?"circ":"cable";
  const opts=(o)=>Object.entries(o).map(([k,v])=>[k,v]);
  ask("Cabo / circuito",[
   {k:"circ",l:"Circuito (ex.: C3 Tomadas cozinha)",v:c.circ},
@@ -1922,8 +2001,17 @@ function cabDialog(init,cb){const c={...CAB_DEF,...init};
   {k:"du0",l:"Queda de tensão a montante (%), usada só se o cabo não estiver num esquema unifilar",v:c.du0},
   {k:"extra",l:"Comprimento extra: subidas, descidas, folga (m)",v:c.extra},
   {k:"lab",l:"Escrever a designação no desenho",type:"check",v:c.lab}
- ],o=>{CAB_LAST={...o}; ["circ","p","ib","extra","kind","nc","desc"].forEach(k=>delete CAB_LAST[k]); if(!o.nc)delete o.nc; if(!o.desc)delete o.desc; cb(o)},'<div class="small" style="padding:0 0 6px">Iz pelas tabelas da IEC 60364-5-52 (cobre). Queda de tensão com ρ = 0,0225 Ω·mm²/m e λ = 0,08 mΩ/m.</div>')}
+ ],o=>{CAB_LAST={...o}; ["circ","p","ib","extra","kind","nc","desc"].forEach(k=>delete CAB_LAST[k]); if(!o.nc)delete o.nc; if(!o.desc)delete o.desc;
+  if(CAB_MODE==="cable"){const nm=String(o.circ||"").trim().toLowerCase(), A=allCircs(), f=nm?(A.find(x=>x.pl===S.doc&&circName(x.ci).toLowerCase()===nm)||A.find(x=>circName(x.ci).toLowerCase()===nm)):null; if(f)o.cid=f.ci.id; else delete o.cid}
+  cb(o)},'<div class="small" style="padding:0 0 6px">Iz pelas tabelas da IEC 60364-5-52 (cobre). Queda de tensão com ρ = 0,0225 Ω·mm²/m e λ = 0,08 mΩ/m.</div>'+(CAB_MODE==="circ"?'<div class="small" style="padding:0 0 6px"><b>Circuito:</b> estes dados (cabo principal e proteção) vão para o esquema unifilar. O comprimento é o dos cabos que desenhar com este nome; até lá é estimado.</div>':'')); cabDialogCircList()}
 let CAB_LAST={};
+// no diálogo do cabo: lista dos circuitos registados; ao escolher um, o cabo herda o tipo, a secção e a proteção do circuito
+function cabDialogCircList(){const b=$("mbox"); if(!b||CAB_MODE!=="cable")return; const i=b.querySelector('[data-k="circ"]'); if(!i)return; const names=[...new Set(allCircs().map(x=>circName(x.ci)).filter(Boolean))]; if(!names.length)return;
+ let dl=$("cabCircDL"); if(!dl){dl=document.createElement("datalist"); dl.id="cabCircDL"; document.body.appendChild(dl)} dl.innerHTML=names.map(n=>`<option value="${uEsc(n)}">`).join(""); i.setAttribute("list","cabCircDL");
+ const lb=i.previousElementSibling; if(lb&&lb.tagName==="LABEL"&&!lb.dataset.cc){lb.dataset.cc=1; lb.textContent="Circuito (escolha um dos registados para o cabo contar nesse circuito)"}}
+document.addEventListener("change",ev=>{const t=ev.target; if(!t||t.dataset.k!=="circ"||!t.closest("#mbox")||CAB_MODE!=="cable")return; const nm=t.value.trim().toLowerCase(); if(!nm)return;
+ const A=allCircs(), f=A.find(x=>x.pl===S.doc&&circName(x.ci).toLowerCase()===nm)||A.find(x=>circName(x.ci).toLowerCase()===nm); if(!f)return; const b=$("mbox");
+ ["kind","type","ph","sec","inst","In","prot","uso","temp","grp"].forEach(k=>{const el=b.querySelector(`[data-k="${k}"]`); if(el&&f.ci.c[k]!=null){el.value=String(f.ci.c[k])}}); toast("Cabo do circuito «"+circName(f.ci)+"»: herdou o tipo, a secção e a proteção.",2500)});
 // ao mudar o tipo de circuito no diálogo, a secção, a proteção e o limite de queda de tensão acompanham
 document.addEventListener("change",ev=>{const t=ev.target; if(!t||t.dataset.k!=="kind"||!t.closest("#mbox"))return; const P=cabPreset(t.value), b=$("mbox");
  ["sec","In","uso"].forEach(k=>{const el=b.querySelector('[data-k="'+k+'"]'); if(el&&P[k]!=null)el.value=P[k]})});
@@ -2610,11 +2698,14 @@ function circStart(edit){ setTool("circ"); S.tmp={list:[],edit:edit||null};
   const qe=quadroAt(P[P.length-1]); if(qe&&!L.includes(qe))L.push(qe); S.tmp.list=L}
  circHint(); draw()}
 function circHint(){const t=S.tmp, n=t&&t.list?t.list.length:0;
- hint(n?(n+" objeto(s) no circuito"+(t.edit?" (a editar)":"")+". Clique em mais objetos pela ordem do cabo, ou arraste uma janela; clicar num já escolhido tira-o. Enter, espaço ou botão direito liga; Esc cancela."):"Circuito: clique primeiro na origem (o quadro) e depois nos objetos pela ordem em que o cabo repica, ou arraste uma janela. Enter, espaço ou botão direito liga.")}
+ const reg=!t||(!t.edit&&!S.circAuto);
+ hint(n?(n+" objeto(s) no circuito"+(t.edit||t.editCi?" (a editar)":"")+". Clique em mais objetos, ou arraste uma janela; clicar num já escolhido tira-o. Enter, espaço ou botão direito "+(reg?"regista o circuito (os cabos desenham-se depois, com a ferramenta Cabo)":"liga")+"; Esc cancela."):(reg?"Circuito: clique no quadro e depois nos objetos do circuito (ou arraste uma janela). Enter regista o circuito; os cabos desenham-se à parte, com a ferramenta Cabo e o nome do circuito.":"Circuito com traçado automático: clique primeiro no quadro e depois nos objetos pela ordem em que o cabo repica. Enter liga."))}
 function circAddBox(x0,y0,x1,y1){const t=S.tmp, cr=boxIsCross(x0,y0,x1,y1), add=S.doc.ents.filter(e=>e.t==="sym"&&!t.list.includes(e)&&layerOf(e).visible&&!layerOf(e).locked&&(cr?crossBox:inBox)(e,x0,y0,x1,y1));
  while(add.length){const l=t.list.length?connPt(t.list[t.list.length-1]):connPt(add[0]); let bi=0,bd=Infinity; add.forEach((e,i)=>{const p=connPt(e),d=Math.abs(p[0]-l[0])+Math.abs(p[1]-l[1]); if(d<bd){bd=d;bi=i}}); t.list.push(add.splice(bi,1)[0])}}
-function circFinish(){const t=S.tmp; if(!t||!t.list||t.list.length<2){toast("Escolha pelo menos a origem e um objeto."); return}
- const list=t.list.slice(), edit=t.edit; S.tmp=null; autoCable(list,{ordered:true,edit})}
+function circFinish(){const t=S.tmp; if(!t||!t.list||t.list.length<2){toast("Escolha pelo menos o quadro e um objeto."); return}
+ const list=t.list.slice(), edit=t.edit, eci=t.editCi; S.tmp=null;
+ if(edit||S.circAuto){autoCable(list,{ordered:true,edit}); return}
+ circRegister(list,eci); draw()}
 function drawCircPick(){const t=S.tmp; if(S.tool!=="circ"||!t||!t.list)return; G.save(); G.strokeStyle="#e8742c"; G.fillStyle="#e8742c"; G.lineWidth=1.5; G.setLineDash([5,4]); G.beginPath();
  t.list.forEach((e,i)=>{const c=connPt(e), [a,b]=W2S(c[0],c[1]); i?G.lineTo(a,b):G.moveTo(a,b)}); if(t.list.length){const [a,b]=W2S(S.mouse.x,S.mouse.y); G.lineTo(a,b)} G.stroke(); G.setLineDash([]);
  t.list.forEach((e,i)=>{const c=connPt(e), [a,b]=W2S(c[0],c[1]); G.beginPath(); G.arc(a,b,9,0,Math.PI*2); G.fill(); G.fillStyle="#fff"; G.font="bold 11px Arial"; G.textAlign="center"; G.textBaseline="middle"; G.fillText(i?String(i):"Q",a,b+.5); G.fillStyle="#e8742c"});
@@ -3398,11 +3489,11 @@ function quadroCables(qe){const B=symBox(qe,.3*U()), out=[];
 function cabDescr(x){ if(x.qd)return "Alimentação "+(quadroName(x.qd)||SYM[x.qd.sym].n);
  if(!x.syms.length)return x.c.layer; const by=new Map(); x.syms.forEach(s=>by.set(s.layer,(by.get(s.layer)||0)+1)); const lay=[...by.entries()].sort((a,b)=>b[1]-a[1])[0][0];
  return lay+" ("+x.syms.length+" ponto"+(x.syms.length>1?"s":"")+")"}
-function uLeafFromCable(x,ph){const e=x.c, r=cabCalc(e), c=r.c, tri=c.ph==="3F"; const m=String(c.circ||"").match(/^\s*(C\s*\d+[A-Za-z]?)\b[\s:.-]*(.*)$/i);
+function uLeafFromCable(x,ph){const e=x.c, r=cabCalc(e), c=r.c, tri=c.ph==="3F"; const m=String(c.circ||"").match(/^\s*((?:C|IL|I|T|TM|FM|F|AV)\s*\d+[A-Za-z]?)\b[\s:.-]*(.*)$/i);
  const prot=c.prot==="gG"?{...uDev("fus",ph),In:uN(c.In),pol:tri?"3P":"1P"}:{...uDev("dj",ph),In:uN(c.In),pol:tri?"3P+N":"1P+N"};
- const des=m?(m[2].trim()||cabDescr(x)):(String(c.circ||"").trim()||cabDescr(x));
+ const des=m?(m[2].trim()||(e._ci&&c.desc)||cabDescr(x)):(String(c.circ||"").trim()||cabDescr(x));
  const p=c.p?String(c.p):(r.Ib>0?uF(r.Ib*(tri?Math.sqrt(3)*400:230)*uN(c.cos||.9)/1000):"");
- return uLeaf([prot],{ref:m?m[1].replace(/\s+/g,"").toUpperCase():"",des,cabo:r.desig,p,fase:tri?"3F":"auto",ex:!!e.exist,src:e.id,pl:(plantaOf(e)||S.doc).id,sub:!!x.qd,...(x.qd?{to:quadroName(x.qd)||SYM[x.qd.sym].n}:{})})}
+ return uLeaf([prot],{ref:m?m[1].replace(/\s+/g,"").toUpperCase():"",des,cabo:r.desig,p,fase:tri?"3F":"auto",ex:!!e.exist,src:e.id,pl:(e._pl||plantaOf(e)||S.doc).id,sub:!!x.qd,...(x.qd?{to:quadroName(x.qd)||SYM[x.qd.sym].n}:{})})}
 function uAutoGroup(leaves,ph,mode){const N=+mode; if(!N)return leaves;
  const groups=[], subs=[], mono=[], tri=[];
  leaves.forEach(l=>{ if(l.circ.sub)subs.push(l); else if(l.circ.fase==="3F")tri.push(l); else mono.push(l)});
@@ -3416,7 +3507,12 @@ function uSizeMain(q){const {ld,tot}=uPhases(q); const Ib=(q.ph==="3F"?Math.max(
  const In=[25,40,63,80,100,125,160,250,400,630].find(v=>v>=Math.max(Ib,mx))||630; q.root.devs.forEach(d=>{ if(d.t==="int"||d.t==="dj")d.In=In})}
 function uShowQ(i){const d=uDoc(); d.act=i; $("uni").style.display="grid"; UNI.arm=null; UNI.drag=null; uPalOn(); UNI.sel=null; uFillQ(); uDone(); setTimeout(uFit,0)}
 // cabos de um quadro em todas as plantas do projeto (o quadro reconhece-se pela etiqueta)
-function quadroCablesAll(qe){const nome=quadroName(qe); if(!nome||!PROJ||PROJ.plantas.length<2)return quadroCables(qe).map(x=>({...x,pl:S.doc}));
+// cabos que saem do quadro e circuitos registados (os cabos que pertencem a um circuito entram pelo circuito)
+function quadroCablesAll(qe){const nome=quadroName(qe), base=quadroCablesAll0(qe).filter(x=>!circOfCable(x.c,x.pl)), out=base.concat(circFeedsOf(qe));
+ // alimentação deste quadro registada como circuito de um quadro a montante
+ if(!out.some(x=>x.in))allCircs().forEach(({ci,pl})=>{const q=circQ(ci,pl); if(!q||q===qe)return; if(circObjs(ci,pl).some(o=>isQuadro(o)&&(o===qe||(nome&&quadroName(o)===nome))))out.push({c:circV(ci,pl),syms:[],qd:q,in:true,pl})});
+ return out}
+function quadroCablesAll0(qe){const nome=quadroName(qe); if(!nome||!PROJ||PROJ.plantas.length<2)return quadroCables(qe).map(x=>({...x,pl:S.doc}));
  const keep=S.doc, out=[], seen=new Set();
  try{PROJ.plantas.forEach(pl=>{const qs=pl===keep?[qe,...pl.ents.filter(e=>e!==qe&&isQuadro(e)&&quadroName(e)===nome)]:pl.ents.filter(e=>isQuadro(e)&&quadroName(e)===nome); if(!qs.length)return;
   S.doc=pl; qs.forEach(q=>quadroCables(q).forEach(x=>{ if(seen.has(x.c.id))return; seen.add(x.c.id); out.push({...x,pl})}))})} finally{S.doc=keep}
@@ -3472,7 +3568,7 @@ function ctxMenu(cx,cy,items){ctxClose(); const m=document.createElement("div");
  const r=m.getBoundingClientRect(); m.style.left=Math.max(4,Math.min(cx,innerWidth-r.width-6))+"px"; m.style.top=Math.max(4,Math.min(cy,innerHeight-r.height-6))+"px";
  m.onclick=ev=>{const b=ev.target.closest("button"); if(!b)return; const it=items[+b.dataset.i]; ctxClose(); it[1]()};
  setTimeout(()=>document.addEventListener("pointerdown",ctxOut,true),0)}
-function entCtx(e,cx,cy,wx,wy){const it=[]; if([...S.sel].some(x=>x.t==="line"||x.t==="pl"||x.t==="arc")&&(S.sel.has(e)||e.t==="line"||e.t==="pl"||e.t==="arc"))it.push(["Transformar em circuito (cabo)…",()=>{ if(!S.sel.has(e))S.sel=new Set([e]); linesToCable()}]);
+function entCtx(e,cx,cy,wx,wy){const it=[]; if([...S.sel].some(x=>x.t==="line"||x.t==="pl"||x.t==="arc")&&(S.sel.has(e)||e.t==="line"||e.t==="pl"||e.t==="arc"))it.push(["Transformar em cabos…",()=>{ if(!S.sel.has(e))S.sel=new Set([e]); linesToCable()}]);
  if((e.t==="pl"||e.t==="cable")&&!e.esp&&wx!=null){const vi=vertAt(e,wx,wy,9/S.view.s);
   if(vi>=0){ if(e.pts.length>2)it.push(["Tirar este nó",()=>nodeDel(e,vi)]); if(e.t==="cable"&&vi>0&&vi<e.pts.length-1)it.push([(e.taps||[]).includes(vi)?"Tirar a derivação deste nó":"Marcar este nó como derivação",()=>nodeTap(e,vi)])}
   else {it.push(["Acrescentar nó aqui",()=>nodeAdd(e,wx,wy,false)]); if(e.t==="cable")it.push(["Acrescentar nó de derivação aqui",()=>nodeAdd(e,wx,wy,true)])}
@@ -3831,7 +3927,7 @@ function cabSec(cabo){const c0=String(cabo||"");
   if(sn>0)return {n:+u[1]+(nn?1:0),s:sn*k,spe:(pe?uN(pe[1]):nn?uN(nn[1]):sn)*k,par:k}}}
  return cabSec0(cabo)}
 function cabSec0(cabo){const m=String(cabo||"").match(/(\d+)\s*[GgxX×]\s*(\d+(?:[.,]\d+)?)/); if(!m)return null; const s=uN(m[2]); if(!(s>0))return null; const pe=String(cabo).match(/\+\s*(\d+(?:[.,]\d+)?)\s*G/i); return {n:+m[1],s,spe:pe?uN(pe[1]):s}}
-function cabById(id){ if(id==null)return null; for(const p of (PROJ?PROJ.plantas:[S.doc])){const c=p.ents.find(e=>e.id===id&&e.t==="cable"); if(c)return c} return null}
+function cabById(id){ if(id==null)return null; for(const p of (PROJ?PROJ.plantas:[S.doc])){const c=p.ents.find(e=>e.id===id&&e.t==="cable"); if(c)return c} const f=allCircs().find(x=>x.ci.id===id); if(f)return circV(f.ci,f.pl); return null}
 function uKs(q){const k=uN(q.ks); return k>0&&k<=1?k:1}
 function uUso(leaf){const c=cabById(leaf.circ.src); if(c)return (c.c&&c.c.uso==="ilum")?"ilum":"out"; return /ilumina/i.test(leaf.circ.des||"")?"ilum":"out"}
 function netDU(P,L,s,tri){ if(!(P>0)||!(L>0)||!(s>0))return 0; const Ib=tri?P*1000/(Math.sqrt(3)*400*NET_COS):P*1000/(NET_U0*NET_COS), sin=Math.sqrt(1-NET_COS*NET_COS);
@@ -4429,9 +4525,11 @@ const CMDS=[
  {id:"trim",n:"Cortar (trim)",g:"Modificar",a:["TR","TRIM","CORTAR"],f:()=>teStart(false)},
  {id:"extend",n:"Prolongar (extend)",g:"Modificar",a:["EX","EXTEND","PROLONGAR"],f:()=>teStart(true)},
  {id:"fillet",n:"Concordância (fillet)…",g:"Modificar",a:["F","FILLET","CONCORDANCIA"],f:()=>filletDialog(),sep:true},
- {id:"circ",n:"Circuito",g:"Elétrico",a:["CI","CIRCUITO"],f:()=>setTool("circ")},
+ {id:"circ",n:"Circuito (quadro e objetos; os cabos desenham-se à parte)",g:"Elétrico",a:["CI","CIRCUITO"],f:()=>{S.circAuto=false; setTool("circ"); circHint()}},
+ {id:"circauto",n:"Circuito com traçado automático do cabo",g:"Elétrico",a:["CIA","CIRCAUTO"],f:()=>{S.circAuto=true; setTool("circ"); circHint()}},
+ {id:"circlist",n:"Circuitos desta planta…",g:"Elétrico",a:["CIRCUITOS","LCI"],f:()=>circListDialog()},
  {id:"cabo",n:"Cabo à mão",g:"Elétrico",a:["CA","CABO","K"],f:()=>setTool("cable")},
- {id:"lin2cab",n:"Linhas → circuito (transformar as linhas selecionadas num cabo)",g:"Elétrico",a:["LC","LINHASCABO","L2C","PCABO"],f:()=>linesToCable()},
+ {id:"lin2cab",n:"Linhas → cabos (transformar as linhas selecionadas em cabos, um por troço)",g:"Elétrico",a:["LC","LINHASCABO","L2C","PCABO"],f:()=>linesToCable()},
  {id:"uni",n:"Esquema unifilar…",g:"Elétrico",a:["UN","UNIFILAR"],f:()=>openUni(),sep:true},
  {id:"legenda",n:"Simbologia no desenho",g:"Elétrico",a:["LEG","LEGENDA","SIMBOLOGIA"],f:()=>legPlace()},
  {id:"legnotas",n:"Simbologia e notas da folha…",g:"Elétrico",a:["NOTAS"],f:()=>legEditDialog()},
@@ -4490,7 +4588,7 @@ function cmdPrompt(){const el=$("cmdPr"); if(!el)return; const t=S.tmp, tool=S.t
  if(S.pend)p=S.pend.name+": selecione objetos [Enter confirma]"; else if(tool==="mv"&&t)p=(t.copy?"Copiar":"Mover")+(t.base?": destino ou distância [@dx,dy]":": ponto base ou deslocamento [x;y]");
  else if(tool==="line")p=t?"Reta: próximo ponto ou comprimento [Desfazer (D) / Fechar (F)]":"Reta: primeiro ponto";
  else if(tool==="circle")p=t&&t.c?"Círculo: raio (m)":"Círculo: centro"; else if(tool==="sym")p="Símbolo: ponto [Rodar (R) / Espelhar (M)"+(S.sym&&symOptList(S.sym)?" / Opções (O)":"")+"]";
- else if(tool==="circ")p="Circuito: quadro e objetos [À mão (M) / Enter liga]"; else if(tool==="cable")p="Cabo: vértices ou distância [Circuito (M) / Enter termina]";
+ else if(tool==="circ")p=S.circAuto?"Circuito automático: quadro e objetos [À mão (M) / Enter liga]":"Circuito: quadro e objetos [Enter regista]"; else if(tool==="cable")p="Cabo: vértices ou distância [Circuito (M) / Enter termina]";
  else if(tool==="esp")p=t&&t.pts&&!t.peca?"Espaço: cantos ou distância [Desfazer (D) / Fechar (F)]":"Espaço: clique dentro [À mão (P)]"; else if(tool!=="select")p=(CMDN[tool]||tool)+":";
  el.textContent=p}
 function cmdLog(t){const L=$("cmdlog"); if(!L)return; L.textContent=(L.textContent+"\n"+t).split("\n").slice(-200).join("\n").replace(/^\n/,""); L.scrollTop=L.scrollHeight}
