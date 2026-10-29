@@ -1015,7 +1015,7 @@ function fxPrims(fx){const L=[], T=[], h=S.doc.textH*U()*.8, vr=VR()*180/Math.PI
    const dx=u[0]*tl*.5+nv[0]*tl, dy=u[1]*tl*.5+nv[1]*tl; L.push({a:[cx-dx,cy-dy],b:[cx+dx,cy+dy],e:e0})}
   let ang=Math.atan2(u[1],u[0])*180/Math.PI-vr; ang=((ang%360)+540)%360-180; if(ang>90)ang-=180; if(ang<=-90)ang+=180; ang+=vr;
   const r=ang*Math.PI/180, up=[-Math.sin(r),Math.cos(r)], names=[...new Set(b.cabs.map(fxCircName).filter(Boolean))];
-  const s=names.length?names.join(", ")+(names.length<n?" +"+(n-names.length):"")+(n>8?" ("+n+" cabos)":""):(n>8?n+" cabos":""); if(!s||s.length*h*.75>b.len*.95)return;
+  const nn=b.cabs.filter(e=>!fxCircName(e)).length, s=names.length?names.join(", ")+(nn?" +"+nn:"")+(n>8?" ("+n+" cabos)":""):(n>8?n+" cabos":""); if(!s||s.length*h*.75>b.len*.95)return;
   T.push({x:mid[0]+up[0]*h*1.5,y:mid[1]+up[1]*h*1.5,h,s,rot:ang,c:1,e:e0})});
  return {L,T}}
 function fxDraw(fx,colFn,lwFn){ if(!fx||!fx.bundles.length)return; const P=fxPrims(fx); G.save(); G.setLineDash([]);
@@ -1636,6 +1636,7 @@ function exportDXF(opts){
   else if((e.t==="pl"||e.t==="cable")){w(0,"POLYLINE");w(8,lay);col(e);w(66,1);w(10,0);w(20,0);w(30,0);w(70,e.closed?1:0); e.pts.forEach(p=>{w(0,"VERTEX");w(8,lay);w(10,p[0]);w(20,p[1]);w(30,0)}); w(0,"SEQEND");w(8,lay)}
   if(e.t==="cable"&&e.taps){const r=tapR(); e.taps.forEach(i=>{const v=e.pts[i]; if(!v||i>=e.pts.length-1)return; w(0,"POLYLINE");w(8,lay);col(e);w(66,1);w(10,0);w(20,0);w(30,0);w(70,1);w(40,r);w(41,r);
    [[v[0]-r/2,v[1]],[v[0]+r/2,v[1]]].forEach(q=>{w(0,"VERTEX");w(8,lay);w(10,q[0]);w(20,q[1]);w(30,0);w(42,1)}); w(0,"SEQEND");w(8,lay)})}
+  if(e.t==="cable")cabTicks(e).forEach(([a,b])=>{w(0,"LINE");w(8,lay);col(e);w(10,a[0]);w(20,a[1]);w(30,0);w(11,b[0]);w(21,b[1]);w(31,0)});
   if(e.t==="cable"){const p=labelOf(e,true); if(p){w(0,"TEXT");w(8,lay);col(e);w(10,p.x);w(20,p.y);w(30,0);w(40,p.h);w(1,dxfStr(p.txt));w(50,p.rot)}}
   if(e.t==="circle"){w(0,"CIRCLE");w(8,lay);col(e);w(10,e.x);w(20,e.y);w(30,0);w(40,e.r)}
   else if(e.t==="arc"){w(0,"ARC");w(8,lay);col(e);w(10,e.x);w(20,e.y);w(30,0);w(40,e.r);w(50,((e.a0%360)+360)%360);w(51,((e.a1%360)+360)%360)}
@@ -1816,7 +1817,7 @@ const RHO=.0225, LAMBDA=.00008;
 const CAB_DEF={circ:"",type:"XV",ph:"1F",comp:"pe",sec:"auto",inst:"B",grp:"1",temp:"30",p:"",ib:"",cos:"0.9",In:"16",prot:"DJ",uso:"out",du0:"0",extra:"0",lab:true};
 const fmtS=s=>String(s).replace(".",",");
 function cabMethod(c){const t=CTYPES[c.type]; if(c.inst==="A")return t.multi?"A2":"A1"; if(c.inst==="B")return t.multi?"B2":"B1"; return c.inst}
-function cabCond(c){return c.ph==="3F"?(c.comp==="pe"?5:4):(c.comp==="pe"?3:2)}
+function cabCond(c){ if(c.nc&&+c.nc>=2)return +c.nc; return c.ph==="3F"?(c.comp==="pe"?5:4):(c.comp==="pe"?3:2)}
 function cabDesig(c,s){const t=CTYPES[c.type], n=cabCond(c), S=fmtS(s);
  if(!t.multi)return (s<=6?"H07V-U":"H07V-R")+" "+n+"x"+S;
  const nm={VV:"VV",XV:"XV",XZ1:"XZ1",H05VVF:"H05VV-F"}[c.type]; return nm+" "+n+(c.comp==="pe"?"G":"x")+S}
@@ -1888,7 +1889,7 @@ function cabCalc(e){const c={...CAB_DEF,...e.c}; const t=CTYPES[c.type]||CTYPES.
  if(s>smax)errs.push(`${CTYPES[c.type].n.split(" ")[0]} só até ${fmtS(smax)} mm².`);
  if(!auto&&s<smin)notes.push(`Secção abaixo do habitual para ${c.uso==="ilum"?"iluminação":"tomadas/força"} (${fmtS(smin)} mm²).`);
  return {c,L,Ib,In,Iz,Izc,fT,fG,meth,s,dU,dT,lim,errs,notes,desig:cabDesig(c,s),ok:!errs.length}}
-function cabLabel(e,r){r=r||cabCalc(e); return (e.c.circ?e.c.circ+" · ":"")+r.desig}
+function cabLabel(e,r){r=r||cabCalc(e); return (e.c.circ?e.c.circ+" · ":"")+r.desig+(e.c.desc?" ("+e.c.desc+")":"")}
 
 // tipos de circuito: secção e proteção sugeridas (podem ser alteradas no diálogo)
 const CAB_KINDS={ilum:{n:"Iluminação",sec:"1.5",In:"10",uso:"ilum"},tom:{n:"Tomadas",sec:"2.5",In:"16",uso:"out"},fm:{n:"Força motriz / equipamento",sec:"auto",In:"16",uso:"out"},qd:{n:"Alimentação de quadro",sec:"4",In:"25",uso:"out"}};
@@ -1906,6 +1907,8 @@ function cabDialog(init,cb){const c={...CAB_DEF,...init};
   {k:"type",l:"Tipo de cabo",type:"select",v:c.type,opts:opts(Object.fromEntries(Object.entries(CTYPES).map(([k,t])=>[k,t.n])))},
   {k:"ph",l:"Alimentação",type:"select",v:c.ph,opts:[["1F","Monofásico 230 V"],["3F","Trifásico 400 V"]]},
   {k:"comp",l:"Condutores",type:"select",v:c.comp,opts:[["pe","Com terra (3G mono / 5G tri)"],["nope","Sem terra (2x mono / 4x tri c/ neutro)"]]},
+  {k:"nc",l:"N.º de condutores (em comandos: fase, viajantes, retorno; vazio = automático)",type:"select",v:String(c.nc||""),opts:[["","Automático"],...["2","3","4","5","6","7"].map(n=>[n,n+" condutores"])]},
+  {k:"desc",l:"Função do troço (ex.: alimentação, viajantes, retorno)",v:c.desc||""},
   {k:"sec",l:"Secção (mm²)",type:"select",v:String(c.sec),opts:[["auto","Automática (mínima que cumpre)"],...SECS.map(s=>[String(s),fmtS(s)+" mm²"])]},
   {k:"inst",l:"Modo de instalação",type:"select",v:c.inst,opts:opts(INST)},
   {k:"grp",l:"Circuitos agrupados",type:"select",v:String(c.grp),opts:Object.keys(FGRP).map(n=>[n,n+(n==="1"?" (isolado)":"")+" · f = "+FGRP[n]])},
@@ -1919,7 +1922,7 @@ function cabDialog(init,cb){const c={...CAB_DEF,...init};
   {k:"du0",l:"Queda de tensão a montante (%), usada só se o cabo não estiver num esquema unifilar",v:c.du0},
   {k:"extra",l:"Comprimento extra: subidas, descidas, folga (m)",v:c.extra},
   {k:"lab",l:"Escrever a designação no desenho",type:"check",v:c.lab}
- ],o=>{CAB_LAST={...o}; ["circ","p","ib","extra","kind"].forEach(k=>delete CAB_LAST[k]); cb(o)},'<div class="small" style="padding:0 0 6px">Iz pelas tabelas da IEC 60364-5-52 (cobre). Queda de tensão com ρ = 0,0225 Ω·mm²/m e λ = 0,08 mΩ/m.</div>')}
+ ],o=>{CAB_LAST={...o}; ["circ","p","ib","extra","kind","nc","desc"].forEach(k=>delete CAB_LAST[k]); if(!o.nc)delete o.nc; if(!o.desc)delete o.desc; cb(o)},'<div class="small" style="padding:0 0 6px">Iz pelas tabelas da IEC 60364-5-52 (cobre). Queda de tensão com ρ = 0,0225 Ω·mm²/m e λ = 0,08 mΩ/m.</div>')}
 let CAB_LAST={};
 // ao mudar o tipo de circuito no diálogo, a secção, a proteção e o limite de queda de tensão acompanham
 document.addEventListener("change",ev=>{const t=ev.target; if(!t||t.dataset.k!=="kind"||!t.closest("#mbox"))return; const P=cabPreset(t.value), b=$("mbox");
@@ -1961,7 +1964,14 @@ function labelOf(e,forPlot){const o=e.lbOff||[0,0];
  if(e.t==="sym"){ if(!e.label||e.lbHide||S.doc.lbSymOff)return null; const k=S.doc.symScale*U()*(e.scale||1); return {x:e.x+.18*k+o[0],y:e.y+.18*k+o[1],h:.1*k*1.2,s:e.label,rot:e.lbRot!=null?+e.lbRot:0,ok:true}}
  if(e.t==="cable"){const r=cabCalc(e); if(e.lbHide||S.doc.lbCabOff||(e.c&&e.c.lab===false&&(r.ok||forPlot)))return null; const p=cabLabelPos(e); return {x:p.x+o[0],y:p.y+o[1],h:p.h,s:(r.ok?"":"⚠ ")+cabLabel(e,r),rot:e.lbRot!=null?+e.lbRot:p.ang,c:0,ok:r.ok,txt:cabLabel(e,r)}}
  return null}
-function drawCableLabel(e,col){const L=labelOf(e,S.plotting); if(!L)return; drawText(L,L.ok?col:"#ef4444")}
+// traços oblíquos com o n.º de condutores (quando foi indicado no cabo), a um quarto do maior troço visível
+function cabTicks(e){ if(!e.c||!(+e.c.nc>=2))return []; let P=e.pts, best=null, bl=-1; const segs=[];
+ (FX&&!FXfull&&FX.pieces.has(e)?FX.pieces.get(e):[P]).forEach(Q=>{for(let i=1;i<Q.length;i++){const l=Math.hypot(Q[i][0]-Q[i-1][0],Q[i][1]-Q[i-1][1]); if(l>bl){bl=l; best=[Q[i-1],Q[i]]}}});
+ if(!best)return []; const h=S.doc.textH*U()*.8, n=Math.min(7,+e.c.nc), [a,b]=best, u=[(b[0]-a[0])/bl,(b[1]-a[1])/bl], nv=[-u[1],u[0]], t0=Math.min(bl*.25,bl/2-h*n*.25), sp=h*.4, tl=h*.6, out=[];
+ if(bl<h*2)return [];
+ for(let k=0;k<n;k++){const c=t0+(k-(n-1)/2)*sp, cx=a[0]+u[0]*c, cy=a[1]+u[1]*c, dx=u[0]*tl*.5+nv[0]*tl, dy=u[1]*tl*.5+nv[1]*tl; out.push([[cx-dx,cy-dy],[cx+dx,cy+dy]])} return out}
+function drawCableLabel(e,col){const T=cabTicks(e); if(T.length){G.save(); G.setLineDash([]); G.strokeStyle=col; G.lineWidth=Math.max(1,G.lineWidth*.6); G.beginPath(); T.forEach(([p,q])=>{const [a,b]=W2S(p[0],p[1]),[c,d]=W2S(q[0],q[1]); G.moveTo(a,b); G.lineTo(c,d)}); G.stroke(); G.restore()}
+ const L=labelOf(e,S.plotting); if(!L)return; drawText(L,L.ok?col:"#ef4444")}
 function pickLabelGrip(x,y){const tol=8/S.view.s; let best=null, bd=tol; S.sel.forEach(e=>{const L=labelOf(e); if(!L)return; const d=Math.hypot(L.x-x,L.y-y); if(d<bd){bd=d; best={e,L}}}); return best}
 function cabLabelPos(e){let bi=1,bl=-1, PP=e.pts;
  // com o feixe ligado, a etiqueta do cabo vai para o maior troço que se vê dele (fora do feixe)
