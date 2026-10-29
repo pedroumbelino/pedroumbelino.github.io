@@ -868,13 +868,17 @@ function render(){
  raf=0; const W=cv.clientWidth,H=cv.clientHeight; G.clearRect(0,0,W,H);
  const light=isLight();
  // imagem de fundo
- if(S.doc.bg&&S.img&&S.img.complete&&S.img.naturalWidth&&!S.doc.refHidden){const b=S.doc.bg; const [px,py]=W2S(b.x,b.y+b.h); G.globalAlpha=b.alpha||.6; G.save(); G.translate(px,py); G.rotate(VR()); G.drawImage(S.img,0,0,b.w*S.view.s,b.h*S.view.s); G.restore(); G.globalAlpha=1}
+ if(S.doc.bg&&S.img&&S.img.complete&&S.img.naturalWidth&&!S.doc.refHidden&&!plantaRefSrc(S.doc).bgOff){const b=S.doc.bg; const [px,py]=W2S(b.x,b.y+b.h); G.globalAlpha=b.alpha||.6; G.save(); G.translate(px,py); G.rotate(VR()); G.drawImage(S.img,0,0,b.w*S.view.s,b.h*S.view.s); G.restore(); G.globalAlpha=1}
  // referência
  G.lineWidth=1; G.strokeStyle=light?"#9aa3af":"#5b6472"; G.fillStyle=G.strokeStyle;
  G.beginPath();
- for(const r of S.doc.ref){ if(!refVisible(r))continue; drawGeom(r,true) }
+ for(const r of S.doc.ref){ if(!refVisible(r)||r.layer===PLANTA_LAY)continue; drawGeom(r,true) }
  G.stroke();
- for(const r of S.doc.ref){ if(r.t==="text"&&refVisible(r))drawText(r,light?"#6b7280":"#8b95a3") }
+ for(const r of S.doc.ref){ if(r.t==="text"&&refVisible(r)&&r.layer!==PLANTA_LAY)drawText(r,light?"#6b7280":"#8b95a3") }
+ // camada PLANTA (contornos do PDF): cinzento 153,153,153 esbatido, como uma camada bloqueada no AutoCAD
+ if(S.doc.ref.some(r=>r.layer===PLANTA_LAY)){G.save(); G.globalAlpha=.55; G.strokeStyle=PLANTA_RGB; G.fillStyle=PLANTA_RGB; G.lineWidth=1; G.beginPath();
+  for(const r of S.doc.ref){ if(r.layer!==PLANTA_LAY||!refVisible(r)||r.t==="text")continue; drawGeom(r,true)} G.stroke();
+  for(const r of S.doc.ref){ if(r.layer===PLANTA_LAY&&r.t==="text"&&refVisible(r))drawText(r,PLANTA_RGB)} G.restore()}
  espDrawAll(light);
  // entidades
  for(const e of S.doc.ents){ const L=layerOf(e); if(!L.visible)continue;
@@ -1605,7 +1609,8 @@ async function importPDF(buf,name){
   ask("Abrir PDF ("+pdf.numPages+" página"+(pdf.numPages>1?"s":"")+")",[
    {k:"pg",l:"Página",v:"1"},
    {k:"sc",l:"Escala do desenho",type:"select",v:"100",opts:[["20","1:20"],["50","1:50"],["100","1:100"],["200","1:200"],["500","1:500"],["0","Não sei: calibrar depois"]]},
-   {k:"q",l:"Resolução",type:"select",v:"2",opts:[["1","Normal ( mais leve )"],["2","Alta"],["3","Muito alta ( PDF A1/A0 )"]]}],async o=>{
+   {k:"q",l:"Resolução",type:"select",v:"2",opts:[["1","Normal ( mais leve )"],["2","Alta"],["3","Muito alta ( PDF A1/A0 )"]]},
+   {k:"vec",l:"Tirar os contornos do desenho para a camada PLANTA (PDF vetorial)",type:"check",v:true},{k:"hide",l:"Depois esconder a imagem (fica só o desenho)",type:"check",v:true}],async o=>{
    try{ const pg=Math.max(1,Math.min(pdf.numPages,parseInt(o.pg,10)||1)); const page=await pdf.getPage(pg);
     const vp1=page.getViewport({scale:1}); const target=[3000,5000,7500][(parseInt(o.q,10)||2)-1];
     let k=target/Math.max(vp1.width,vp1.height); const maxPx=36e6; if(vp1.width*vp1.height*k*k>maxPx)k=Math.sqrt(maxPx/(vp1.width*vp1.height));
@@ -1617,6 +1622,7 @@ async function importPDF(buf,name){
     const wReal=sc?vp1.width*ptm*sc:10, hReal=wReal*c.height/c.width;
     const img=new Image(); img.onload=()=>{pushUndo(); refDetach(); S.doc.bg={data,x:0,y:0,w:wReal*U(),h:hReal*U(),alpha:.75}; refShare(); S.img=img; if(!S.doc.name)S.doc.name=name.replace(/\.pdf$/i,"");
      rebuildIndex(); fit(); saveLocal();
+     if(o.vec){(async()=>{try{toast("A tirar os contornos do PDF…",8000); const R=await pdfVectorize(page,{text:true}); pdfReport(R,pdfApplyVector(R,{hideImg:o.hide}))}catch(e){console.error(e); toast("Não deu para tirar os contornos deste PDF; fica como imagem.",5000)}})()}
      if(sc){toast("PDF aberto à escala 1:"+sc+". Confirme com «Medir» numa cota conhecida; se não bater, use «Calibrar».",6000); setTool("select")}
      else {toast("PDF aberto. Use «Calibrar»: clique em dois pontos de uma cota conhecida.",6000); setTool("calib")}};
     img.src=data;
@@ -3517,6 +3523,62 @@ function legEditDialog(cb){const it=legCollect(null);
 window.addEventListener("keydown",e=>{ if(e.key==="Shift"&&!S.shiftDown){S.shiftDown=true; if(S.tool==="trim"||S.tool==="extend")draw()}});
 window.addEventListener("keyup",e=>{ if(e.key==="Shift"){S.shiftDown=false; if(S.tool==="trim"||S.tool==="extend")draw()}});
 
+/* ================= Contornos a partir de um PDF vetorial: camada PLANTA (cinzento 153,153,153, esbatida e sempre por trás) ================= */
+const PLANTA_LAY="PLANTA", PLANTA_RGB="#999999";
+async function pdfVectorize(page,opts){opts=opts||{}; const OPS=pdfjsLib.OPS, U2=pdfjsLib.Util, vp=page.getViewport({scale:1});
+ const ol=await page.getOperatorList(); const F=ol.fnArray, A=ol.argsArray;
+ let ctm=[1,0,0,1,0,0]; const stack=[]; let stroke="#000000", fill="#000000"; const sstack=[];
+ const paths=[]; let cur=[], sub=null; const MAXS=opts.max||400000; let nseg=0;
+ const tp=(x,y)=>{const p=U2.applyTransform([x,y],ctm); return U2.applyTransform(p,vp.transform)};
+ const hex=a=>{ if(typeof a[0]==="string")return a[0].toLowerCase(); if(a.length>=3)return "#"+[a[0],a[1],a[2]].map(v=>Math.max(0,Math.min(255,Math.round(v<=1&&a.every(q=>q<=1)?v*255:v))).toString(16).padStart(2,"0")).join(""); return "#000000"};
+ const white=h=>{const m=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/.exec(h||""); return m&&parseInt(m[1],16)>235&&parseInt(m[2],16)>235&&parseInt(m[3],16)>235};
+ const flush=(paint)=>{ if(sub&&sub.length>1)cur.push(sub); sub=null; if(paint&&cur.length){ cur.forEach(p=>{ if(nseg<MAXS){paths.push(p); nseg+=p.length-1}})} cur=[]};
+ for(let i=0;i<F.length;i++){const fn=F[i], a=A[i];
+  if(fn===OPS.save){stack.push(ctm.slice()); sstack.push([stroke,fill])}
+  else if(fn===OPS.restore){ if(stack.length)ctm=stack.pop(); if(sstack.length)[stroke,fill]=sstack.pop()}
+  else if(fn===OPS.transform)ctm=U2.transform(ctm,a);
+  else if(fn===OPS.paintFormXObjectBegin){stack.push(ctm.slice()); sstack.push([stroke,fill]); if(a&&a[0]&&a[0].length===6)ctm=U2.transform(ctm,a[0])}
+  else if(fn===OPS.paintFormXObjectEnd){ if(stack.length)ctm=stack.pop(); if(sstack.length)[stroke,fill]=sstack.pop()}
+  else if(fn===OPS.setStrokeRGBColor||fn===OPS.setStrokeColor)stroke=hex(a||[]);
+  else if(fn===OPS.setFillRGBColor||fn===OPS.setFillColor)fill=hex(a||[]);
+  else if(fn===OPS.setStrokeGray)stroke=hex([a[0],a[0],a[0]]); else if(fn===OPS.setFillGray)fill=hex([a[0],a[0],a[0]]);
+  else if(fn===OPS.constructPath){const ops=a[0], c=a[1]; let k=0, last=null, start=null;
+   for(const op of ops){
+    if(op===OPS.moveTo){ if(sub&&sub.length>1)cur.push(sub); const p=tp(c[k],c[k+1]); k+=2; sub=[p]; last=[c[k-2],c[k-1]]; start=last}
+    else if(op===OPS.lineTo){const p=tp(c[k],c[k+1]); last=[c[k],c[k+1]]; k+=2; if(!sub)sub=[p]; else sub.push(p)}
+    else if(op===OPS.curveTo||op===OPS.curveTo2||op===OPS.curveTo3){let p1,p2,p3; if(op===OPS.curveTo){p1=[c[k],c[k+1]];p2=[c[k+2],c[k+3]];p3=[c[k+4],c[k+5]];k+=6} else if(op===OPS.curveTo2){p1=last;p2=[c[k],c[k+1]];p3=[c[k+2],c[k+3]];k+=4} else {p1=[c[k],c[k+1]];p2=[c[k+2],c[k+3]];p3=p2;k+=4}
+     const p0=last||p1; if(!sub)sub=[tp(p0[0],p0[1])]; const N=8; for(let j=1;j<=N;j++){const t=j/N, u=1-t; const x=u*u*u*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t*t*t*p3[0], y=u*u*u*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t*t*t*p3[1]; sub.push(tp(x,y))} last=p3}
+    else if(op===OPS.closePath){ if(sub&&sub.length>1){sub.push(sub[0].slice())} }
+    else if(op===OPS.rectangle){ if(sub&&sub.length>1)cur.push(sub); const x=c[k],y=c[k+1],w=c[k+2],h=c[k+3]; k+=4; sub=[tp(x,y),tp(x+w,y),tp(x+w,y+h),tp(x,y+h),tp(x,y)]; cur.push(sub); sub=null}}}
+  else if(fn===OPS.stroke||fn===OPS.closeStroke){ if(fn===OPS.closeStroke&&sub&&sub.length>1)sub.push(sub[0].slice()); flush(!white(stroke))}
+  else if(fn===OPS.fill||fn===OPS.eoFill){flush(!white(fill))}
+  else if(fn===OPS.fillStroke||fn===OPS.eoFillStroke||fn===OPS.closeFillStroke||fn===OPS.closeEOFillStroke){flush(!white(stroke)||!white(fill))}
+  else if(fn===OPS.endPath){flush(false)}}
+ // textos (nomes dos compartimentos, cotas…)
+ const texts=[]; if(opts.text!==false){try{const tc=await page.getTextContent(); tc.items.forEach(it=>{const s=String(it.str||"").trim(); if(!s)return; const m=U2.transform(vp.transform,it.transform), h=Math.hypot(m[2],m[3]); if(!(h>0))return; texts.push({x:m[4],y:m[5],h,rot:-Math.atan2(m[1],m[0])*180/Math.PI,s})})}catch(e){}}
+ return {paths,texts,w:vp.width,h:vp.height,cut:nseg>=MAXS}}
+// passa os contornos para a planta de fundo (referência), alinhados com a imagem do PDF
+function pdfApplyVector(R,o){o=o||{}; const b=S.doc.bg; if(!b){toast("Abra primeiro o PDF como planta de fundo.");return 0}
+ const X=px=>b.x+px/R.w*b.w, Y=py=>b.y+b.h-py/R.h*b.h, kx=b.w/R.w;
+ const seen=new Set(), out=[];
+ R.paths.forEach(P=>{const pts=[]; P.forEach(p=>{const q=[X(p[0]),Y(p[1])]; const l=pts[pts.length-1]; if(!l||Math.hypot(q[0]-l[0],q[1]-l[1])>kx*.05)pts.push(q)}); if(pts.length<2)return;
+  const key=pts.map(q=>q[0].toFixed(3)+","+q[1].toFixed(3)).join(";"); if(seen.has(key))return; seen.add(key);
+  const cl=pts.length>3&&Math.hypot(pts[0][0]-pts[pts.length-1][0],pts[0][1]-pts[pts.length-1][1])<kx*.05; if(cl)pts.pop();
+  out.push(pts.length===2?{t:"line",x1:pts[0][0],y1:pts[0][1],x2:pts[1][0],y2:pts[1][1],layer:PLANTA_LAY}:{t:"pl",pts,closed:cl,layer:PLANTA_LAY})});
+ R.texts.forEach(t=>out.push({t:"text",x:X(t.x),y:Y(t.y),h:t.h*Math.abs(b.h/R.h),s:t.s,rot:t.rot,layer:PLANTA_LAY}));
+ pushUndo(); const src=plantaRefSrc(S.doc); src.ref=src.ref.filter(r=>r.layer!==PLANTA_LAY).concat(out); src.refLayers=src.refLayers||{}; src.refLayers[PLANTA_LAY]={...(src.refLayers[PLANTA_LAY]||{}),hidden:false};
+ if(o.hideImg&&R.paths.length>=3)src.bgOff=true; PROJ.plantas.forEach(q=>{ if(q===src||q.refOf===src.id){q.ref=src.ref; q.refLayers=src.refLayers}}); rebuildIndex(); saveLocal(); draw(); return out.length}
+async function pdfContours(){const i=document.createElement("input"); i.type="file"; i.accept=".pdf"; i.onchange=async()=>{const f=i.files[0]; if(!f)return; const buf=await f.arrayBuffer();
+ if(!pdfjsLib.GlobalWorkerOptions.workerSrc)pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([document.getElementById("pdfworker").textContent],{type:"text/javascript"}));
+ try{const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+  if(!S.doc.bg){toast("Esta planta ainda não tem o PDF de fundo: abro-o agora e traço os contornos.",4000); importPDF(buf,f.name); return}
+  ask("Contornos a partir do PDF",[{k:"pg",l:"Página (a mesma que está de fundo)",v:"1"},{k:"tx",l:"Trazer também os textos (nomes, cotas)",type:"check",v:true},{k:"hide",l:"Esconder a imagem do PDF (fica só o desenho vetorial)",type:"check",v:true}],async o=>{
+   const page=await pdf.getPage(Math.max(1,Math.min(pdf.numPages,parseInt(o.pg,10)||1))); toast("A tirar os contornos do PDF…",8000);
+   const R=await pdfVectorize(page,{text:o.tx}); pdfReport(R,pdfApplyVector(R,{hideImg:o.hide}))},'<div class="small" style="margin-bottom:6px">Escolha a página que está como fundo desta planta: os contornos ficam por cima da imagem, na mesma escala e posição.</div>')}
+ catch(e){console.error(e); toast("Não foi possível ler o PDF.",4000)}}; i.click()}
+function pdfReport(R,n){ if(R.paths.length<3){toast("Este PDF quase não tem desenho vetorial (parece uma imagem digitalizada): não há contornos para tirar, fica só como imagem.",7000); return}
+ toast("Contornos na camada PLANTA: "+n+" elementos"+(R.cut?" (PDF muito pesado: ficou pelos primeiros 400 mil troços)":"")+". Ficam por trás, a cinzento, e servem de paredes para o traçado dos circuitos.",6000)}
+
 /* ================= Plantas várias no mesmo ficheiro ================= */
 function refBox(e){ if(e.t==="line")return [Math.min(e.x1,e.x2),Math.min(e.y1,e.y2),Math.max(e.x1,e.x2),Math.max(e.y1,e.y2)];
  if(e.t==="pl"){let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity; e.pts.forEach(p=>{a=Math.min(a,p[0]);c=Math.max(c,p[0]);b=Math.min(b,p[1]);d=Math.max(d,p[1])}); return [a,b,c,d]}
@@ -4175,6 +4237,7 @@ const CMDS=[
  {id:"paralela",n:"Paralela",g:"Desenho",a:["O","PARALELA","OFFSET"],f:()=>setTool("offset")},
  {id:"medir",n:"Medir distância",g:"Desenho",a:["DI","MEDIR","DIST"],f:()=>setTool("measure"),sep:true},
  {id:"espaco",n:"Espaço (compartimento)",g:"Desenho",a:["ES","ESPACO"],f:()=>setTool("esp")},
+ {id:"pdfvec",n:"Contornos a partir de um PDF (camada PLANTA)…",g:"Desenho",a:["CONTORNOS","PDFVEC"],f:()=>pdfContours()},
  {id:"calib",n:"Calibrar imagem",g:"Desenho",a:["CAL","CALIBRAR"],f:()=>setTool("calib")},
  {id:"simbolo",n:"Procurar símbolo…",g:"Desenho",a:["SI","SIMBOLO","INSERT"],f:()=>{const q=$("palQ"); if($("left").classList.contains("hide"))$("bL").click(); if(q){q.focus(); q.select()}},sep:true},
  {id:"mover",n:"Mover",g:"Modificar",a:["M","MOVER","MOVE"],f:()=>mvStart(false)},
@@ -4210,6 +4273,7 @@ const CMDS=[
  {id:"parede",n:"Encostar símbolos à parede",g:"Vista",a:["PAREDE"],f:()=>toggle("wall"),chk:()=>S.wall},
  {id:"lbsym",n:"Etiquetas dos símbolos",g:"Vista",a:["ETIQ"],f:()=>{S.doc.lbSymOff=!S.doc.lbSymOff; saveLocal(); draw()},chk:()=>!S.doc.lbSymOff},
  {id:"lbcab",n:"Designações dos cabos",g:"Vista",a:["DESIG"],f:()=>{S.doc.lbCabOff=!S.doc.lbCabOff; saveLocal(); draw()},chk:()=>!S.doc.lbCabOff},
+ {id:"bgimg",n:"Imagem do PDF de fundo",g:"Vista",a:["IMAGEM"],f:()=>{const s2=plantaRefSrc(S.doc); s2.bgOff=!s2.bgOff; saveLocal(); draw()},chk:()=>!plantaRefSrc(S.doc).bgOff},
  {id:"fundo",n:"Planta de fundo visível",g:"Vista",a:["FUNDO"],f:()=>$("bPlanta").click(),chk:()=>!S.doc.refHidden,sep:true},
  {id:"psim",n:"Painel de símbolos",g:"Vista",a:["PS"],f:()=>$("bL").click(),chk:()=>!$("left").classList.contains("hide")},
  {id:"plat",n:"Painel lateral (camadas, propriedades)",g:"Vista",a:["LA","CAMADAS","LAYER"],f:()=>$("bR").click(),chk:()=>!$("right").classList.contains("hide")},
@@ -4308,8 +4372,8 @@ function plDraw(ctx,p,pageLayers,pageTitle){const P=plPaper(p), F=plFrame(p), V=
   S.view={s,ox:vx-ca*s,oy:vy+cb*s,rot:view0.rot||0};
   ctx.save(); ctx.beginPath(); ctx.rect(VP.x*V,VP.y*V,VP.w*V,VP.h*V); ctx.clip();
   const lwK=+p.lw||1;
-  if(p.bg&&S.doc.bg&&S.img&&S.img.complete&&S.img.naturalWidth){const b=S.doc.bg; const [px,py]=W2S(b.x,b.y+b.h); ctx.globalAlpha=b.alpha||.6; ctx.save(); ctx.translate(px,py); ctx.rotate(VR()); ctx.drawImage(S.img,0,0,b.w*s,b.h*s); ctx.restore(); ctx.globalAlpha=1}
-  if(p.ref){ctx.lineWidth=1.3*lwK; ctx.strokeStyle="#8a8f98"; ctx.fillStyle=ctx.strokeStyle; ctx.setLineDash([]); ctx.beginPath(); for(const r of S.doc.ref){ if(!refVisible(r)||r.t==="text")continue; drawGeom(r,true)} ctx.stroke();
+  if(p.bg&&!plantaRefSrc(S.doc).bgOff&&S.doc.bg&&S.img&&S.img.complete&&S.img.naturalWidth){const b=S.doc.bg; const [px,py]=W2S(b.x,b.y+b.h); ctx.globalAlpha=b.alpha||.6; ctx.save(); ctx.translate(px,py); ctx.rotate(VR()); ctx.drawImage(S.img,0,0,b.w*s,b.h*s); ctx.restore(); ctx.globalAlpha=1}
+  if(p.ref){ctx.lineWidth=1.3*lwK; ctx.strokeStyle=S.doc.ref.some(r=>r.layer==="PLANTA")?"#999999":"#8a8f98"; ctx.fillStyle=ctx.strokeStyle; ctx.setLineDash([]); ctx.beginPath(); for(const r of S.doc.ref){ if(!refVisible(r)||r.t==="text")continue; drawGeom(r,true)} ctx.stroke();
    for(const r of S.doc.ref){ if(r.t==="text"&&refVisible(r))drawText(r,"#6b7280")}}
   if(p.esp)espDrawAll(true);
   for(const e of S.doc.ents){ if(!pageLayers.includes(e.layer))continue; if(e.t==="pl"&&e.esp)continue;
