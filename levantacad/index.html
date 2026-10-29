@@ -825,7 +825,7 @@ function nearestWall(x,y){ if(!IDX)return null; const r=.6*U(); let best=null,bd
 }
 
 /* ================= Camadas ================= */
-function ensureLayer(n){ if(!layerByName(n)){const d=DEF_LAYERS.find(l=>l.name===n)||(n==="Espaços"?{name:n,color:"#94a3b8",aci:8}:null)||{name:n,color:"#22c55e",aci:7}; S.doc.layers.push({...d,visible:true,locked:false}); refreshLayers()} return n}
+function ensureLayer(n,doc){const D=doc||S.doc; if(!D.layers.find(l=>l.name===n)){ if(n===PLANTA_LAY){D.layers.unshift({name:n,color:PLANTA_RGB,aci:8,visible:true,locked:true,back:true})} else {const d=DEF_LAYERS.find(l=>l.name===n)||(n==="Espaços"?{name:n,color:"#94a3b8",aci:8}:null)||{name:n,color:"#22c55e",aci:7}; D.layers.push({...d,visible:true,locked:false})} if(D===S.doc)refreshLayers()} return n}
 function layerByName(n){return S.doc.layers.find(l=>l.name===n)}
 function layerOf(e){return layerByName(e.layer)||S.doc.layers[0]}
 function refVisible(r){const v=S.doc.refLayers[r.layer]; return !(v&&v.hidden) && !S.doc.refHidden}
@@ -881,11 +881,12 @@ function render(){
   for(const r of S.doc.ref){ if(r.layer===PLANTA_LAY&&r.t==="text"&&refVisible(r))drawText(r,PLANTA_RGB)} G.restore()}
  espDrawAll(light);
  // entidades
- for(const e of S.doc.ents){ const L=layerOf(e); if(!L.visible)continue;
+ const backL=S.doc.layers.filter(l=>l.back).map(l=>l.name), ENTS=backL.length?S.doc.ents.filter(e=>backL.includes(e.layer)).concat(S.doc.ents.filter(e=>!backL.includes(e.layer))):S.doc.ents;
+ for(const e of ENTS){ const L=layerOf(e); if(!L.visible)continue;
   let col=colorOf(e); if(light&&/^#(e5e7eb|ffffff)$/i.test(col))col="#111827"; if(light&&col==="#facc15")col="#b45309"; if(!light&&/^#000000$/i.test(col))col="#e5e7eb";
   const sel=S.sel.has(e); G.strokeStyle=sel?"#e8742c":col; G.fillStyle=G.strokeStyle; const lwk=Math.max(.7,Math.min(4,lwOf(e)/.25));
   G.lineWidth=(sel?2.2:1.4)*(e.t==="cable"?1:lwk); if(e.t==="cable")G.lineWidth=(sel?3:2)*Math.max(.7,Math.min(4,lwOf(e)/.35));
-  G.globalAlpha=(e.tr?1-e.tr/100:1)*(e.locked&&!S.plotting?.55:1);
+  G.globalAlpha=(e.tr?1-e.tr/100:1)*((e.locked||L.locked)&&!S.plotting?.5:1);
   if(e.t==="text"){drawText(e,G.strokeStyle); G.globalAlpha=1; continue}
   if(e.t==="leg"){legDraw(e,G.strokeStyle,false); G.globalAlpha=1; continue}
   const dsh=ltDash(ltOf(e)); G.setLineDash(dsh.length?dsh.map(v=>v*3.2):[]);
@@ -1396,7 +1397,7 @@ function quantities(){const rows=new Map(); const lens=new Map(); const cabs=new
  S.doc.ents.forEach(e=>{ if(e.t==="cable"){const r=cabCalc(e); if(!r.ok)bad.push(e); const k=r.desig+(e.exist?" (existente)":""); const o=cabs.get(k)||{L:0,n:0,cond:CTYPES[r.c.type].multi?0:cabCond(r.c),s:r.s}; o.L+=cabLenQty(e); o.n++; cabs.set(k,o); return}
   if(e.t==="sym"){const k=e.layer+"|"+symName(e)+(e.exist?" (existente)":""); rows.set(k,(rows.get(k)||0)+1)}
   else if(e.t==="pl"&&e.esp){const k=espTipoN(e.esp.tipo); const o=esps.get(k)||{n:0,A:0}; o.n++; o.A+=espArea(e); esps.set(k,o)}
-  else if(e.t==="line"||e.t==="arc"||(e.t==="pl"||e.t==="cable")){const k=e.layer+(e.exist?" (existente)":""); lens.set(k,(lens.get(k)||0)+entLen(e))}});
+  else if((e.t==="line"||e.t==="arc"||e.t==="pl"||e.t==="cable")&&e.layer!==PLANTA_LAY){const k=e.layer+(e.exist?" (existente)":""); lens.set(k,(lens.get(k)||0)+entLen(e))}});
  return {rows,lens,cabs,bad,esps}}
 function refreshQty(){netCalc(); const {rows,lens,cabs,bad,esps}=quantities(); let h='';
  const wb=S.doc.ents.filter(e=>{const r=e.t==="sym"&&wcCheck(e); return r&&(r.sev==="Erro"||r.sev==="Aviso")});
@@ -1487,7 +1488,7 @@ function exportDXF(opts){
  w(0,"SECTION");w(2,"HEADER");w(9,"$ACADVER");w(1,"AC1009");w(9,"$DWGCODEPAGE");w(3,"ANSI_1252");w(9,"$INSBASE");w(10,0);w(20,0);w(30,0);w(0,"ENDSEC");
  w(0,"SECTION");w(2,"TABLES");
  w(0,"TABLE");w(2,"LTYPE");w(70,LTYPES.length); LTYPES.forEach(t=>{const m=.1/S.doc.unit, pat=t[3].map((v,i)=>i%2?-v*m:v*m); w(0,"LTYPE");w(2,t[2]);w(70,0);w(3,t[1]);w(72,65);w(73,pat.length);w(40,pat.reduce((a,b)=>a+Math.abs(b),0)); pat.forEach(v=>w(49,v))}); w(0,"ENDTAB");
- const allL=[]; const seenL=new Set(); [...layers.map(l=>[l.name,opts.vrColors?7:hexToAci(l.color)]),...refLayerNames.map(n=>[n,8]),["0",7]].forEach(x=>{if(!seenL.has(x[0])){seenL.add(x[0]);allL.push(x)}});
+ const allL=[]; const seenL=new Set(); [...layers.map(l=>[l.name,l.name===PLANTA_LAY?8:opts.vrColors?7:hexToAci(l.color)]),...refLayerNames.map(n=>[n,8]),["0",7]].forEach(x=>{if(!seenL.has(x[0])){seenL.add(x[0]);allL.push(x)}});
  w(0,"TABLE");w(2,"LAYER");w(70,allL.length); allL.forEach(([n,c])=>{const lo=layerByName(n); w(0,"LAYER");w(2,dxfStr(n));w(70,0);w(62,c);w(6,(LTYPES.find(t=>t[0]===(lo&&lo.lt))||LTYPES[0])[2])}); w(0,"ENDTAB");
  w(0,"TABLE");w(2,"STYLE");w(70,1);w(0,"STYLE");w(2,"STANDARD");w(70,0);w(40,0);w(41,1);w(50,0);w(71,0);w(42,.2);w(3,"txt");w(4,"");w(0,"ENDTAB");
  w(0,"ENDSEC");
@@ -2261,7 +2262,8 @@ function connPt(e){
  if(e.t==="line")return [(e.x1+e.x2)/2,(e.y1+e.y2)/2];
  if(e.pts)return e.pts[e.pts.length-1];
  return [e.x,e.y]}
-function wallSegsV(){const out=[]; for(const r of S.doc.ref){ if(!refVisible(r))continue; let sg=[];
+function wallSrc(){const L=layerByName(PLANTA_LAY); return L&&L.visible?S.doc.ref.filter(refVisible).concat(S.doc.ents.filter(e=>e.layer===PLANTA_LAY&&(e.t==="line"||e.t==="pl"))):S.doc.ref.filter(refVisible)}
+function wallSegsV(){const out=[]; for(const r of wallSrc()){ let sg=[];
   if(r.t==="line")sg=[[[r.x1,r.y1],[r.x2,r.y2]]]; else if(r.t==="pl"){for(let i=1;i<r.pts.length;i++)sg.push([r.pts[i-1],r.pts[i]]); if(r.closed&&r.pts.length>2)sg.push([r.pts[r.pts.length-1],r.pts[0]])} else continue;
   for(const [p,q] of sg){const P=toV(p[0],p[1]),Q=toV(q[0],q[1]), dx=Math.abs(Q[0]-P[0]), dy=Math.abs(Q[1]-P[1]); if(dx+dy<1e-9)continue;
    if(dy<=dx*.0175)out.push({h:1,c:(P[1]+Q[1])/2,s0:Math.min(P[0],Q[0]),s1:Math.max(P[0],Q[0])}); else if(dx<=dy*.0175)out.push({h:0,c:(P[0]+Q[0])/2,s0:Math.min(P[1],Q[1]),s1:Math.max(P[1],Q[1])})}}
@@ -2278,7 +2280,7 @@ function routeBetween(A,B,o){ o=o||{}; // A,B em coordenadas do desenho; devolve
  const mark=(p,q)=>{const L=Math.hypot(q[0]-p[0],q[1]-p[1]); const n=Math.max(1,Math.ceil(L/(cell/3)));
   for(let k=0;k<=n;k++){const x=p[0]+(q[0]-p[0])*k/n,y=p[1]+(q[1]-p[1])*k/n; const [i,j]=ci(x,y); if(i>=0&&j>=0&&i<NX&&j<NY)wall[j*NX+i]=1}};
  const inB=(p)=>p[0]>=minx-cell&&p[0]<=maxx+cell&&p[1]>=miny-cell&&p[1]<=maxy+cell;
- for(const r of S.doc.ref){ if(!refVisible(r))continue; let segs=[];
+ for(const r of wallSrc()){ let segs=[];
   if(r.t==="line")segs=[[[r.x1,r.y1],[r.x2,r.y2]]]; else if(r.t==="pl"){for(let i=1;i<r.pts.length;i++)segs.push([r.pts[i-1],r.pts[i]]); if(r.closed&&r.pts.length>2)segs.push([r.pts[r.pts.length-1],r.pts[0]])} else continue;
   for(const [p,q] of segs){const P=toV(p[0],p[1]),Q=toV(q[0],q[1]); if(!inB(P)&&!inB(Q)&&Math.hypot(Q[0]-P[0],Q[1]-P[1])<(maxx-minx))continue; mark(P,Q)}}
  const [si,sj]=ci(a[0],a[1]), [ei,ej]=ci(b[0],b[1]);
@@ -3559,15 +3561,25 @@ async function pdfVectorize(page,opts){opts=opts||{}; const OPS=pdfjsLib.OPS, U2
  return {paths,texts,w:vp.width,h:vp.height,cut:nseg>=MAXS}}
 // passa os contornos para a planta de fundo (referência), alinhados com a imagem do PDF
 function pdfApplyVector(R,o){o=o||{}; const b=S.doc.bg; if(!b){toast("Abra primeiro o PDF como planta de fundo.");return 0}
- const X=px=>b.x+px/R.w*b.w, Y=py=>b.y+b.h-py/R.h*b.h, kx=b.w/R.w;
+ // a imagem é desenhada a partir do canto (x, y+h), rodada com a vista: usa-se a mesma transformação para os contornos ficarem por cima dela
+ const r=VR(), s0=S.view.s, [px,py]=W2S(b.x,b.y+b.h), cs=Math.cos(r), sn=Math.sin(r);
+ const W=(qx,qy)=>{const u=qx/R.w*b.w, v=qy/R.h*b.h; return S2W(px+(cs*u-sn*v)*s0,py+(sn*u+cs*v)*s0)}, kx=b.w/R.w;
  const seen=new Set(), out=[];
- R.paths.forEach(P=>{const pts=[]; P.forEach(p=>{const q=[X(p[0]),Y(p[1])]; const l=pts[pts.length-1]; if(!l||Math.hypot(q[0]-l[0],q[1]-l[1])>kx*.05)pts.push(q)}); if(pts.length<2)return;
+ R.paths.forEach(P=>{const pts=[]; P.forEach(p=>{const q=W(p[0],p[1]); const l=pts[pts.length-1]; if(!l||Math.hypot(q[0]-l[0],q[1]-l[1])>kx*.05)pts.push(q)}); if(pts.length<2)return;
   const key=pts.map(q=>q[0].toFixed(3)+","+q[1].toFixed(3)).join(";"); if(seen.has(key))return; seen.add(key);
   const cl=pts.length>3&&Math.hypot(pts[0][0]-pts[pts.length-1][0],pts[0][1]-pts[pts.length-1][1])<kx*.05; if(cl)pts.pop();
   out.push(pts.length===2?{t:"line",x1:pts[0][0],y1:pts[0][1],x2:pts[1][0],y2:pts[1][1],layer:PLANTA_LAY}:{t:"pl",pts,closed:cl,layer:PLANTA_LAY})});
- R.texts.forEach(t=>out.push({t:"text",x:X(t.x),y:Y(t.y),h:t.h*Math.abs(b.h/R.h),s:t.s,rot:t.rot,layer:PLANTA_LAY}));
- pushUndo(); const src=plantaRefSrc(S.doc); src.ref=src.ref.filter(r=>r.layer!==PLANTA_LAY).concat(out); src.refLayers=src.refLayers||{}; src.refLayers[PLANTA_LAY]={...(src.refLayers[PLANTA_LAY]||{}),hidden:false};
- if(o.hideImg&&R.paths.length>=3)src.bgOff=true; PROJ.plantas.forEach(q=>{ if(q===src||q.refOf===src.id){q.ref=src.ref; q.refLayers=src.refLayers}}); rebuildIndex(); saveLocal(); draw(); return out.length}
+ R.texts.forEach(t=>{const a=-t.rot*Math.PI/180, p0=W(t.x,t.y), p1=W(t.x+Math.cos(a)*10,t.y+Math.sin(a)*10); out.push({t:"text",x:p0[0],y:p0[1],h:t.h*Math.abs(b.h/R.h),s:t.s,rot:Math.atan2(p1[1]-p0[1],p1[0]-p0[0])*180/Math.PI,layer:PLANTA_LAY})});
+ if(!out.length)return 0;
+ pushUndo(); const src=plantaRefSrc(S.doc), floor=PROJ.plantas.filter(q=>plantaRefSrc(q)===src);
+ src.ref=(src.ref||[]).filter(x=>x.layer!==PLANTA_LAY); floor.forEach(q=>{ if(q!==src)q.ref=src.ref});
+ let replaced=0; floor.forEach(q=>{const n0=q.ents.length; q.ents=q.ents.filter(e=>e.layer!==PLANTA_LAY); replaced+=n0-q.ents.length; ensureLayer(PLANTA_LAY,q);
+  const L=q.layers.find(l=>l.name===PLANTA_LAY); L.back=true; out.forEach(e=>{const c=JSON.parse(JSON.stringify(e)); c.id=PROJ.nextId++; q.ents.push(c)})});
+ if(o.hideImg&&R.paths.length>=3)src.bgOff=true; R.floorN=floor.length; R.replaced=replaced;
+ refreshLayers(); rebuildIndex(); refreshQty(); saveLocal(); draw(); return out.length}
+function bgDelete(){const src=plantaRefSrc(S.doc); if(!src.bg){toast("Esta planta não tem imagem de fundo.");return}
+ if(!confirm("Apagar a imagem / PDF de fundo deste piso? Os contornos na camada PLANTA e os seus desenhos ficam."))return;
+ pushUndo(); PROJ.plantas.forEach(q=>{ if(plantaRefSrc(q)===src)q.bg=null}); src.bg=null; delete src.bgOff; S.img=null; rebuildIndex(); saveLocal(); draw(); toast("Imagem de fundo apagada.",2500)}
 async function pdfContours(){const i=document.createElement("input"); i.type="file"; i.accept=".pdf"; i.onchange=async()=>{const f=i.files[0]; if(!f)return; const buf=await f.arrayBuffer();
  if(!pdfjsLib.GlobalWorkerOptions.workerSrc)pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([document.getElementById("pdfworker").textContent],{type:"text/javascript"}));
  try{const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
@@ -3576,8 +3588,8 @@ async function pdfContours(){const i=document.createElement("input"); i.type="fi
    const page=await pdf.getPage(Math.max(1,Math.min(pdf.numPages,parseInt(o.pg,10)||1))); toast("A tirar os contornos do PDF…",8000);
    const R=await pdfVectorize(page,{text:o.tx}); pdfReport(R,pdfApplyVector(R,{hideImg:o.hide}))},'<div class="small" style="margin-bottom:6px">Escolha a página que está como fundo desta planta: os contornos ficam por cima da imagem, na mesma escala e posição.</div>')}
  catch(e){console.error(e); toast("Não foi possível ler o PDF.",4000)}}; i.click()}
-function pdfReport(R,n){ if(R.paths.length<3){toast("Este PDF quase não tem desenho vetorial (parece uma imagem digitalizada): não há contornos para tirar, fica só como imagem.",7000); return}
- toast("Contornos na camada PLANTA: "+n+" elementos"+(R.cut?" (PDF muito pesado: ficou pelos primeiros 400 mil troços)":"")+". Ficam por trás, a cinzento, e servem de paredes para o traçado dos circuitos.",6000)}
+function pdfReport(R,n){ if(R.paths.length<3||!n){toast("Este PDF quase não tem desenho vetorial (parece uma imagem digitalizada): não há contornos para tirar, fica só como imagem.",7000); return}
+ toast("Contornos na camada PLANTA: "+n+" elementos"+(R.floorN>1?" em cada uma das "+R.floorN+" plantas deste piso":"")+(R.replaced?" (substituíram os anteriores)":"")+(R.cut?" (PDF muito pesado: ficou pelos primeiros 400 mil troços)":"")+". A camada fica bloqueada (esbatida e por trás); desbloqueie-a no separador Camadas para editar.",7000)}
 
 /* ================= Plantas várias no mesmo ficheiro ================= */
 function refBox(e){ if(e.t==="line")return [Math.min(e.x1,e.x2),Math.min(e.y1,e.y2),Math.max(e.x1,e.x2),Math.max(e.y1,e.y2)];
@@ -4273,6 +4285,7 @@ const CMDS=[
  {id:"parede",n:"Encostar símbolos à parede",g:"Vista",a:["PAREDE"],f:()=>toggle("wall"),chk:()=>S.wall},
  {id:"lbsym",n:"Etiquetas dos símbolos",g:"Vista",a:["ETIQ"],f:()=>{S.doc.lbSymOff=!S.doc.lbSymOff; saveLocal(); draw()},chk:()=>!S.doc.lbSymOff},
  {id:"lbcab",n:"Designações dos cabos",g:"Vista",a:["DESIG"],f:()=>{S.doc.lbCabOff=!S.doc.lbCabOff; saveLocal(); draw()},chk:()=>!S.doc.lbCabOff},
+ {id:"bgdel",n:"Apagar a imagem / PDF de fundo",g:"Vista",a:["APAGARFUNDO"],f:()=>bgDelete()},
  {id:"bgimg",n:"Imagem do PDF de fundo",g:"Vista",a:["IMAGEM"],f:()=>{const s2=plantaRefSrc(S.doc); s2.bgOff=!s2.bgOff; saveLocal(); draw()},chk:()=>!plantaRefSrc(S.doc).bgOff},
  {id:"fundo",n:"Planta de fundo visível",g:"Vista",a:["FUNDO"],f:()=>$("bPlanta").click(),chk:()=>!S.doc.refHidden,sep:true},
  {id:"psim",n:"Painel de símbolos",g:"Vista",a:["PS"],f:()=>$("bL").click(),chk:()=>!$("left").classList.contains("hide")},
@@ -4376,9 +4389,10 @@ function plDraw(ctx,p,pageLayers,pageTitle){const P=plPaper(p), F=plFrame(p), V=
   if(p.ref){ctx.lineWidth=1.3*lwK; ctx.strokeStyle=S.doc.ref.some(r=>r.layer==="PLANTA")?"#999999":"#8a8f98"; ctx.fillStyle=ctx.strokeStyle; ctx.setLineDash([]); ctx.beginPath(); for(const r of S.doc.ref){ if(!refVisible(r)||r.t==="text")continue; drawGeom(r,true)} ctx.stroke();
    for(const r of S.doc.ref){ if(r.t==="text"&&refVisible(r))drawText(r,"#6b7280")}}
   if(p.esp)espDrawAll(true);
-  for(const e of S.doc.ents){ if(!pageLayers.includes(e.layer))continue; if(e.t==="pl"&&e.esp)continue;
+  const backL=S.doc.layers.filter(l=>l.back).map(l=>l.name), ENTS=backL.length?S.doc.ents.filter(e=>backL.includes(e.layer)).concat(S.doc.ents.filter(e=>!backL.includes(e.layer))):S.doc.ents;
+  for(const e of ENTS){ if(!pageLayers.includes(e.layer))continue; if(e.t==="pl"&&e.esp)continue;
    const own=e.col&&!/^#(e5e7eb|ffffff)$/i.test(e.col)?e.col:null; // cor escolhida no objeto: imprime-se, exceto em «Tudo a preto»
-   let col=p.col==="mono"?"#000000":p.col==="vr"?(e.exist?"#1d4ed8":own||"#000000"):colorOf(e); if(p.col==="layers"&&/^#(e5e7eb|ffffff|facc15)$/i.test(col))col=col.toLowerCase()==="#facc15"?"#b45309":"#111827";
+   let col=e.layer==="PLANTA"?(e.col||"#999999"):p.col==="mono"?"#000000":p.col==="vr"?(e.exist?"#1d4ed8":own||"#000000"):colorOf(e); if(p.col==="layers"&&/^#(e5e7eb|ffffff|facc15)$/i.test(col))col=col.toLowerCase()==="#facc15"?"#b45309":"#111827";
    ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=lwOf(e)*V*lwK; ctx.globalAlpha=e.tr?1-e.tr/100:1;
    const dsh=ltDash(ltOf(e)); ctx.setLineDash(dsh.length?dsh.map(v=>v*V):[]);
    if(e.t==="text"){ctx.setLineDash([]); drawText(e,col); ctx.globalAlpha=1; continue}
