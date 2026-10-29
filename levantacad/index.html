@@ -893,7 +893,7 @@ function render(){
  // pegas das pontas
  if(S.tool==="select"){G.fillStyle="#3b82f6"; S.sel.forEach(e=>vertsOf(e).forEach(v=>{const [a,b]=W2S(v[0],v[1]); G.fillRect(a-4,b-4,8,8)}))}
  // temporários
- drawTemp(); drawPastePreview(); drawCircPick(); teDrawPrev();
+ drawTemp(); drawPastePreview(); drawCircPick(); teDrawPrev(); offDrawPrev();
  // marcador de snap
  if(S.hover){const [px,py]=W2S(S.hover[0],S.hover[1]); G.strokeStyle="#22c55e"; G.lineWidth=1.5; const k=S.hover[2]; G.beginPath();
   if(k==="tangente"||k==="no círculo"){G.arc(px,py,7,0,Math.PI*2); if(k==="tangente"){G.moveTo(px-9,py-8); G.lineTo(px+9,py-8)}}
@@ -954,7 +954,7 @@ function setTool(t){ if(t!=="select")S.pend=null; if(CMDN[t])S.lastCmd={k:"tool"
  document.querySelectorAll("#top button[data-tool]").forEach(b=>b.classList.toggle("on",b.dataset.tool===t));
  document.querySelectorAll(".sym").forEach(b=>b.classList.toggle("on",t==="sym"&&b.dataset.k===S.sym));
  const H={select:"Clique para selecionar; arraste um objeto para o mover. No vazio: da esquerda para a direita seleciona o que fica dentro (janela), da direita para a esquerda o que toca (cruzamento).",line:"Clique no ponto inicial; clique para continuar; botão direito termina; Esc cancela.",
-  circle:"Clique no centro e depois no raio.",text:"Clique onde quer o texto.",offset:"Clique numa reta e depois do lado onde quer a paralela.",
+  circle:"Clique no centro e depois no raio.",text:"Clique onde quer o texto.",offset:"Paralela: clique numa reta, polilinha, cabo, círculo ou arco e depois do lado onde a quer. Escreva um número na linha de comando para mudar a distância.",
   measure:"Clique em dois pontos para medir.",circ:"Circuito: clique primeiro na origem (o quadro) e depois nos objetos pela ordem em que o cabo repica, ou arraste uma janela. Enter, espaço ou botão direito liga.",fillet:"Concordância: clique na primeira reta, do lado que quer manter, e depois na segunda. Esc termina.",rotpick:"Clique no ponto de referência da rotação.",pickpt:"Clique no ponto de referência.",paste:"Clique onde quer colar. Esc cancela.",viewalign:"Clique no primeiro ponto de uma parede que deva ficar horizontal (ou vertical).",cable:"Clique nos pontos do traçado do cabo; Enter, duplo clique ou botão direito termina e pede os dados do circuito. Esc cancela.",calib:"Clique em dois pontos de distância conhecida na imagem de fundo.",sym:"Clique para colocar. R roda 90°. Esc cancela."};
  hint(t==="esp"?espHint():(H[t]||"")); symBar(); cmdPrompt(); draw()}
 function symCurOpt(){ if(!S.symOpt)S.symOpt={}; return S.symOpt[S.sym]||{}}
@@ -1088,10 +1088,10 @@ function onDown(x,y,btn,ev){
   if(e===S.tmp.e1){toast("Escolha outra reta.");return}
   const ok=doFillet(S.tmp.e1,S.tmp.c1,e,[x,y],num(S.filR)*U()); S.tmp=null;
   if(ok&&!S.filM)setTool("select"); else {hint("Concordância: clique na primeira reta. Esc termina."); draw()} return}
- if(t==="offset"){ if(!S.tmp){const e=pick(x,y); if(e&&e.t==="line"){S.tmp={e}; hint("Clique do lado onde quer a paralela."); S.sel=new Set([e]); draw()} return}
-  const e=S.tmp.e; const dx=e.x2-e.x1,dy=e.y2-e.y1,L=Math.hypot(dx,dy); if(!L){S.tmp=null;return} let nx=-dy/L,ny=dx/L; if((x-e.x1)*nx+(y-e.y1)*ny<0){nx=-nx;ny=-ny}
-  const d=S.doc.offset*U(); pushUndo(); const c=addEnt({t:"line",x1:e.x1+nx*d,y1:e.y1+ny*d,x2:e.x2+nx*d,y2:e.y2+ny*d,layer:e.layer}); if(e.exist)c.exist=true;
-  S.tmp=null; S.sel=new Set([c]); rebuildIndex(); refreshUI(); hint("Paralela criada. Clique noutra reta para repetir."); draw(); return}
+ if(t==="offset"){ if(!S.tmp){const e=pick(x,y); if(!e)return; if(!offOk(e)){toast("A paralela faz-se em retas, polilinhas, cabos e circuitos, círculos e arcos.",3000); return}
+   S.tmp={e}; hint("Clique do lado onde quer a paralela (a "+uF(S.doc.offset,3)+" m; escreva outra distância na linha de comando). Esc termina."); S.sel=new Set([e]); draw(); return}
+  const c=offMake(S.tmp.e,x,y); if(!c){toast("Não deu para fazer a paralela deste objeto a esta distância.",3000); S.tmp=null; draw(); return}
+  pushUndo(); c.id=S.doc.nextId++; S.doc.ents.push(c); S.tmp=null; S.sel=new Set([c]); S.teStamp=(S.teStamp||0)+1; rebuildIndex(); refreshUI(); saveLocal(); hint("Paralela criada. Clique noutro objeto para repetir; Esc termina."); draw(); return}
  if(t==="viewalign"){const p=snapPt(x,y); if(!S.rotWall){S.rotWall=p; hint("Agora clique no segundo ponto da parede."); return}
   const q=S.rotWall; S.rotWall=null; const ang=Math.atan2(p[1]-q[1],p[0]-q[0])*180/Math.PI; let a=((ang%90)+90)%90; if(a>45)a-=90; setTool("select"); setViewRot(Math.round(a*100)/100); toast("Vista alinhada com a parede. Ortho segue a vista."); return}
  if(t==="pickpt"&&S.pickPend){const p=snapPt(x,y); const fn=S.pickPend; S.pickPend=null; setTool("select"); fn(p); return}
@@ -3213,6 +3213,26 @@ async function importDWG(buf,name){
  try{d=await readDWG(buf)}catch(e){console.error(e); toast("Não foi possível ler este DWG ("+e.message+"). No AutoCAD grave-o como DXF, ou como DWG de outra versão, e abra esse ficheiro.",8000); return}
  importCAD(d,name,"DWG")}
 
+/* ================= Paralela (OFFSET) de qualquer objeto: retas, polilinhas, cabos e circuitos, círculos e arcos ================= */
+function offOk(e){return ["line","pl","cable","circle","arc"].includes(e.t)}
+// desloca um caminho d para a esquerda do sentido (d<0: direita), com cantos em esquadria
+function offPts(P,closed,d){const n=P.length; if(n<2)return null; const m=closed?n:n-1, sg=[];
+ for(let i=0;i<m;i++){const a=P[i], b=P[(i+1)%n], dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy); if(L<1e-12)continue; const nx=-dy/L*d, ny=dx/L*d; sg.push([[a[0]+nx,a[1]+ny],[b[0]+nx,b[1]+ny]])}
+ if(!sg.length)return null;
+ const X=(s1,s2)=>{const d1=[s1[1][0]-s1[0][0],s1[1][1]-s1[0][1]], d2=[s2[1][0]-s2[0][0],s2[1][1]-s2[0][1]], den=d1[0]*d2[1]-d1[1]*d2[0]; if(Math.abs(den)<1e-12*Math.hypot(...d1)*Math.hypot(...d2))return s1[1];
+  const t=((s2[0][0]-s1[0][0])*d2[1]-(s2[0][1]-s1[0][1])*d2[0])/den, q=[s1[0][0]+t*d1[0],s1[0][1]+t*d1[1]]; return Math.hypot(q[0]-s1[1][0],q[1]-s1[1][1])>6*Math.abs(d)?s1[1]:q};
+ const out=[]; if(!closed){out.push(sg[0][0]); for(let i=1;i<sg.length;i++)out.push(X(sg[i-1],sg[i])); out.push(sg[sg.length-1][1])}
+ else for(let i=0;i<sg.length;i++)out.push(X(sg[(i-1+sg.length)%sg.length],sg[i]));
+ return out}
+function offSide(P,closed,x,y){let best=Infinity, sd=1; const n=P.length, m=closed?n:n-1; for(let i=0;i<m;i++){const a=P[i], b=P[(i+1)%n], r=dSeg(x,y,a[0],a[1],b[0],b[1])[0]; if(r<best){best=r; sd=((b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0]))>=0?1:-1}} return sd}
+function offMake(e,x,y,dist){const d=(dist!=null?dist:S.doc.offset)*U(), c=JSON.parse(JSON.stringify(e)); delete c.id;
+ if(e.t==="line"){const P=[[e.x1,e.y1],[e.x2,e.y2]], q=offPts(P,false,d*offSide(P,false,x,y)); if(!q)return null; Object.assign(c,{x1:q[0][0],y1:q[0][1],x2:q[1][0],y2:q[1][1]}); return c}
+ if(e.t==="pl"||e.t==="cable"){const cl=!!e.closed&&e.pts.length>2, q=offPts(e.pts,cl,d*offSide(e.pts,cl,x,y)); if(!q||q.length<2)return null; c.pts=q; if(c.taps&&q.length!==e.pts.length)delete c.taps; if(c.esp)delete c.esp; return c}
+ if(e.t==="circle"||e.t==="arc"){const out=Math.hypot(x-e.x,y-e.y)>e.r, r=e.r+(out?d:-d); if(r<=1e-9)return null; c.r=r; return c}
+ return null}
+function offDrawPrev(){ if(S.tool!=="offset"||!S.tmp||!S.tmp.e)return; const c=offMake(S.tmp.e,S.mouse.x,S.mouse.y); if(!c)return;
+ G.save(); G.setLineDash([5,4]); G.strokeStyle="#e8742c"; G.lineWidth=1.6; G.beginPath(); drawGeom(c,false); G.stroke(); G.restore()}
+
 /* ================= Cortar (TRIM) e prolongar (EXTEND), como no AutoCAD em modo rápido ================= */
 // Todos os objetos visíveis e a planta de fundo servem de limite. Shift troca entre cortar e prolongar.
 function teBounds(){ if(S.teB&&S.teB.v===S.doc.ents.length+":"+S.teStamp)return S.teB;
@@ -3959,6 +3979,7 @@ function cInput(txt){const c=cParse(txt), u=U(), m=S.mouse, t=S.tmp; if(!c)retur
   const q=c.pt?[t.base[0]+c.x*u,t.base[1]+c.y*u]:along(t.base,c.d); mvApply(q[0]-t.base[0],q[1]-t.base[1]); return true}
  if(S.tool==="line"){ if(!t){ if(!c.pt)return false; lineAdd([c.x*u,c.y*u]); return true} lineAdd(c.pt?[t.p[0]+c.x*u,t.p[1]+c.y*u]:along(t.p,c.d)); return true}
  if(S.tool==="cable"&&t&&t.pts&&t.pts.length){const lp=t.pts[t.pts.length-1]; t.pts.push(c.pt?[lp[0]+c.x*u,lp[1]+c.y*u]:along(lp,c.d)); draw(); return true}
+ if(S.tool==="offset"&&c.num&&c.d>0){S.doc.offset=c.d; $("iOffset").value=c.d; saveLocal(); hint("Distância da paralela: "+uF(c.d,3)+" m. "+(t&&t.e?"Clique do lado onde a quer.":"Clique no objeto.")); cmdLog("Distância da paralela: "+uF(c.d,3)+" m"); draw(); return true}
  if(S.tool==="circle"&&t&&t.c&&c.num&&c.d>0){pushUndo(); addEnt({t:"circle",x:t.c[0],y:t.c[1],r:c.d*u}); rebuildIndex(); S.tmp=null; draw(); return true}
  if(S.tool==="esp"&&t&&t.pts&&!t.peca){const lp=t.pts[t.pts.length-1]; t.pts.push(c.pt?[lp[0]+c.x*u,lp[1]+c.y*u]:along(lp,c.d)); draw(); return true}
  return false}
