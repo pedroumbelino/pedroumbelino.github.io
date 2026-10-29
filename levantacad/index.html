@@ -938,7 +938,7 @@ function drawTemp(){
  const t=S.tmp, m=S.mouse;
  if(S.cons&&S.drag&&S.drag.grip){const c=S.cons, k=1e3*U(), [a,b]=W2S(c.fix[0]-c.ux*k,c.fix[1]-c.uy*k), [e,f]=W2S(c.fix[0]+c.ux*k,c.fix[1]+c.uy*k); G.save(); G.setLineDash([3,5]); G.strokeStyle="#22c55e"; G.lineWidth=1; G.beginPath(); G.moveTo(a,b); G.lineTo(e,f); G.stroke(); G.restore()}
  if(t&&S.tool==="fillet"&&t.e1){G.save(); G.strokeStyle="#22c55e"; G.lineWidth=3; G.beginPath(); drawGeom(t.e1,false); G.stroke(); G.restore()} G.setLineDash([6,4]); G.strokeStyle="#e8742c"; G.lineWidth=1.2; G.beginPath();
- if(t&&(S.tool==="line"||S.tool==="measure"||S.tool==="calib")&&t.p){const [a,b]=W2S(t.p[0],t.p[1]),[c,d]=W2S(m.x,m.y); G.moveTo(a,b); G.lineTo(c,d);
+ if(t&&(S.tool==="line"||S.tool==="measure"||S.tool==="calib"||S.tool==="scref")&&t.p){const [a,b]=W2S(t.p[0],t.p[1]),[c,d]=W2S(m.x,m.y); G.moveTo(a,b); G.lineTo(c,d);
   G.stroke(); G.setLineDash([]); const L=Math.hypot(m.x-t.p[0],m.y-t.p[1])*S.doc.unit; G.fillStyle="#e8742c"; G.font="12px Arial"; G.fillText(L.toFixed(2)+" m",(a+c)/2+6,(b+d)/2-6); return}
  if(t&&S.tool==="cable"&&t.pts){t.pts.forEach((p,i)=>{const [a,b]=W2S(p[0],p[1]); i?G.lineTo(a,b):G.moveTo(a,b)}); const lp=t.pts[t.pts.length-1],[a,b]=W2S(lp[0],lp[1]),[c,d]=W2S(m.x,m.y); G.lineTo(c,d);
   G.stroke(); G.setLineDash([]); let L=Math.hypot(m.x-lp[0],m.y-lp[1]); for(let i=1;i<t.pts.length;i++)L+=Math.hypot(t.pts[i][0]-t.pts[i-1][0],t.pts[i][1]-t.pts[i-1][1]);
@@ -1088,6 +1088,7 @@ function onDown(x,y,btn,ev){
  if(t==="plotwin"){ if(btn===2){S.tmp=null; setTool("select"); openPlot(); return} if(!S.tmp)S.tmp={pw:[x,y],dn:[x,y]}; else plWinDone(S.tmp.pw,[x,y]); draw(); return}
  if(btn===2){ if(t==="select"&&!S.tmp&&ev&&ev.clientX!=null){const lk=pick(x,y,true); if(lk&&lk.locked){ctxMenu(ev.clientX,ev.clientY,[["Desbloquear este objeto",()=>lockSet([lk],false)],["Desbloquear todos os objetos desta planta",()=>lockSet(S.doc.ents.filter(o=>o.locked),false)]]); return} const e=pick(x,y); if(e){ if(!S.sel.has(e)){S.sel=new Set([e]); refreshProps(); draw()} entCtx(e,ev.clientX,ev.clientY,x,y); return}} finishOrCancel(); return}
  if(t==="esp")return espClick(x,y,ev);
+ if(t==="scref"){const p=snapPt(x,y,S.tmp&&S.tmp.p); if(!S.tmp||!S.tmp.p){S.tmp={p}; hint("Agora a segunda ponta da medida."); draw(); return} const a=S.tmp.p; S.tmp=null; setTool("select"); scaleRefDialog(a,p); return}
  if(t==="trim"||t==="extend")return teClick(x,y,ev);
  if(t==="legpt"){pushUndo(); const e=addEnt({t:"leg",x,y,scale:1,layer:"Notas"}); S.sel=new Set([e]); setTool("select"); refreshProps(); saveLocal(); draw(); return}
  if(t==="cable"){const p=snapPt(x,y,S.tmp&&S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]); if(!S.tmp)S.tmp={pts:[p]}; else {const lp=S.tmp.pts[S.tmp.pts.length-1]; if(Math.hypot(p[0]-lp[0],p[1]-lp[1])*S.view.s<4){finishCable();return} S.tmp.pts.push(p)} draw(); return}
@@ -1143,7 +1144,7 @@ function onMove(x,y,ev){
   if(!d.moved){pushUndo(); d.moved=true} setVert(d.grip.e,d.grip.i,p); draw(); return}
  if(S.tool==="select"&&S.drag&&S.drag.lab){const d=S.drag, L=d.lab; if(!d.moved){pushUndo(); d.moved=true} L.e.lbOff=[L.o0[0]+x-L.x0,L.o0[1]+y-L.y0]; draw(); return}
  if(S.tool==="select"&&S.drag&&S.drag.move){const p=snapPt(x,y); const dx=p[0]-S.drag.lx,dy=p[1]-S.drag.ly; if(dx||dy){ if(!S.drag.moved){pushUndo();S.drag.moved=true} S.sel.forEach(e=>moveEnt(e,dx,dy)); S.drag.lx=p[0];S.drag.ly=p[1]} draw(); return}
- if(["line","circle","measure","calib","sym","text","cable","rotpick","pickpt","paste","viewalign","mv","plotwin"].includes(S.tool)){ if(S.tool!=="sym")snapPt(x,y,S.tmp&&(S.tmp.p||S.tmp.base||(S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]))); else S.hover=null; if((S.tool==="line"||S.tool==="cable")&&S.tmp&&S.ortho&&!S.hover){const p=snapPt(x,y,S.tmp.p||S.tmp.pts[S.tmp.pts.length-1]); S.mouse.x=p[0];S.mouse.y=p[1]} } else S.hover=null;
+ if(["line","circle","measure","calib","scref","sym","text","cable","rotpick","pickpt","paste","viewalign","mv","plotwin"].includes(S.tool)){ if(S.tool!=="sym")snapPt(x,y,S.tmp&&(S.tmp.p||S.tmp.base||(S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]))); else S.hover=null; if((S.tool==="line"||S.tool==="cable")&&S.tmp&&S.ortho&&!S.hover){const p=snapPt(x,y,S.tmp.p||S.tmp.pts[S.tmp.pts.length-1]); S.mouse.x=p[0];S.mouse.y=p[1]} } else S.hover=null;
  $("sSnap").textContent=S.hover?("Snap: "+S.hover[2]):"";
  draw()}
 // direções possíveis: a do troço original e a perpendicular, e as de uma reta da planta ou do desenho junto ao cursor (paralela e perpendicular a ela)
@@ -1338,6 +1339,7 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  h+=`<div class="pbtns"><button id="pSim" title="Seleciona todos os objetos do mesmo tipo e da mesma camada (e o mesmo símbolo)">Semelhantes</button>${one?`<button id="pCpP" title="Guarda camada, cor, tipo de linha, espessura e transparência deste objeto">Copiar prop.</button>`:""}${S.propClip?`<button id="pPsP" title="Aplica as propriedades copiadas à seleção">Colar prop.</button>`:""}</div>`;
  if(one){const m=v=>(v*S.doc.unit).toFixed(3), num=(id,l,v,st)=>`<div class="row"><label>${l}</label><input type="number" step="${st||0.01}" id="${id}" value="${v}"></div>`;
   if(one.t!=="leg")h+='<div class="psec">Geometria</div>';
+  if(one.t==="line")h+='<div class="pbtns"><button id="pScRef" title="Escreve o comprimento real desta reta e a planta é escalada para bater certo">Escalar a planta por esta medida…</button></div>';
   if(one.t==="line"){const len=Math.hypot(one.x2-one.x1,one.y2-one.y1), ang=((Math.atan2(one.y2-one.y1,one.x2-one.x1)*180/Math.PI)+360)%360;
    h+=num("gX1","Início X (m)",m(one.x1))+num("gY1","Início Y (m)",m(one.y1))+num("gX2","Fim X (m)",m(one.x2))+num("gY2","Fim Y (m)",m(one.y2))+num("gLen","Comprimento (m)",m(len))+num("gAng","Ângulo (°)",ang.toFixed(2),1)}
   else if(one.t==="pl"||one.t==="cable"){h+=`<div class="pinfo"><span>Vértices</span><b>${one.pts.length}</b></div><div class="pinfo"><span>Comprimento</span><b>${entLen(one).toFixed(2)} m</b></div>`;
@@ -1367,7 +1369,7 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  const gv=el=>(parseFloat(String(el.value).replace(",","."))||0)*U(), gch=(id,fn)=>ch(id,el=>{fn(el); setTimeout(refreshProps,0)});
  if($("pCol"))$("pCol").onclick=()=>colorPop($("pCol"),col===MIX?"":col,c=>{pushUndo(); sel.forEach(e=>{ if(c)e.col=c; else delete e.col}); refreshProps(); saveLocal(); draw()});
  ch("pLt",el=>sel.forEach(e=>{ if(el.value)e.lt=el.value; else delete e.lt})); ch("pLw",el=>sel.forEach(e=>{ if(el.value)e.lw=+el.value; else delete e.lw})); ch("pTr",el=>sel.forEach(e=>{ if(+el.value)e.tr=+el.value; else delete e.tr}));
- if($("pSim"))$("pSim").onclick=()=>selSimilar(sel); if($("pLock"))$("pLock").onclick=()=>lockSet(sel,true);
+ if($("pSim"))$("pSim").onclick=()=>selSimilar(sel); if($("pScRef"))$("pScRef").onclick=()=>scaleRefStart(); if($("pLock"))$("pLock").onclick=()=>lockSet(sel,true);
  { const v=$("pLbV"); if(v){ if(v.dataset.mix)v.indeterminate=true; v.onchange=()=>{pushUndo(); sel.forEach(e=>{ if(!((e.t==="sym"&&e.label)||e.t==="cable"))return; if(v.checked){delete e.lbHide; if(e.t==="cable"&&e.c&&e.c.lab===false)e.c.lab=true} else e.lbHide=true}); saveLocal(); draw()}}
   if($("pLbR"))$("pLbR").onclick=()=>{pushUndo(); sel.forEach(e=>delete e.lbOff); refreshProps(); saveLocal(); draw()};
   const labs=sel.filter(e=>(e.t==="sym"&&e.label)||e.t==="cable"), lbSet=f=>{pushUndo(); labs.forEach(e=>{const v=f(e); if(v==null)delete e.lbRot; else e.lbRot=Math.round((((v%360)+540)%360-180)*100)/100}); refreshProps(); saveLocal(); draw()}, cur=e=>{const L=labelOf(e)||{}; return e.lbRot!=null?+e.lbRot:(L.rot||0)};
@@ -2162,6 +2164,30 @@ function withRef(o,cb){ if(o.ref==="center"){const [cx,cy]=selCenter(); return c
  if(o.ref==="xy"){const x=num2(o.x),y=num2(o.y); if(!isFinite(x)||!isFinite(y)){toast("Indique X e Y.");return} return cb(x,y)}
  pickPoint("Clique no ponto de referência.",p=>cb(p[0],p[1]))}
 function needSel(){ if(!S.sel.size){toast("Selecione primeiro os objetos.");return false} return true}
+// escalar a planta por uma medida conhecida: escolhe-se uma reta (ou dois pontos), escreve-se o comprimento real e escala-se tudo à volta do centro
+function scaleRefStart(){const one=S.sel.size===1?[...S.sel][0]:null;
+ if(one&&(one.t==="line"||(one.t==="pl"&&one.pts.length===2)||(one.t==="cable"&&one.pts.length===2))){const a=one.t==="line"?[one.x1,one.y1]:one.pts[0], b=one.t==="line"?[one.x2,one.y2]:one.pts[1]; return scaleRefDialog(a,b)}
+ setTool("scref"); hint("Escalar pela medida: clique nas duas pontas de uma medida conhecida (ou selecione antes uma reta). Esc cancela.")}
+function scaleRefDialog(a,b){const Lm=Math.hypot(b[0]-a[0],b[1]-a[1])*S.doc.unit; if(!(Lm>0)){toast("Medida com comprimento zero.");return}
+ ask("Escalar pela medida",[{k:"real",l:"Comprimento real desta medida (m) · agora mede "+Lm.toFixed(3).replace(".",",")+" m",v:""},
+  {k:"sc",l:"O que escalar",type:"select",v:S.scRefScope||"all",opts:[["all","A planta toda deste piso: fundo, camada PLANTA e todos os desenhos"],["plan","Só a planta de arquitetura (fundo e camada PLANTA)"],...(S.sel.size?[["sel","Só os objetos selecionados"]]:[])]},
+  {k:"c",l:"Centro da escala",type:"select",v:S.scRefC||"mid",opts:[["mid","Centro da planta"],["ref","Meio da medida"],["a","Primeira ponta da medida (fica no sítio)"]]}],o=>{
+  const real=parseFloat(String(o.real).replace(",",".")); if(!(real>0)){toast("Escreva o comprimento real.");return} const f=real/Lm; S.scRefScope=o.sc; S.scRefC=o.c;
+  const src=plantaRefSrc(S.doc), floor=PROJ.plantas.filter(q=>plantaRefSrc(q)===src);
+  let ents=o.sc==="sel"?[...S.sel]:floor.flatMap(q=>q.ents.filter(e=>o.sc==="all"||e.layer===PLANTA_LAY)), useRef=o.sc!=="sel";
+  // centro
+  let cx,cy; if(o.c==="ref"){cx=(a[0]+b[0])/2; cy=(a[1]+b[1])/2} else if(o.c==="a"){cx=a[0]; cy=a[1]} else {const keep=S.doc.ents; let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity; const P=(x,y)=>{ if(isFinite(x)&&isFinite(y)){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y)}};
+   if(useRef){(src.ref||[]).forEach(r=>{ if(r.t==="line"){P(r.x1,r.y1);P(r.x2,r.y2)} else if(r.pts)r.pts.forEach(q=>P(q[0],q[1])); else P(r.x,r.y)}); if(src.bg){P(src.bg.x,src.bg.y);P(src.bg.x+src.bg.w,src.bg.y+src.bg.h)}}
+   ents.forEach(e=>{ if(e.t==="line"){P(e.x1,e.y1);P(e.x2,e.y2)} else if(e.pts)e.pts.forEach(q=>P(q[0],q[1])); else P(e.x,e.y)}); cx=(x0+x1)/2; cy=(y0+y1)/2; if(!isFinite(cx)){cx=a[0];cy=a[1]}}
+  const fn=(x,y)=>[cx+(x-cx)*f,cy+(y-cy)*f]; pushUndo();
+  // objetos: a geometria escala; símbolos e textos dos seus desenhos só mudam de sítio (mantêm o tamanho normalizado)
+  const geo=ents.filter(e=>!(e.t==="sym"||(e.t==="text"&&e.layer!==PLANTA_LAY)||e.t==="leg")), pos=ents.filter(e=>!geo.includes(e));
+  xformEnts(geo,fn,{scale:f}); pos.forEach(e=>{[e.x,e.y]=fn(e.x,e.y)});
+  if(useRef){(src.ref||[]).forEach(r=>{ if(r.t==="line"){[r.x1,r.y1]=fn(r.x1,r.y1);[r.x2,r.y2]=fn(r.x2,r.y2)} else if(r.pts)r.pts=r.pts.map(q=>fn(q[0],q[1])); else {[r.x,r.y]=fn(r.x,r.y); if(r.h)r.h*=f; if(r.r)r.r*=f}});
+   if(src.bg){const b2=src.bg, [nx,ny]=fn(b2.x,b2.y); b2.x=nx; b2.y=ny; b2.w*=f; b2.h*=f}}
+  S.teStamp=(S.teStamp||0)+1; rebuildIndex(); refreshQty(); refreshProps(); saveLocal(); setTool("select"); draw();
+  toast("Escalado ×"+f.toFixed(4).replace(".",",")+": a medida passou a "+real.toFixed(3).replace(".",",")+" m"+(o.sc!=="sel"&&floor.length>1?" (em todas as "+floor.length+" plantas deste piso)":"")+".",5000)},
+  '<div class="small" style="margin-bottom:6px">Tudo é multiplicado pelo mesmo fator, à volta do centro escolhido. Os símbolos e os textos dos seus desenhos mudam de sítio mas mantêm o tamanho.</div>')}
 function scaleDialog(){ if(!needSel())return;
  ask("Escalar "+S.sel.size+" objeto(s)",[{k:"f",l:"Fator de escala (ex.: 2 duplica, 0,5 reduz para metade)",v:S.scLast||"2"},...refDialogFields(S.scRef||"center",true),{k:"cp",l:"Manter o original (cria uma cópia)",type:"check",v:false}],o=>{
   const f=num2(o.f); if(!(f>0)){toast("Fator inválido.");return} S.scLast=String(o.f); S.scRef=o.ref;
@@ -4258,6 +4284,7 @@ const CMDS=[
  {id:"rodar90",n:"Rodar 90°",g:"Modificar",a:["R"],f:()=>needSelThen("Rodar 90°",()=>rotateSel(90))},
  {id:"espelhar",n:"Espelhar…",g:"Modificar",a:["MI","ESPELHAR","MIRROR"],f:()=>needSelThen("Espelhar",mirrorDialog)},
  {id:"escalar",n:"Escalar…",g:"Modificar",a:["SC","ESCALAR","SCALE"],f:()=>needSelThen("Escalar",scaleDialog)},
+ {id:"escref",n:"Escalar pela medida (comprimento real)…",g:"Modificar",a:["ESCREF","SCALEREF","ESCALARMEDIDA"],f:()=>scaleRefStart()},
  {id:"alinhar",n:"Alinhar…",g:"Modificar",a:["AL","ALINHAR","ALIGN"],f:()=>needSelThen("Alinhar",alignDialog)},
  {id:"serie",n:"Copiar em série…",g:"Modificar",a:["AR","SERIE","ARRAY"],f:()=>needSelThen("Copiar em série",moveDialog)},
  {id:"bloq",n:"Bloquear a seleção",g:"Modificar",a:["BLOQ","LOCK","BLOQUEAR"],f:()=>needSelThen("Bloquear",()=>lockSet([...S.sel],true))},
