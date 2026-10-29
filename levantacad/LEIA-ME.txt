@@ -1,0 +1,12 @@
+LevantaCAD como app no tablet (Android)
+
+1. Pôr esta pasta num endereço https (uma vez):
+   - GitHub Pages: criar um repositório, carregar estes ficheiros, Settings > Pages > Branch main. Fica em https://<utilizador>.github.io/<repositório>/
+   - ou Netlify: app.netlify.com/drop, arrastar a pasta (crie conta grátis para o site não expirar).
+2. No tablet, abrir esse endereço no Chrome e escolher ⋮ > Instalar aplicação (ou Adicionar ao ecrã principal).
+3. Abrir sempre pelo ícone LevantaCAD. Abre em ecrã inteiro, sem barra do navegador, sem refresh por engano e funciona sem rede.
+
+Notas
+- Os projetos ficam gravados no tablet (gravação automática com versões). Use na mesma «Guardar» ou «Guardar e partilhar» para ter o ficheiro .levantacad.json.
+- Para atualizar a app: substituir index.html e desktop.html no servidor e mudar "levantacad-v1" para "levantacad-v2" no sw.js. O tablet recebe a nova versão na próxima vez que abrir com rede.
+- Se mudar o endereço, a gravação automática não passa para o novo: abra lá o último ficheiro guardado.
