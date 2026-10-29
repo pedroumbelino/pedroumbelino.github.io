@@ -282,6 +282,9 @@ button.ic small.badge{font-size:10px;font-weight:600}
     <div class="row"><label>Paralela: distância (m)</label><input id="iOffset" type="number" step="0.001" min="0.001" value="0.01"></div>
     <div class="row"><label>Afastamento entre cabos (m)</label><input id="iCabGap" type="number" step="0.001" min="0.001" max="0.2" value="0.01"></div>
     <div class="small">0,01 m = 0,1 mm em papel a 1:100.</div>
+    <div class="row"><label>Cabos paralelos em feixe</label><input id="iFeixe" type="checkbox" checked></div>
+    <div class="row"><label>Feixe: cabos até (m) de distância</label><input id="iFxTol" type="number" step="0.01" min="0.02" max="1" value="0.15"></div>
+    <div class="small">Os circuitos que seguem o mesmo caminho desenham-se numa só linha, com um traço por cabo e os nomes dos circuitos. Só muda o desenho: os comprimentos ficam iguais.</div>
     <div class="row"><label>Novo elemento existente</label><input id="cExist" type="checkbox"></div>
     <h3>Quantidades</h3>
     <div id="qty"></div>
@@ -882,6 +885,8 @@ function render(){
  espDrawAll(light);
  // entidades
  const backL=S.doc.layers.filter(l=>l.back).map(l=>l.name), ENTS=backL.length?S.doc.ents.filter(e=>backL.includes(e.layer)).concat(S.doc.ents.filter(e=>!backL.includes(e.layer))):S.doc.ents;
+ FX=fxOn()?fxCompute(S.doc.ents.filter(e=>e.t==="cable"&&layerOf(e).visible)):null;
+ const fxCol=e=>{let c=colorOf(e); if(light&&/^#(e5e7eb|ffffff)$/i.test(c))c="#111827"; if(light&&c==="#facc15")c="#b45309"; if(!light&&/^#000000$/i.test(c))c="#e5e7eb"; return c};
  for(const e of ENTS){ const L=layerOf(e); if(!L.visible)continue;
   let col=colorOf(e); if(light&&/^#(e5e7eb|ffffff)$/i.test(col))col="#111827"; if(light&&col==="#facc15")col="#b45309"; if(!light&&/^#000000$/i.test(col))col="#e5e7eb";
   const sel=S.sel.has(e); G.strokeStyle=sel?"#e8742c":col; G.fillStyle=G.strokeStyle; const lwk=Math.max(.7,Math.min(4,lwOf(e)/.25));
@@ -890,11 +895,12 @@ function render(){
   if(e.t==="text"){drawText(e,G.strokeStyle); G.globalAlpha=1; continue}
   if(e.t==="leg"){legDraw(e,G.strokeStyle,false); G.globalAlpha=1; continue}
   const dsh=ltDash(ltOf(e)); G.setLineDash(dsh.length?dsh.map(v=>v*3.2):[]);
-  G.beginPath(); drawGeom(e,false); G.stroke(); G.setLineDash([]);
+  FXfull=sel; G.beginPath(); drawGeom(e,false); G.stroke(); G.setLineDash([]); FXfull=false;
   if(e.t==="cable"){drawCableLabel(e,G.strokeStyle); drawTaps(e,G.strokeStyle); if(sel)drawCableDir(e,G.strokeStyle)}
   if(e.t==="sym"){const L=labelOf(e); if(L)drawText(L,G.strokeStyle)}
   G.globalAlpha=1;
  }
+ if(FX)fxDraw(FX,fxCol,e=>2*Math.max(.7,Math.min(4,lwOf(e)/.35)));
  riserDrawNotes(light?"#6b21a8":"#c4b5fd");
  wcMarks();
  // pegas das pontas
@@ -912,9 +918,76 @@ function render(){
   else if(k==="sobre a reta"){G.moveTo(px-6,py-6); G.lineTo(px+6,py+6); G.moveTo(px-6,py+6); G.lineTo(px+6,py-6)}
   else G.rect(px-6,py-6,12,12); G.stroke()}
 }
+/* ================= Feixe de cabos: circuitos que seguem o mesmo caminho desenham-se numa só linha ================= */
+// Só muda o desenho (ecrã, folha, PDF e DXF): cada cabo mantém o seu percurso, o seu comprimento e os seus cálculos.
+let FX=null, FXfull=false;
+function fxOn(){return S.doc.feixe!==false}
+function fxTol(){const t=S.doc.fxTol!=null?+S.doc.fxTol:.15; return Math.max(.02,Math.min(1,t>0?t:.15))*U()}
+function fxCircName(e){const c=e.c||{}; return String(c.circ||"").trim()}
+function fxCompute(cabs){
+ const tol=fxTol(), eps=1e-7*U()+1e-9, minL=tol*.5, segs=[];
+ cabs.forEach(e=>{ if(!e.pts||e.pts.length<2)return; for(let i=1;i<e.pts.length;i++){const a=e.pts[i-1], b=e.pts[i], L=Math.hypot(b[0]-a[0],b[1]-a[1]); if(L<minL)continue;
+  segs.push({e,i,a,b,L,ux:(b[0]-a[0])/L,uy:(b[1]-a[1])/L,x0:Math.min(a[0],b[0])-tol,x1:Math.max(a[0],b[0])+tol,y0:Math.min(a[1],b[1])-tol,y1:Math.max(a[1],b[1])+tol})}});
+ const n=segs.length, par=new Int32Array(n).map((_,i)=>i), find=i=>{while(par[i]!==i){par[i]=par[par[i]]; i=par[i]} return i};
+ for(let i=0;i<n;i++){const A=segs[i]; for(let j=i+1;j<n;j++){const B=segs[j]; if(A.e===B.e)continue;
+  if(B.x0>A.x1||B.x1<A.x0||B.y0>A.y1||B.y1<A.y0)continue;
+  if(Math.abs(A.ux*B.uy-A.uy*B.ux)>.026)continue; // paralelos (até 1,5°)
+  const pa=[B.a[0]-A.a[0],B.a[1]-A.a[1]], pb=[B.b[0]-A.a[0],B.b[1]-A.a[1]];
+  const t0=pa[0]*A.ux+pa[1]*A.uy, t1=pb[0]*A.ux+pb[1]*A.uy, ov=Math.min(Math.max(t0,t1),A.L)-Math.max(Math.min(t0,t1),0); if(ov<minL)continue;
+  const d0=A.ux*pa[1]-A.uy*pa[0], d1=A.ux*pb[1]-A.uy*pb[0]; if(Math.max(Math.abs(d0),Math.abs(d1))>tol)continue;
+  const ra=find(i), rb=find(j); if(ra!==rb)par[ra]=rb}}
+ const groups=new Map(); segs.forEach((s,i)=>{const r=find(i); (groups.get(r)||groups.set(r,[]).get(r)).push(s)});
+ const hide=new Map(), jogs=new Map(), bundles=[];
+ const addHide=(s,l0,l1)=>{const k=s.e; if(!hide.has(k))hide.set(k,new Map()); const m=hide.get(k); (m.get(s.i)||m.set(s.i,[]).get(s.i)).push([Math.max(0,Math.min(l0,l1)),Math.min(1,Math.max(l0,l1))])};
+ const addJog=(e,p,q)=>{ if(Math.hypot(p[0]-q[0],p[1]-q[1])<eps*10)return; (jogs.get(e)||jogs.set(e,[]).get(e)).push([p,q])};
+ groups.forEach(G0=>{ if(new Set(G0.map(s=>s.e)).size<2)return;
+  const r=G0.reduce((a,b)=>b.L>a.L?b:a), O=r.a, u=[r.ux,r.uy], nv=[-r.uy,r.ux];
+  const T=p=>(p[0]-O[0])*u[0]+(p[1]-O[1])*u[1], D=p=>(p[0]-O[0])*nv[0]+(p[1]-O[1])*nv[1];
+  const M=G0.map(s=>{const ta=T(s.a), tb=T(s.b); return {s,ta,tb,lo:Math.min(ta,tb),hi:Math.max(ta,tb),d:(D(s.a)+D(s.b))/2}});
+  const bp=[...new Set(M.flatMap(m=>[m.lo,m.hi]).map(v=>Math.round(v/eps)*eps))].sort((a,b)=>a-b);
+  const iv=[]; for(let k=1;k<bp.length;k++){const x0=bp[k-1], x1=bp[k]; if(x1-x0<eps*10)continue; const cov=M.filter(m=>m.lo<=x0+eps*10&&m.hi>=x1-eps*10);
+   const cs=[...new Set(cov.map(m=>m.s.e))]; if(cs.length<2)continue; const key=cs.map(e=>e.id).sort((a,b)=>a-b).join(",");
+   const last=iv[iv.length-1]; if(last&&last.key===key&&Math.abs(last.x1-x0)<eps*10){last.x1=x1; cov.forEach(m=>last.cov.add(m))} else iv.push({x0,x1,key,cabs:cs,cov:new Set(cov)})}
+  const best=new Map();
+  iv.filter(b=>b.x1-b.x0>=Math.max(tol*2,.3*U())).forEach(b=>{const cov=[...b.cov], d=cov.reduce((a,m)=>a+m.d,0)/cov.length, P=t=>[O[0]+u[0]*t+nv[0]*d,O[1]+u[1]*t+nv[1]*d];
+   b.p0=P(b.x0); b.p1=P(b.x1); b.u=u; b.nv=nv; b.len=b.x1-b.x0;
+   cov.forEach(m=>{const s=m.s, l=t=>(t-m.ta)/(m.tb-m.ta), c0=Math.max(b.x0,m.lo), c1=Math.min(b.x1,m.hi); if(c1-c0<=eps)return; addHide(s,l(c0),l(c1));
+    const at=lam=>[s.a[0]+(s.b[0]-s.a[0])*lam,s.a[1]+(s.b[1]-s.a[1])*lam];
+    if(c0<=b.x0+eps*10)addJog(s.e,at(l(c0)),P(b.x0)); if(c1>=b.x1-eps*10)addJog(s.e,at(l(c1)),P(b.x1))});
+   bundles.push(b); const o=best.get(b.key); if(!o||b.len>o.len)best.set(b.key,b)});
+  best.forEach(b=>b.lab=true)});
+ // troços visíveis de cada cabo: o percurso sem as partes que vão no feixe, mais as pequenas ligações ao feixe
+ const pieces=new Map();
+ hide.forEach((m,e)=>{const out=[]; let cur=null;
+  for(let i=1;i<e.pts.length;i++){const a=e.pts[i-1], b=e.pts[i], at=l=>[a[0]+(b[0]-a[0])*l,a[1]+(b[1]-a[1])*l];
+   const H=(m.get(i)||[]).sort((p,q)=>p[0]-q[0]), vis=[]; let s0=0; H.forEach(([h0,h1])=>{ if(h0>s0+1e-9)vis.push([s0,h0]); s0=Math.max(s0,h1)}); if(s0<1-1e-9)vis.push([s0,1]);
+   vis.forEach(([l0,l1])=>{ if(cur&&l0<1e-9&&cur.open){cur.pts.push(at(l1))} else { if(cur)out.push(cur.pts); cur={pts:[at(l0),at(l1)],open:true}} cur.open=l1>1-1e-9});
+   if(!vis.length||vis[vis.length-1][1]<1-1e-9){ if(cur){out.push(cur.pts); cur=null}}}
+  if(cur)out.push(cur.pts);
+  (jogs.get(e)||[]).forEach(j=>out.push(j));
+  pieces.set(e,out)});
+ return {pieces,bundles}}
+// linhas, traços e textos do feixe (os mesmos no ecrã, na folha e no DXF)
+function fxPrims(fx){const L=[], T=[], h=S.doc.textH*U()*.8, vr=VR()*180/Math.PI;
+ fx.bundles.forEach(b=>{const e0=b.cabs[0]; L.push({a:b.p0,b:b.p1,e:e0,main:true});
+  if(!b.lab||b.len<h*4)return;
+  const n=b.cabs.length, nt=Math.min(n,8), sp=h*.45, mid=[(b.p0[0]+b.p1[0])/2,(b.p0[1]+b.p1[1])/2], u=b.u, nv=b.nv, tl=h*.75;
+  for(let k=0;k<nt;k++){const c=(k-(nt-1)/2)*sp, cx=mid[0]+u[0]*c, cy=mid[1]+u[1]*c; // traço oblíquo a 60°
+   const dx=u[0]*tl*.5+nv[0]*tl, dy=u[1]*tl*.5+nv[1]*tl; L.push({a:[cx-dx,cy-dy],b:[cx+dx,cy+dy],e:e0})}
+  let ang=Math.atan2(u[1],u[0])*180/Math.PI-vr; ang=((ang%360)+540)%360-180; if(ang>90)ang-=180; if(ang<=-90)ang+=180; ang+=vr;
+  const r=ang*Math.PI/180, up=[-Math.sin(r),Math.cos(r)], names=[...new Set(b.cabs.map(fxCircName).filter(Boolean))];
+  const s=names.length?names.join(", ")+(names.length<n?" +"+(n-names.length):"")+(n>8?" ("+n+" cabos)":""):(n>8?n+" cabos":""); if(!s||s.length*h*.75>b.len*.95)return;
+  T.push({x:mid[0]+up[0]*h*1.5,y:mid[1]+up[1]*h*1.5,h,s,rot:ang,c:1,e:e0})});
+ return {L,T}}
+function fxDraw(fx,colFn,lwFn){ if(!fx||!fx.bundles.length)return; const P=fxPrims(fx); G.save(); G.setLineDash([]);
+ P.L.forEach(l=>{G.strokeStyle=colFn(l.e); G.lineWidth=lwFn(l.e)*(l.main?1.7:1); G.beginPath(); const [a,b]=W2S(l.a[0],l.a[1]), [c,d]=W2S(l.b[0],l.b[1]); G.moveTo(a,b); G.lineTo(c,d); G.stroke()});
+ P.T.forEach(t=>drawText(t,colFn(t.e))); G.restore()}
+function fxToggle(on){S.doc.feixe=on==null?!fxOn():!!on; saveLocal(); draw(); if($("iFeixe"))$("iFeixe").checked=fxOn();
+ toast(fxOn()?"Feixe de cabos ligado: os circuitos que seguem o mesmo caminho ficam numa só linha, com um traço por cabo e os nomes dos circuitos. Selecione um cabo para ver o percurso dele.":"Feixe de cabos desligado: cada cabo desenha-se com o seu próprio traço.",6000)}
 function drawGeom(e,isRef){
  const v=S.view;
  if(e.t==="line"){const [a,b]=W2S(e.x1,e.y1),[c,d]=W2S(e.x2,e.y2); G.moveTo(a,b); G.lineTo(c,d)}
+ else if(e.t==="cable"&&FX&&!FXfull&&FX.pieces.has(e)){FX.pieces.get(e).forEach(P=>P.forEach((p,i)=>{const [a,b]=W2S(p[0],p[1]); i?G.lineTo(a,b):G.moveTo(a,b)}))}
  else if((e.t==="pl"||e.t==="cable")){e.pts.forEach((p,i)=>{const [a,b]=W2S(p[0],p[1]); i?G.lineTo(a,b):G.moveTo(a,b)}); if(e.closed&&e.pts.length){const [a,b]=W2S(e.pts[0][0],e.pts[0][1]); G.lineTo(a,b)}}
  else if(e.t==="circle"){const [a,b]=W2S(e.x,e.y); G.moveTo(a+e.r*v.s,b); G.arc(a,b,e.r*v.s,0,Math.PI*2)}
  else if(e.t==="arc"){const [a,b]=W2S(e.x,e.y); const s0=-(e.a0*Math.PI/180-VR()), s1=-(e.a1*Math.PI/180-VR()); G.moveTo(a+e.r*v.s*Math.cos(s0),b+e.r*v.s*Math.sin(s0)); G.arc(a,b,e.r*v.s,s0,s1,true)}
@@ -1412,7 +1485,7 @@ function refreshQty(){netCalc(); const {rows,lens,cabs,bad,esps}=quantities(); l
  [...esps.entries()].sort().forEach(([k,o])=>{h+=`<tr><td>Espaços · ${uEsc(k)} (${o.n})</td><td class="n">${o.A.toFixed(1)} m²</td></tr>`});
  $("qty").innerHTML=h+"</table>"; const qb=$("qBad"); if(qb)qb.onclick=()=>{S.sel=new Set(bad); setTool("select"); refreshProps(); draw()}; const qw=$("qWc"); if(qw)qw.onclick=()=>{S.sel=new Set(wb); setTool("select"); refreshProps(); draw()}}
 function refreshUI(){netCalc(); refreshLayers(); refreshProps(); refreshQty();
- $("sUnits").value=String(S.doc.unit); $("iSymScale").value=S.doc.symScale; $("iTextH").value=S.doc.textH; $("iOffset").value=S.doc.offset; $("iCabGap").value=S.doc.cabGap!=null?S.doc.cabGap:.01;
+ $("sUnits").value=String(S.doc.unit); $("iSymScale").value=S.doc.symScale; $("iTextH").value=S.doc.textH; $("iOffset").value=S.doc.offset; $("iCabGap").value=S.doc.cabGap!=null?S.doc.cabGap:.01; $("iFeixe").checked=fxOn(); $("iFxTol").value=S.doc.fxTol!=null?S.doc.fxTol:.15;
  $("bPlanta").classList.toggle("on",!S.doc.refHidden)}
 
 /* ================= DXF: leitura ================= */
@@ -1516,8 +1589,11 @@ function exportDXF(opts){
   else if(r.t==="circle"){w(0,"CIRCLE");w(8,lay);w(10,r.x);w(20,r.y);w(30,0);w(40,r.r)}
   else if(r.t==="arc"){w(0,"ARC");w(8,lay);w(10,r.x);w(20,r.y);w(30,0);w(40,r.r);w(50,r.a0);w(51,r.a1)}
   else if(r.t==="text"){w(0,"TEXT");w(8,lay);w(10,r.x);w(20,r.y);w(30,0);w(40,r.h);w(1,dxfStr(r.s.split("\n")[0]));w(50,r.rot||0)}})}
+ const fx=fxOn()?fxCompute(ents.filter(e=>e.t==="cable")):null, fx0=FX; FX=fx;
+ const pline=(lay,e,P,cl)=>{w(0,"POLYLINE");w(8,lay);col(e);w(66,1);w(10,0);w(20,0);w(30,0);w(70,cl?1:0); P.forEach(p=>{w(0,"VERTEX");w(8,lay);w(10,p[0]);w(20,p[1]);w(30,0)}); w(0,"SEQEND");w(8,lay)};
  ents.forEach(e=>{const lay=dxfStr(e.layer);
   if(e.t==="line"){w(0,"LINE");w(8,lay);col(e);w(10,e.x1);w(20,e.y1);w(30,0);w(11,e.x2);w(21,e.y2);w(31,0)}
+  else if(e.t==="cable"&&fx&&fx.pieces.has(e)){fx.pieces.get(e).forEach(P=>pline(lay,e,P,false))}
   else if((e.t==="pl"||e.t==="cable")){w(0,"POLYLINE");w(8,lay);col(e);w(66,1);w(10,0);w(20,0);w(30,0);w(70,e.closed?1:0); e.pts.forEach(p=>{w(0,"VERTEX");w(8,lay);w(10,p[0]);w(20,p[1]);w(30,0)}); w(0,"SEQEND");w(8,lay)}
   if(e.t==="cable"&&e.taps){const r=tapR(); e.taps.forEach(i=>{const v=e.pts[i]; if(!v||i>=e.pts.length-1)return; w(0,"POLYLINE");w(8,lay);col(e);w(66,1);w(10,0);w(20,0);w(30,0);w(70,1);w(40,r);w(41,r);
    [[v[0]-r/2,v[1]],[v[0]+r/2,v[1]]].forEach(q=>{w(0,"VERTEX");w(8,lay);w(10,q[0]);w(20,q[1]);w(30,0);w(42,1)}); w(0,"SEQEND");w(8,lay)})}
@@ -1528,7 +1604,9 @@ function exportDXF(opts){
   else if(e.t==="sym"){w(0,"INSERT");w(8,lay);col(e);w(2,"LC_"+symBlk(e));w(10,e.x);w(20,e.y);w(30,0);w(41,(e.scale||1)*(e.flip?-1:1));w(42,e.scale||1);w(43,1);w(50,e.rot||0);
    {const L=labelOf(e,true); if(L){const kk=k*(e.scale||1); w(0,"TEXT");w(8,lay);col(e);w(10,L.x);w(20,L.y);w(30,0);w(40,.12*kk);w(1,dxfStr(e.label));w(50,L.rot||0)}}}
  });
- w(0,"ENDSEC");w(0,"EOF");
+ if(fx&&fx.bundles.length){const P=fxPrims(fx); P.L.forEach(l=>{const lay=dxfStr(l.e.layer); w(0,"LINE");w(8,lay);col(l.e);w(10,l.a[0]);w(20,l.a[1]);w(30,0);w(11,l.b[0]);w(21,l.b[1]);w(31,0)});
+  P.T.forEach(t=>{const lay=dxfStr(t.e.layer); w(0,"TEXT");w(8,lay);col(t.e);w(10,t.x);w(20,t.y);w(30,0);w(40,t.h);w(1,dxfStr(t.s));w(50,t.rot);w(72,1);w(11,t.x);w(21,t.y);w(31,0);w(73,2)})}
+ w(0,"ENDSEC");w(0,"EOF"); FX=fx0;
  return o.join("\r\n")+"\r\n"}
 function latin1(str){const u=new Uint8Array(str.length); for(let i=0;i<str.length;i++){const c=str.charCodeAt(i); u[i]=c<256?c:63} return u}
 function solid(w,k,a,b,c){w(0,"SOLID");w(8,"0");w(10,a[0]*k);w(20,a[1]*k);w(30,0);w(11,b[0]*k);w(21,b[1]*k);w(31,0);w(12,c[0]*k);w(22,c[1]*k);w(32,0);w(13,c[0]*k);w(23,c[1]*k);w(33,0)}
@@ -1846,8 +1924,11 @@ function labelOf(e,forPlot){const o=e.lbOff||[0,0];
  return null}
 function drawCableLabel(e,col){const L=labelOf(e,S.plotting); if(!L)return; drawText(L,L.ok?col:"#ef4444")}
 function pickLabelGrip(x,y){const tol=8/S.view.s; let best=null, bd=tol; S.sel.forEach(e=>{const L=labelOf(e); if(!L)return; const d=Math.hypot(L.x-x,L.y-y); if(d<bd){bd=d; best={e,L}}}); return best}
-function cabLabelPos(e){let bi=1,bl=-1; for(let i=1;i<e.pts.length;i++){const l=Math.hypot(e.pts[i][0]-e.pts[i-1][0],e.pts[i][1]-e.pts[i-1][1]); if(l>bl){bl=l;bi=i}}
- const a=e.pts[bi-1],b=e.pts[bi]; const vr=VR()*180/Math.PI; let ang=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI-vr; ang=((ang%360)+540)%360-180; if(ang>90)ang-=180; if(ang<=-90)ang+=180; ang+=vr;
+function cabLabelPos(e){let bi=1,bl=-1, PP=e.pts;
+ // com o feixe ligado, a etiqueta do cabo vai para o maior troço que se vê dele (fora do feixe)
+ if(FX&&!FXfull&&FX.pieces.has(e)){let best=null; FX.pieces.get(e).forEach(P=>{ if(P.length<2)return; for(let i=1;i<P.length;i++){const l=Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]); if(l>bl){bl=l; best=[P[i-1],P[i]]}}}); if(best&&bl>fxTol()){PP=best; bl=-1}}
+ for(let i=1;i<PP.length;i++){const l=Math.hypot(PP[i][0]-PP[i-1][0],PP[i][1]-PP[i-1][1]); if(l>bl){bl=l;bi=i}}
+ const a=PP[bi-1],b=PP[bi]; const vr=VR()*180/Math.PI; let ang=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI-vr; ang=((ang%360)+540)%360-180; if(ang>90)ang-=180; if(ang<=-90)ang+=180; ang+=vr;
  const h=S.doc.textH*U()*.8, r0=ang*Math.PI/180, L=Math.hypot(b[0]-a[0],b[1]-a[1]), tw=h*.6*cabLabel(e).length;
  const ux=Math.cos(r0),uy=Math.sin(r0); const mx=(a[0]+b[0])/2-ux*Math.min(tw,L)/2, my=(a[1]+b[1])/2-uy*Math.min(tw,L)/2;
  return {x:mx-Math.sin(r0)*h*.5,y:my+Math.cos(r0)*h*.5,h,ang}}
@@ -3871,6 +3952,8 @@ $("sUnits").onchange=e=>{S.doc.unit=parseFloat(e.target.value); rebuildIndex(); 
 $("iSymScale").onchange=e=>{S.doc.symScale=parseFloat(e.target.value)||1; saveLocal(); draw()};
 $("iTextH").onchange=e=>{S.doc.textH=parseFloat(e.target.value)||.15; saveLocal()};
 $("iOffset").onchange=e=>{S.doc.offset=parseFloat(String(e.target.value).replace(",","."))||.01; saveLocal()};
+$("iFeixe").onchange=e=>fxToggle(e.target.checked);
+$("iFxTol").onchange=e=>{const v=parseFloat(String(e.target.value).replace(",",".")); S.doc.fxTol=v>0?Math.max(.02,Math.min(1,v)):.15; e.target.value=S.doc.fxTol; saveLocal(); draw()};
 $("iCabGap").onchange=e=>{const v=parseFloat(String(e.target.value).replace(",",".")); S.doc.cabGap=v>0?Math.min(.2,v):.01; e.target.value=S.doc.cabGap; saveLocal()};
 
 /* ================= Peças escritas (versão Desktop) ================= */
@@ -4306,6 +4389,7 @@ const CMDS=[
  {id:"inter",n:"Interruptor",g:"Elétrico",a:["IN","INTERRUPTOR"],f:()=>startSym("int1")},
  {id:"quadro",n:"Quadro elétrico",g:"Elétrico",a:["QE","QUADRO"],f:()=>startSym("qe")},
  {id:"vertudo",n:"Ver tudo",g:"Vista",a:["ZE","ZOOM","VERTUDO"],f:()=>fit()},
+ {id:"feixe",n:"Cabos em feixe (ligar / desligar)",g:"Vista",a:["FEIXE","FX","BUNDLE"],f:()=>fxToggle()},
  {id:"rodvista",n:"Rodar vista…",g:"Vista",a:["RV","RODARVISTA"],f:()=>$("bViewRot").click(),sep:true},
  {id:"orto",n:"Orto",g:"Vista",a:["ORTO","ORTHO"],k:"F8",f:()=>toggle("ortho"),chk:()=>S.ortho},
  {id:"snap",n:"Snap a pontos",g:"Vista",a:["SNAP","OSNAP"],k:"F3",f:()=>toggle("snap"),chk:()=>S.snap},
@@ -4417,6 +4501,8 @@ function plDraw(ctx,p,pageLayers,pageTitle){const P=plPaper(p), F=plFrame(p), V=
    for(const r of S.doc.ref){ if(r.t==="text"&&refVisible(r))drawText(r,"#6b7280")}}
   if(p.esp)espDrawAll(true);
   const backL=S.doc.layers.filter(l=>l.back).map(l=>l.name), ENTS=backL.length?S.doc.ents.filter(e=>backL.includes(e.layer)).concat(S.doc.ents.filter(e=>!backL.includes(e.layer))):S.doc.ents;
+  var fx0=FX; FX=typeof fxOn==="function"&&fxOn()?fxCompute(S.doc.ents.filter(e=>e.t==="cable"&&pageLayers.includes(e.layer))):null;
+  const fxCol=e=>{const own=e.col&&!/^#(e5e7eb|ffffff)$/i.test(e.col)?e.col:null; let c=p.col==="mono"?"#000000":p.col==="vr"?(e.exist?"#1d4ed8":own||"#000000"):colorOf(e); if(p.col==="layers"&&/^#(e5e7eb|ffffff|facc15)$/i.test(c))c=c.toLowerCase()==="#facc15"?"#b45309":"#111827"; return c};
   for(const e of ENTS){ if(!pageLayers.includes(e.layer))continue; if(e.t==="pl"&&e.esp)continue;
    const own=e.col&&!/^#(e5e7eb|ffffff)$/i.test(e.col)?e.col:null; // cor escolhida no objeto: imprime-se, exceto em «Tudo a preto»
    let col=e.layer==="PLANTA"?(e.col||"#999999"):p.col==="mono"?"#000000":p.col==="vr"?(e.exist?"#1d4ed8":own||"#000000"):colorOf(e); if(p.col==="layers"&&/^#(e5e7eb|ffffff|facc15)$/i.test(col))col=col.toLowerCase()==="#facc15"?"#b45309":"#111827";
@@ -4427,6 +4513,7 @@ function plDraw(ctx,p,pageLayers,pageTitle){const P=plPaper(p), F=plFrame(p), V=
    ctx.beginPath(); drawGeom(e,false); ctx.stroke(); ctx.setLineDash([]);
    if(e.t==="cable"){drawCableLabel(e,col); drawTaps(e,col)}
    if(e.t==="sym"){const L=labelOf(e,true); if(L)drawText(L,col)} ctx.globalAlpha=1}
+  if(FX)fxDraw(FX,fxCol,e=>lwOf(e)*V*lwK);
   if(typeof riserDrawNotes==="function"&&S.doc.ents.some(e=>isRiser(e)&&pageLayers.includes(e.layer)))riserDrawNotes(p.col==="layers"?"#6b21a8":"#000");
   ctx.restore();
   // moldura e carimbo
@@ -4434,7 +4521,7 @@ function plDraw(ctx,p,pageLayers,pageTitle){const P=plPaper(p), F=plFrame(p), V=
   if(p.carimbo)plCarimbo(ctx,p,F,sc,pageTitle);
   if(p.leg!==false&&typeof vrDrawLegend==="function")vrDrawLegend(ctx,p,{layers:pageLayers,title:pageTitle});
   if(p.notas!==false&&typeof vrDrawNotes==="function")vrDrawNotes(ctx,p,S.doc.notas);
- } finally {G=G0; S.view=view0; S.plotting=false; if(theme)document.documentElement.dataset.theme=theme; else delete document.documentElement.dataset.theme}}
+ } finally { if(typeof fx0!=="undefined")FX=fx0; G=G0; S.view=view0; S.plotting=false; if(theme)document.documentElement.dataset.theme=theme; else delete document.documentElement.dataset.theme}}
 function plDenTxt(sc){return "1:"+(sc.fit?Math.round(sc.den):sc.den)}
 let PL_LOGO=null;
 function plLogo(){ if(PL_LOGO!==null)return PL_LOGO; PL_LOGO=false; try{const b=PE_TPL&&PE_TPL.MD&&PE_TPL.MD["word/media/image1.jpeg"]; if(b){const im=new Image(); im.onload=()=>{PL_LOGO=im; plPreview()}; im.src="data:image/jpeg;base64,"+b.slice(4)}}catch(e){} return PL_LOGO}
