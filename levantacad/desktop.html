@@ -3196,11 +3196,16 @@ function inBoxP(p,B){return p[0]>=B[0]&&p[0]<=B[2]&&p[1]>=B[1]&&p[1]<=B[3]}
 function polyDist(p,pts){let d=Infinity; for(let i=1;i<pts.length;i++)d=Math.min(d,dSeg(p[0],p[1],pts[i-1][0],pts[i-1][1],pts[i][0],pts[i][1])[0]); return d}
 // cabos com uma (e só uma) ponta no quadro; o que está ao longo do cabo diz para onde vai
 function quadroCables(qe){const B=symBox(qe,.3*U()), out=[];
- S.doc.ents.forEach(c=>{ if(c.t!=="cable"||!c.pts||c.pts.length<2)return; const s=inBoxP(c.pts[0],B), f=inBoxP(c.pts[c.pts.length-1],B); if(s===f)return;
+ S.doc.ents.forEach(c=>{ if(c.t!=="cable"||!c.pts||c.pts.length<2)return; let s=inBoxP(c.pts[0],B), f=inBoxP(c.pts[c.pts.length-1],B);
+  if(s&&f){ if(endRiser(c,S.doc,false))s=false; else if(endRiser(c,S.doc,true))f=false} // subida mesmo ao lado do quadro: essa ponta é a da subida
+  if(s===f)return;
   const vt=.1*U(), nearV=q=>c.pts.some(v=>Math.hypot(v[0]-q[0],v[1]-q[1])<=vt); const syms=S.doc.ents.filter(o=>o!==qe&&o.t==="sym"&&nearV(connPt(o)));
-  const qd=syms.find(isQuadro)||null;
+  let qd=syms.find(isQuadro)||null, inn=!!(qd&&f&&!s); let pts=syms.filter(o=>!isQuadro(o)&&!isRiser(o));
+  // circuito que continua noutro piso (subidas): o quadro na outra ponta e os pontos dos outros troços também contam
+  const R=cabChain(c); if(R.multi){ R.segs.forEach(sg=>{ if(sg.c===c)return; const nv=q=>sg.c.pts.some(v=>Math.hypot(v[0]-q[0],v[1]-q[1])<=vt); sg.pl.ents.forEach(o=>{ if(o.t==="sym"&&!isQuadro(o)&&!isRiser(o)&&nv(connPt(o)))pts.push(o)})});
+   if(!qd){ for(const sg of R.segs){ if(sg.c===c)continue; const ends=[[sg.c.pts[0],true],[sg.c.pts[sg.c.pts.length-1],false]]; for(const [pt,atStart] of ends){const q=quadroAt(pt,sg.pl); if(q&&!(sg.pl===S.doc&&q===qe)&&quadroName(q)!==quadroName(qe)){qd=q; inn=s===atStart?(UQRANK[q.sym]||2)>(UQRANK[qe.sym]||2):!s; break}} if(qd)break}}}
   // sentido: o cabo sai do quadro onde começou a ser desenhado; um cabo que liga a um objeto que não é quadro sai sempre deste quadro
-  out.push({c,syms:syms.filter(o=>!isQuadro(o)),qd,in:!!(qd&&f&&!s)})});
+  out.push({c,syms:pts,qd,in:inn})});
  return out}
 function cabDescr(x){ if(x.qd)return "Alimentação "+(quadroName(x.qd)||SYM[x.qd.sym].n);
  if(!x.syms.length)return x.c.layer; const by=new Map(); x.syms.forEach(s=>by.set(s.layer,(by.get(s.layer)||0)+1)); const lay=[...by.entries()].sort((a,b)=>b[1]-a[1])[0][0];
@@ -3256,7 +3261,7 @@ function uFromQuadro(qe){ if(!isQuadro(qe))return;
   else if(idx>=0){q=d.qs[idx]; const have=new Map(); uWalk(q.root,n=>{ if(!n.kids&&n.circ.src!=null)have.set(n.circ.src,n)});
    let upd=0; const nw=[];
    sorted.forEach(x=>{const L=uLeafFromCable(x,q.ph), old=have.get(x.c.id);
-    if(old){const c=old.circ; c.cabo=L.circ.cabo; c.p=L.circ.p; c.ex=L.circ.ex; if(L.circ.fase==="3F")c.fase="3F"; if(!c.des)c.des=L.circ.des; if(L.circ.to&&!c.to)c.to=L.circ.to;
+    if(old){const c=old.circ; c.cabo=L.circ.cabo; c.p=L.circ.p; c.ex=L.circ.ex; if(L.circ.fase==="3F")c.fase="3F"; const autoDes=!c.des||/\(\d+ pontos?\)$/.test(c.des)||/^Alimentação /.test(c.des); if(autoDes)c.des=L.circ.des; if(L.circ.to&&!c.to){c.to=L.circ.to; c.sub=true}
      const pr=[...old.devs].reverse().find(uIsProt), np=L.devs[0]; if(pr&&pr.t===np.t){pr.In=np.In; pr.pol=np.pol} else if(!pr)old.devs.push(np); have.delete(x.c.id); upd++}
     else nw.push(L)});
    if(sorted.some(x=>(x.c.c||{}).ph==="3F")||(feed&&(feed.c.c||{}).ph==="3F"))q.ph="3F";
