@@ -1534,6 +1534,31 @@ function fnSafe(t){return String(t).normalize("NFD").replace(/[\u0300-\u036f]/g,
 function baseName(){return fnSafe((PROJ&&PROJ.name)||S.doc.name||"levantamento")}
 function baseNamePl(){return baseName()+(PROJ&&PROJ.plantas.length>1?"_"+fnSafe(S.doc.pname||""):"")}
 let FILEH=null;
+// juntar outro projeto (por exemplo outro piso) a este: as plantas, os esquemas e os blocos passam para cá
+function openOrMerge(P,fname){const n=P.plantas.length;
+ ask("Abrir «"+uEsc(fname)+"»",[{k:"m",l:"O que fazer",type:"select",v:"merge",opts:[["merge","Juntar a este projeto (acrescenta as "+n+" planta(s) dele)"],["open","Abrir em vez deste (o atual fica nas versões gravadas)"]]}],o=>{
+  if(o.m==="open"){importDocSyms(P); setProject(P); setTimeout(()=>{LC_DIRTY=false; saveStatus()},500); toast("Projeto aberto.",2500); return}
+  mergeDialog(P,fname)},'<div class="small" style="margin-bottom:6px">Já tem um projeto aberto com desenhos.</div>')}
+function mergeDialog(P,fname){const base=String(fname||"").replace(/\.levantacad\.json$|\.json$/i,""), srcs=P.plantas.filter(q=>!q.refOf);
+ const curNoCota=PROJ.plantas.filter(q=>!q.refOf&&q.cota==null).length;
+ ask("Juntar «"+uEsc(fname)+"» a este projeto",[{k:"pre",l:"Nome do piso destas plantas (fica antes do nome de cada uma; vazio = sem alteração)",v:""},{k:"cota",l:"Cota do pavimento deste piso (m)",v:srcs[0]&&srcs[0].cota!=null?String(srcs[0].cota):""},...(curNoCota?[{k:"cota0",l:"Cota do piso que já estava aberto (m)",v:""}]:[])],o=>{
+  const r=mergeProject(P,{pre:String(o.pre||"").trim(),cota:o.cota,cota0:o.cota0}); toast("Juntado: "+r.pl+" planta(s)"+(r.qs?", "+r.qs+" esquema(s) de quadro":"")+(r.ren.length?". Esquemas com nome repetido ficaram como: "+r.ren.join(", "):"")+".",6000)},
+  `<div class="small" style="margin-bottom:6px">Plantas que entram: ${P.plantas.map(q=>uEsc(q.pname||"Planta")+(q.esp?" ("+uEsc(q.esp)+")":"")).join(", ")}. Os cabos que chegam a subidas com a mesma referência (S1, S2…) ficam ligados entre pisos.</div>`)}
+function mergeProject(P,o){o=o||{}; flushLocal("before"); importDocSyms(P);
+ const num2=v=>{const t=String(v==null?"":v).trim().replace(",","."); return t!==""&&isFinite(+t)?+t:null};
+ if(num2(o.cota0)!=null)PROJ.plantas.filter(q=>!q.refOf&&q.cota==null).forEach(q=>q.cota=num2(o.cota0));
+ const idMap=new Map(), plMap=new Map(); let nid=PROJ.nextId||1;
+ const inc=JSON.parse(JSON.stringify(P.plantas));
+ inc.forEach(q=>{const nidp="p"+(++PROJ.pseq); plMap.set(q.id,nidp); q.id=nidp; if(o.pre)q.pname=o.pre+" · "+(q.pname||"Planta");
+  (q.ents||[]).forEach(e=>{idMap.set(e.id,nid); e.id=nid++})});
+ inc.forEach(q=>{ if(q.refOf)q.refOf=plMap.get(q.refOf)||undefined; if(!q.refOf){delete q.refOf; if(num2(o.cota)!=null)q.cota=num2(o.cota)} PROJ.plantas.push(q)});
+ PROJ.nextId=nid; projLink(PROJ);
+ // esquemas unifilares: ids novos e nomes sem repetir
+ const ren=[]; let nq=0; if(P.uni&&P.uni.qs&&P.uni.qs.length){const d=uDoc();
+  P.uni.qs.forEach(q0=>{const q=JSON.parse(JSON.stringify(q0)); let nm=q.nome||"Quadro", k=2; if(d.qs.some(x=>x.nome===nm)){while(d.qs.some(x=>x.nome===nm+" ("+k+")"))k++; nm=nm+" ("+k+")"; ren.push(nm)} q.nome=nm;
+   const re=n=>{n.id=uId(); if(n.circ){ if(n.circ.src!=null&&idMap.has(n.circ.src))n.circ.src=idMap.get(n.circ.src); if(n.circ.pl&&plMap.has(n.circ.pl))n.circ.pl=plMap.get(n.circ.pl)} (n.kids||[]).forEach(re)};
+   re(q.root); (q.root.par||[]).forEach(pn=>pn.id=uId()); d.qs.push(q); nq++})}
+ LC_VER++; updPlantaUI(); refreshUI(); saveLocal(); draw(); return {pl:inc.length,qs:nq,ren}}
 function projSaveSummary(data){let d; try{d=JSON.parse(data)}catch(e){return null} const st=projStats(projWrap(d)); return st.n+" planta(s) ("+st.names.join(", ")+"), "+st.ents+" objetos"+(st.qs?", "+st.qs+" quadro(s)":"")+", "+(data.length/1048576).toFixed(1).replace(".",",")+" MB"}
 function markFileSaved(){LC_DIRTY=false; LC_FILESAVED=Date.now(); flushLocal("file"); saveStatus()}
 async function saveProject(asNew){PROJ.syms=docSymsForSave(); if(!PROJ.name)PROJ.name=S.doc.name||""; const data=projJSON(), sum=projSaveSummary(data);
@@ -1554,7 +1579,9 @@ $("bSave").onclick=()=>saveProject(false);
 $("bOpen").onclick=async()=>{ if(window.showOpenFilePicker){try{const [h]=await showOpenFilePicker({types:[{description:"Plantas e projetos",accept:{"application/octet-stream":[".dwg",".dxf",".json",".pdf",".png",".jpg",".jpeg",".webp"]}}]}); const f=await h.getFile(); openFile(f,h); return}catch(e){ if(e&&e.name==="AbortError")return}} $("file").click()};
 $("file").onchange=ev=>{const f=ev.target.files[0]; if(f)openFile(f,null); ev.target.value=""};
 function openFile(f,handle){ const n=f.name.toLowerCase(); const rd=new FileReader(); if(n.endsWith(".json"))FILEH=handle||null;
- if(n.endsWith(".json")){rd.onload=()=>{try{const d=JSON.parse(rd.result); if(!d||(d.v!==1&&d.v!==2))throw 0; const P=projWrap(d); importDocSyms(P); setProject(P); setTimeout(()=>{LC_DIRTY=false; saveStatus()},500); toast("Projeto aberto"+(P.plantas.length>1?" ("+P.plantas.length+" plantas)":"")+".")}catch(e){toast("Ficheiro de projeto inválido.")}}; rd.readAsText(f)}
+ if(n.endsWith(".json")){rd.onload=()=>{try{const d=JSON.parse(rd.result); if(!d||(d.v!==1&&d.v!==2))throw 0; const P=projWrap(d);
+  if(PROJ&&PROJ.plantas.some(q=>q.ents.length)&&!S._forceOpen){openOrMerge(P,f.name); return} S._forceOpen=false;
+  importDocSyms(P); setProject(P); setTimeout(()=>{LC_DIRTY=false; saveStatus()},500); toast("Projeto aberto"+(P.plantas.length>1?" ("+P.plantas.length+" plantas)":"")+".")}catch(e){toast("Ficheiro de projeto inválido.")}}; rd.readAsText(f)}
  else if(n.endsWith(".dxf")){rd.onload=()=>{let t; try{t=new TextDecoder("utf-8",{fatal:true}).decode(rd.result)}catch(e){t=new TextDecoder("windows-1252").decode(rd.result)} importDXFText(t,f.name)}; rd.readAsArrayBuffer(f)}
  else if(n.endsWith(".dwg")){rd.onload=()=>importDWG(rd.result,f.name); rd.readAsArrayBuffer(f)}
  else if(n.endsWith(".pdf")){rd.onload=()=>importPDF(rd.result,f.name); rd.readAsArrayBuffer(f)}
@@ -4093,6 +4120,7 @@ function lineClose(){const t=S.tmp; if(!t||t.made.length<2){toast("Faça pelo me
 // lista de comandos: id, nome, grupo, nomes curtos (o primeiro aparece no menu), tecla, ação
 const CMDS=[
  {id:"novo",n:"Novo…",g:"Ficheiro",a:["NOVO","NEW"],k:"Ctrl+N",f:()=>newDialog()},
+ {id:"juntar",n:"Juntar outro projeto (outro piso)…",g:"Ficheiro",a:["JUNTAR","MERGE"],f:()=>{const i=document.createElement("input"); i.type="file"; i.accept=".json"; i.onchange=()=>{const f=i.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=()=>{try{const d=JSON.parse(rd.result); if(!d||(d.v!==1&&d.v!==2))throw 0; mergeDialog(projWrap(d),f.name)}catch(e){toast("Ficheiro de projeto inválido.")}}; rd.readAsText(f)}; i.click()}},
  {id:"abrir",n:"Abrir…",g:"Ficheiro",a:["ABRIR","OPEN"],k:"Ctrl+O",f:()=>$("bOpen").click()},
  {id:"guardar",n:"Guardar",g:"Ficheiro",a:["GUARDAR","SAVE"],k:"Ctrl+S",f:()=>saveProject(false)},
  {id:"guardarc",n:"Guardar como…",g:"Ficheiro",a:["GUARDARCOMO","SAVEAS"],k:"Ctrl+Shift+S",f:()=>saveProject(true)},
