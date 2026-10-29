@@ -280,6 +280,7 @@ button.ic small.badge{font-size:10px;font-weight:600}
     <div class="row"><label>Escala dos símbolos</label><input id="iSymScale" type="number" step="0.1" min="0.1" value="1"></div>
     <div class="row"><label>Altura do texto (m)</label><input id="iTextH" type="number" step="0.01" min="0.01" value="0.15"></div>
     <div class="row"><label>Paralela: distância (m)</label><input id="iOffset" type="number" step="0.001" min="0.001" value="0.01"></div>
+    <div class="row"><label>Afastamento entre cabos (m)</label><input id="iCabGap" type="number" step="0.001" min="0.001" max="0.2" value="0.01"></div>
     <div class="small">0,01 m = 0,1 mm em papel a 1:100.</div>
     <div class="row"><label>Novo elemento existente</label><input id="cExist" type="checkbox"></div>
     <h3>Quantidades</h3>
@@ -1395,7 +1396,7 @@ function refreshQty(){netCalc(); const {rows,lens,cabs,bad,esps}=quantities(); l
  [...esps.entries()].sort().forEach(([k,o])=>{h+=`<tr><td>Espaços · ${uEsc(k)} (${o.n})</td><td class="n">${o.A.toFixed(1)} m²</td></tr>`});
  $("qty").innerHTML=h+"</table>"; const qb=$("qBad"); if(qb)qb.onclick=()=>{S.sel=new Set(bad); setTool("select"); refreshProps(); draw()}; const qw=$("qWc"); if(qw)qw.onclick=()=>{S.sel=new Set(wb); setTool("select"); refreshProps(); draw()}}
 function refreshUI(){netCalc(); refreshLayers(); refreshProps(); refreshQty();
- $("sUnits").value=String(S.doc.unit); $("iSymScale").value=S.doc.symScale; $("iTextH").value=S.doc.textH; $("iOffset").value=S.doc.offset;
+ $("sUnits").value=String(S.doc.unit); $("iSymScale").value=S.doc.symScale; $("iTextH").value=S.doc.textH; $("iOffset").value=S.doc.offset; $("iCabGap").value=S.doc.cabGap!=null?S.doc.cabGap:.01;
  $("bPlanta").classList.toggle("on",!S.doc.refHidden)}
 
 /* ================= DXF: leitura ================= */
@@ -2240,7 +2241,8 @@ function routeBetween(A,B,o){ o=o||{}; // A,B em coordenadas do desenho; devolve
  const clean=[pts[0]]; for(let k=1;k<pts.length;k++){const p=clean[clean.length-1]; if(Math.hypot(pts[k][0]-p[0],pts[k][1]-p[1])>1e-9)clean.push(pts[k])}
  return clean.map(p=>fromV(p[0],p[1]))}
 /* ---------- Separação entre cabos (saídas paralelas e troços afastados) ---------- */
-function cabGap(){return Math.max(1e-6,(S.doc.offset||.01)*U())}
+// afastamento entre cabos paralelos e às paredes: valor próprio (não é a distância da Paralela), limitado a 0,2 m
+function cabGap(){const g=S.doc.cabGap!=null?+S.doc.cabGap:.01; return Math.max(1e-6,Math.min(.2,g>0?g:.01))*U()}
 function exitInfo(e,extra){const base=connPt(e), d=cabGap(), R=Math.max(.3*U()*(S.doc.symScale||1)*(e.scale||1),6*d);
  const isWall=e.t==="sym"&&SYM[e.sym]&&SYM[e.sym].wall, r=(e.rot||0)*Math.PI/180;
  let dir; if(isWall)dir=[Math.cos(r),Math.sin(r)]; else {const o=fromV(0,0),x=fromV(1,0); dir=[x[0]-o[0],x[1]-o[1]]}
@@ -2281,7 +2283,7 @@ function separateRoute(pts,prot){const d=cabGap(), tol=d*.9; const isP=b=>(prot|
    changed=true; break}
   if(!changed)break}
  // limpar colineares/repetidos
- const out=[P[0]]; for(let i=1;i<P.length;i++){const p=out[out.length-1]; if(Math.hypot(P[i][0]-p[0],P[i][1]-p[1])<1e-9)continue; if(out.length>=2){const q=out[out.length-2]; if((Math.abs(q[0]-p[0])<1e-9&&Math.abs(p[0]-P[i][0])<1e-9)||(Math.abs(q[1]-p[1])<1e-9&&Math.abs(p[1]-P[i][1])<1e-9)){out[out.length-1]=P[i];continue}} out.push(P[i])}
+ const out=[P[0]]; for(let i=1;i<P.length;i++){const p=out[out.length-1]; if(Math.hypot(P[i][0]-p[0],P[i][1]-p[1])<1e-9)continue; if(out.length>=2&&!isP(fromV(p[0],p[1]))){const q=out[out.length-2]; if((Math.abs(q[0]-p[0])<1e-9&&Math.abs(p[0]-P[i][0])<1e-9)||(Math.abs(q[1]-p[1])<1e-9&&Math.abs(p[1]-P[i][1])<1e-9)){out[out.length-1]=P[i];continue}} out.push(P[i])}
  return out.map(p=>fromV(p[0],p[1]))}
 
 // tira «espigões» (ir e voltar pelo mesmo caminho); os pontos alinhados ficam, porque marcam os objetos por onde o cabo passa
@@ -3661,6 +3663,7 @@ $("sUnits").onchange=e=>{S.doc.unit=parseFloat(e.target.value); rebuildIndex(); 
 $("iSymScale").onchange=e=>{S.doc.symScale=parseFloat(e.target.value)||1; saveLocal(); draw()};
 $("iTextH").onchange=e=>{S.doc.textH=parseFloat(e.target.value)||.15; saveLocal()};
 $("iOffset").onchange=e=>{S.doc.offset=parseFloat(String(e.target.value).replace(",","."))||.01; saveLocal()};
+$("iCabGap").onchange=e=>{const v=parseFloat(String(e.target.value).replace(",",".")); S.doc.cabGap=v>0?Math.min(.2,v):.01; e.target.value=S.doc.cabGap; saveLocal()};
 
 /* ================= Peças escritas (versão Desktop) ================= */
 // Modelos da Ventura Rodrigues com marcadores {{...}}; gera .docx e .xlsx sem internet (zip sem compressão)
