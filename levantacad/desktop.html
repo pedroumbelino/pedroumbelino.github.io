@@ -282,6 +282,8 @@ button.ic small.badge{font-size:10px;font-weight:600}
     <div class="row"><label>Paralela: distância (m)</label><input id="iOffset" type="number" step="0.001" min="0.001" value="0.01"></div>
     <div class="row"><label>Afastamento entre cabos (m)</label><input id="iCabGap" type="number" step="0.001" min="0.001" max="0.2" value="0.01"></div>
     <div class="small">0,01 m = 0,1 mm em papel a 1:100.</div>
+    <div class="row"><label>Símbolos e textos acompanham a escala de impressão</label><input id="iAnnot" type="checkbox" checked></div>
+    <div class="small">Ligado: ao mudar a escala da folha (1:100 → 1:50), símbolos, textos, etiquetas e afastamento entre cabos ajustam-se para ficarem do mesmo tamanho no papel.</div>
     <div class="row"><label>Cabos paralelos em feixe</label><input id="iFeixe" type="checkbox" checked></div>
     <div class="row"><label>Feixe: cabos até (m) de distância</label><input id="iFxTol" type="number" step="0.01" min="0.02" max="1" value="0.15"></div>
     <div class="small">Os circuitos que seguem o mesmo caminho desenham-se numa só linha, com um traço por cabo e os nomes dos circuitos. Só muda o desenho: os comprimentos ficam iguais.</div>
@@ -472,9 +474,10 @@ function toast(t,ms){const e=$("toast");e.textContent=t;e.style.display="block";
 function hint(t){$("hint").textContent=t||""}
 
 /* ================= Undo ================= */
-function snapshot(){return JSON.stringify({ents:S.doc.ents,layers:S.doc.layers,active:S.doc.active,bg:S.doc.bg?{...S.doc.bg,data:undefined}:null})}
+function snapshot(){const d=S.doc; return JSON.stringify({ents:d.ents,layers:d.layers,active:d.active,bg:d.bg?{...d.bg,data:undefined}:null,ann:{symScale:d.symScale,textH:d.textH,cabGap:d.cabGap,fxTol:d.fxTol,sc:d.plot?d.plot.sc:undefined}})}
 function pushUndo(){S.undo.push(snapshot()); if(S.undo.length>200)S.undo.shift(); S.redo=[]; saveLocal()}
 function restore(js){const o=JSON.parse(js); S.doc.ents=o.ents; S.doc.layers=o.layers; S.doc.active=o.active;
+ if(o.ann){["symScale","textH","cabGap","fxTol"].forEach(k=>{ if(o.ann[k]!=null)S.doc[k]=o.ann[k]; else delete S.doc[k]}); if(o.ann.sc!=null&&S.doc.plot)S.doc.plot.sc=o.ann.sc}
  if(o.bg&&S.doc.bg){Object.assign(S.doc.bg,o.bg,{data:S.doc.bg.data})} S.sel.clear(); rebuildIndex(); refreshUI(); draw()}
 function undo(){if(!S.undo.length)return; S.redo.push(snapshot()); restore(S.undo.pop()); saveLocal()}
 function redo(){if(!S.redo.length)return; S.undo.push(snapshot()); restore(S.redo.pop()); saveLocal()}
@@ -919,6 +922,16 @@ function render(){
   else if(k==="sobre a reta"){G.moveTo(px-6,py-6); G.lineTo(px+6,py+6); G.moveTo(px-6,py+6); G.lineTo(px+6,py-6)}
   else G.rect(px-6,py-6,12,12); G.stroke()}
 }
+/* ================= Anotações à escala da folha: símbolos, textos, etiquetas e afastamento dos cabos acompanham a escala de impressão ================= */
+function annotOn(){return S.doc.annot!==false}
+function annotRescale(f,doc){doc=doc||S.doc; if(!(f>0)||Math.abs(f-1)<1e-9)return 0; const r=v=>Math.round(v*1e6)/1e6;
+ doc.symScale=r((doc.symScale||1)*f); doc.textH=r((doc.textH||.15)*f);
+ doc.cabGap=r(Math.max(1e-6,Math.min(.2,(doc.cabGap!=null?+doc.cabGap:.01)*f))); doc.fxTol=r(Math.max(.02,Math.min(1,(doc.fxTol!=null?+doc.fxTol:.15)*f)));
+ let n=0; doc.ents.forEach(e=>{ if(e.lbOff){e.lbOff=e.lbOff.map(v=>v*f); n++} if(e.t==="text"&&e.layer!==PLANTA_LAY&&e.h){e.h*=f; n++}});
+ return n}
+// chamado quando a escala de impressão muda: den0 → den1
+function annotScaleChanged(den0,den1){ if(!annotOn()||!(den0>0)||!(den1>0)||Math.abs(den1/den0-1)<1e-6)return; pushUndo(); annotRescale(den1/den0); rebuildIndex(); refreshUI(); saveLocal(); draw();
+ toast("Escala 1:"+Math.round(den0)+" → 1:"+Math.round(den1)+": os símbolos, os textos, as etiquetas e o afastamento entre cabos foram ajustados para ficarem do mesmo tamanho na folha. As medidas não mudam. Os cabos já traçados mantêm o afastamento; para o atualizar, volte a traçá-los. (Ctrl+Z desfaz.)",8000)}
 /* ================= Linhas → circuito: junta retas, polilinhas e arcos ponta a ponta num só cabo ================= */
 function l2cPts(e){ if(e.t==="line")return [[e.x1,e.y1],[e.x2,e.y2]];
  if(e.t==="pl"){const P=e.pts.map(p=>[p[0],p[1]]); if(e.closed&&P.length>2)P.push([P[0][0],P[0][1]]); return P}
@@ -1511,7 +1524,7 @@ function refreshQty(){netCalc(); const {rows,lens,cabs,bad,esps}=quantities(); l
  [...esps.entries()].sort().forEach(([k,o])=>{h+=`<tr><td>Espaços · ${uEsc(k)} (${o.n})</td><td class="n">${o.A.toFixed(1)} m²</td></tr>`});
  $("qty").innerHTML=h+"</table>"; const qb=$("qBad"); if(qb)qb.onclick=()=>{S.sel=new Set(bad); setTool("select"); refreshProps(); draw()}; const qw=$("qWc"); if(qw)qw.onclick=()=>{S.sel=new Set(wb); setTool("select"); refreshProps(); draw()}}
 function refreshUI(){netCalc(); refreshLayers(); refreshProps(); refreshQty();
- $("sUnits").value=String(S.doc.unit); $("iSymScale").value=S.doc.symScale; $("iTextH").value=S.doc.textH; $("iOffset").value=S.doc.offset; $("iCabGap").value=S.doc.cabGap!=null?S.doc.cabGap:.01; $("iFeixe").checked=fxOn(); $("iFxTol").value=S.doc.fxTol!=null?S.doc.fxTol:.15;
+ $("sUnits").value=String(S.doc.unit); $("iSymScale").value=S.doc.symScale; $("iTextH").value=S.doc.textH; $("iOffset").value=S.doc.offset; $("iCabGap").value=S.doc.cabGap!=null?S.doc.cabGap:.01; $("iFeixe").checked=fxOn(); $("iAnnot").checked=annotOn(); $("iFxTol").value=S.doc.fxTol!=null?S.doc.fxTol:.15;
  $("bPlanta").classList.toggle("on",!S.doc.refHidden)}
 
 /* ================= DXF: leitura ================= */
@@ -3979,6 +3992,7 @@ $("iSymScale").onchange=e=>{S.doc.symScale=parseFloat(e.target.value)||1; saveLo
 $("iTextH").onchange=e=>{S.doc.textH=parseFloat(e.target.value)||.15; saveLocal()};
 $("iOffset").onchange=e=>{S.doc.offset=parseFloat(String(e.target.value).replace(",","."))||.01; saveLocal()};
 $("iFeixe").onchange=e=>fxToggle(e.target.checked);
+$("iAnnot").onchange=e=>{S.doc.annot=!!e.target.checked; saveLocal()};
 $("iFxTol").onchange=e=>{const v=parseFloat(String(e.target.value).replace(",",".")); S.doc.fxTol=v>0?Math.max(.02,Math.min(1,v)):.15; e.target.value=S.doc.fxTol; saveLocal(); draw()};
 $("iCabGap").onchange=e=>{const v=parseFloat(String(e.target.value).replace(",",".")); S.doc.cabGap=v>0?Math.min(.2,v):.01; e.target.value=S.doc.cabGap; saveLocal()};
 
@@ -4711,7 +4725,7 @@ function openPlot(){ if(!S.doc)return; PL=PL||{pg:0}; const p=plState(); let el=
  </div></div>`;
  el.style.display="flex";
  const upd=()=>{saveLocal(); plPreview()};
- el.querySelectorAll("[data-k]").forEach(i=>i.onchange=()=>{const k=i.dataset.k; p[k]=i.type==="checkbox"?i.checked:i.value; if(k==="area"&&i.value==="janela"&&!p.win){plPickWin(); return} upd()});
+ el.querySelectorAll("[data-k]").forEach(i=>i.onchange=()=>{const k=i.dataset.k, d0=k==="sc"?plScale(p).den:0; p[k]=i.type==="checkbox"?i.checked:i.value; if(k==="sc"&&typeof annotScaleChanged==="function")annotScaleChanged(d0,plScale(p).den); if(k==="area"&&i.value==="janela"&&!p.win){plPickWin(); return} upd()});
  el.querySelectorAll("[data-lay]").forEach(i=>i.onchange=()=>{p.lay[i.dataset.lay]=i.checked; upd()});
  $("plX").onclick=()=>{el.style.display="none"}; $("plLeg").onclick=()=>legEditDialog(()=>plPreview());
  const curPg=()=>{const pg=plPages(p); return pg[Math.min(PL.pg||0,pg.length-1)]};
@@ -4749,7 +4763,7 @@ function sheetDraw(light){ if(!S.doc.showSheet||S.plotting||!S.doc.plot&&!S.doc.
  G.restore()}
 function sheetDialog(){const p=plState(); const fm=Object.keys(PL_FMT).map(k=>[k,k]), sc=PL_SCALES.map(v=>[String(v),v==="fit"?"Ajustar à folha":"1:"+v]);
  ask("Folha no desenho",[{k:"show",l:"Mostrar a folha no desenho",type:"check",v:true},{k:"fmt",l:"Formato",type:"select",v:p.fmt||"A3",opts:fm},{k:"or",l:"Orientação",type:"select",v:p.or||"h",opts:[["h","Horizontal"],["v","Vertical"]]},{k:"sc",l:"Escala de impressão",type:"select",v:String(p.sc),opts:sc}],o=>{
-  S.doc.showSheet=!!o.show; p.fmt=o.fmt; p.or=o.or; p.sc=o.sc; delete p.paper; saveLocal(); if(o.show)sheetFit(); draw();
+  const d0=plScale(p).den, sc0=p.sc; S.doc.showSheet=!!o.show; p.fmt=o.fmt; p.or=o.or; p.sc=o.sc; delete p.paper; if(o.sc!==sc0&&typeof annotScaleChanged==="function")annotScaleChanged(d0,plScale(p).den); saveLocal(); if(o.show)sheetFit(); draw();
   if(o.show){const s=plScale(p), f=s.fitDen/s.den; toast(f>1.001?"Na escala 1:"+s.den+" o desenho não cabe nesta folha: precisa de um formato maior ou de uma escala menor (1:"+Math.ceil(s.fitDen)+" ou mais).":"O desenho ocupa cerca de "+Math.round(f*100)+"% da área útil da folha. Pode mover o desenho dentro da folha na pré-visualização da impressão.",7000)}},
   '<div class="small" style="margin-bottom:6px">A folha aparece no desenho à escala de impressão: papel, moldura, área útil para o desenho e a coluna da simbologia e do carimbo. É a mesma configuração da impressão (Ficheiro › Imprimir).</div>')}
 function sheetFit(){const p=plState(), P=plPaper(p), {M}=plSheetMap(p); const Q=[[0,0],[P.w,0],[P.w,P.h],[0,P.h]].map(q=>toV(...M(q[0],q[1])));
