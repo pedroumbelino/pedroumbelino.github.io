@@ -881,7 +881,7 @@ function render(){
   let col=colorOf(e); if(light&&/^#(e5e7eb|ffffff)$/i.test(col))col="#111827"; if(light&&col==="#facc15")col="#b45309"; if(!light&&/^#000000$/i.test(col))col="#e5e7eb";
   const sel=S.sel.has(e); G.strokeStyle=sel?"#e8742c":col; G.fillStyle=G.strokeStyle; const lwk=Math.max(.7,Math.min(4,lwOf(e)/.25));
   G.lineWidth=(sel?2.2:1.4)*(e.t==="cable"?1:lwk); if(e.t==="cable")G.lineWidth=(sel?3:2)*Math.max(.7,Math.min(4,lwOf(e)/.35));
-  G.globalAlpha=e.tr?1-e.tr/100:1;
+  G.globalAlpha=(e.tr?1-e.tr/100:1)*(e.locked&&!S.plotting?.55:1);
   if(e.t==="text"){drawText(e,G.strokeStyle); G.globalAlpha=1; continue}
   if(e.t==="leg"){legDraw(e,G.strokeStyle,false); G.globalAlpha=1; continue}
   const dsh=ltDash(ltOf(e)); G.setLineDash(dsh.length?dsh.map(v=>v*3.2):[]);
@@ -994,10 +994,10 @@ function pickMidGrip(x,y){const tol=8/S.view.s; let best=null, bd=tol; S.sel.for
   for(let i=0;i<m;i++){const a=P[i], b=P[(i+1)%n], q=[(a[0]+b[0])/2,(a[1]+b[1])/2], d=Math.hypot(q[0]-x,q[1]-y); if(Math.hypot(b[0]-a[0],b[1]-a[1])*S.view.s>26&&d<bd){bd=d; best={e,i,p:q}}}}); return best}
 function setVert(e,i,p){ if(e.t==="line"){ if(i===0){e.x1=p[0];e.y1=p[1]} else {e.x2=p[0];e.y2=p[1]} } else {e.pts[i]=[p[0],p[1]]}}
 function pickGrip(x,y){const tol=9/S.view.s; let best=null,bd=tol;
- const test=(e,bonus)=>{const L=layerOf(e); if(!L.visible||L.locked)return; vertsOf(e).forEach((v,i)=>{const d=Math.hypot(v[0]-x,v[1]-y)-bonus; if(d<bd){bd=d;best={e,i}}})};
+ const test=(e,bonus)=>{const L=layerOf(e); if(!L.visible||L.locked||e.locked)return; vertsOf(e).forEach((v,i)=>{const d=Math.hypot(v[0]-x,v[1]-y)-bonus; if(d<bd){bd=d;best={e,i}}})};
  S.sel.forEach(e=>test(e,tol*.5)); S.doc.ents.forEach(e=>{ if(!S.sel.has(e))test(e,0)}); return best}
-function pick(x,y){const tol=8/S.view.s; let best=null,bd=tol;
- for(let i=S.doc.ents.length-1;i>=0;i--){const e=S.doc.ents[i], L=layerOf(e); if(!L.visible||L.locked)continue; let d=Infinity;
+function pick(x,y,inclLocked){const tol=8/S.view.s; let best=null,bd=tol;
+ for(let i=S.doc.ents.length-1;i>=0;i--){const e=S.doc.ents[i], L=layerOf(e); if(!L.visible||L.locked||(e.locked&&!inclLocked))continue; let d=Infinity;
   if(e.t==="line")d=dSeg(x,y,e.x1,e.y1,e.x2,e.y2)[0];
   else if((e.t==="pl"||e.t==="cable")){for(let j=1;j<e.pts.length;j++)d=Math.min(d,dSeg(x,y,...e.pts[j-1],...e.pts[j])[0])}
   else if(e.t==="circle")d=Math.abs(Math.hypot(x-e.x,y-e.y)-e.r);
@@ -1081,7 +1081,7 @@ function onDown(x,y,btn,ev){
  if(btn===2&&S.pend&&t==="select"){pendGo(); return}
  if(t==="mv")return mvClick(x,y,btn);
  if(t==="plotwin"){ if(btn===2){S.tmp=null; setTool("select"); openPlot(); return} if(!S.tmp)S.tmp={pw:[x,y],dn:[x,y]}; else plWinDone(S.tmp.pw,[x,y]); draw(); return}
- if(btn===2){ if(t==="select"&&!S.tmp&&ev&&ev.clientX!=null){const e=pick(x,y); if(e){ if(!S.sel.has(e)){S.sel=new Set([e]); refreshProps(); draw()} entCtx(e,ev.clientX,ev.clientY,x,y); return}} finishOrCancel(); return}
+ if(btn===2){ if(t==="select"&&!S.tmp&&ev&&ev.clientX!=null){const lk=pick(x,y,true); if(lk&&lk.locked){ctxMenu(ev.clientX,ev.clientY,[["Desbloquear este objeto",()=>lockSet([lk],false)],["Desbloquear todos os objetos desta planta",()=>lockSet(S.doc.ents.filter(o=>o.locked),false)]]); return} const e=pick(x,y); if(e){ if(!S.sel.has(e)){S.sel=new Set([e]); refreshProps(); draw()} entCtx(e,ev.clientX,ev.clientY,x,y); return}} finishOrCancel(); return}
  if(t==="esp")return espClick(x,y,ev);
  if(t==="trim"||t==="extend")return teClick(x,y,ev);
  if(t==="legpt"){pushUndo(); const e=addEnt({t:"leg",x,y,scale:1,layer:"Notas"}); S.sel=new Set([e]); setTool("select"); refreshProps(); saveLocal(); draw(); return}
@@ -1150,7 +1150,7 @@ function gripConstrain(d,p,x,y){const f=d.fix, vx=p[0]-f[0], vy=p[1]-f[1], L=Mat
  const ux=Math.cos(bi[0]), uy=Math.sin(bi[0]), t=vx*ux+vy*uy; return {p:[f[0]+ux*t,f[1]+uy*t],fix:f,ux,uy,label:"Ctrl: "+bi[1]}}
 function onUp(x,y){ S.cons=null;
  if(S.tool==="plotwin"&&S.tmp&&S.tmp.dn){const d=S.tmp.dn; S.tmp.dn=null; if(Math.abs(x-d[0])*S.view.s>6||Math.abs(y-d[1])*S.view.s>6){plWinDone(S.tmp.pw,[x,y]); return}}
- if(S.tool==="circ"&&S.cbox){const b=S.cbox; S.cbox=null; if(Math.abs(x-b.x0)*S.view.s>4||Math.abs(y-b.y0)*S.view.s>4){circAddBox(b.x0,b.y0,x,y); circHint()} draw(); return} if(S.tool==="select"&&S.drag){ if(S.drag.box){const d=S.drag; if(Math.abs(x-d.x0)*S.view.s>4||Math.abs(y-d.y0)*S.view.s>4){const cr=boxIsCross(d.x0,d.y0,x,y); S.doc.ents.forEach(e=>{const L=layerOf(e); if(L.visible&&!L.locked&&(cr?crossBox(e,d.x0,d.y0,x,y):inBox(e,d.x0,d.y0,x,y))){ if(d.sub)S.sel.delete(e); else S.sel.add(e)}}); if(S.pend)hint(pendHint())}}
+ if(S.tool==="circ"&&S.cbox){const b=S.cbox; S.cbox=null; if(Math.abs(x-b.x0)*S.view.s>4||Math.abs(y-b.y0)*S.view.s>4){circAddBox(b.x0,b.y0,x,y); circHint()} draw(); return} if(S.tool==="select"&&S.drag){ if(S.drag.box){const d=S.drag; if(Math.abs(x-d.x0)*S.view.s>4||Math.abs(y-d.y0)*S.view.s>4){const cr=boxIsCross(d.x0,d.y0,x,y); S.doc.ents.forEach(e=>{const L=layerOf(e); if(L.visible&&!L.locked&&!e.locked&&(cr?crossBox(e,d.x0,d.y0,x,y):inBox(e,d.x0,d.y0,x,y))){ if(d.sub)S.sel.delete(e); else S.sel.add(e)}}); if(S.pend)hint(pendHint())}}
   if(S.drag.grip){setTool("select")} if(S.drag.moved){rebuildIndex(); refreshQty(); saveLocal()} S.drag=null; refreshProps(); draw()}}
 
 /* ================= Ponteiro, zoom e pan ================= */
@@ -1297,7 +1297,9 @@ function refreshLayers(){const L=$("layers"); L.innerHTML=""; S.doc.layers.forEa
   L.appendChild(d)}); $("sLay").textContent=S.doc.active; qpSync()}
 const RT={cur:"props",back:null,n:0};
 function rtab(k){RT.cur=k; document.querySelectorAll("#rtabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===k)); document.querySelectorAll("#right .tpane").forEach(p=>p.classList.toggle("on",p.dataset.pane===k)); try{localStorage.setItem("lc_rtab",k)}catch(e){}}
-function selSimilar(sel){const key=e=>e.t+"|"+e.layer+"|"+(e.t==="sym"?e.sym:"")+"|"+(e.t==="pl"&&e.esp?"esp":""); const ks=new Set(sel.map(key)); S.sel=new Set(S.doc.ents.filter(e=>ks.has(key(e))&&layerOf(e).visible&&!layerOf(e).locked)); refreshProps(); draw(); toast(S.sel.size+" objeto(s) selecionados.",2000)}
+function lockSet(list,on){ if(!list.length)return; pushUndo(); list.forEach(e=>{ if(on)e.locked=true; else delete e.locked}); if(on)S.sel.clear(); rebuildIndex(); refreshProps(); saveLocal(); draw();
+ toast(on?list.length+" objeto(s) bloqueado(s): não se selecionam nem se mexem. Botão direito em cima para desbloquear.":list.length+" objeto(s) desbloqueado(s).",3500)}
+function selSimilar(sel){const key=e=>e.t+"|"+e.layer+"|"+(e.t==="sym"?e.sym:"")+"|"+(e.t==="pl"&&e.esp?"esp":""); const ks=new Set(sel.map(key)); S.sel=new Set(S.doc.ents.filter(e=>ks.has(key(e))&&layerOf(e).visible&&!layerOf(e).locked&&!e.locked)); refreshProps(); draw(); toast(S.sel.size+" objeto(s) selecionados.",2000)}
 function propCopy(e){const cabLab=e.t==="cable"&&e.c&&e.c.lab===false; S.propClip={layer:e.layer,col:e.col,lt:e.lt,lw:e.lw,tr:e.tr,exist:e.exist,lbHide:e.lbHide||cabLab||undefined,lbOff:e.lbOff?[...e.lbOff]:undefined,lbRot:e.lbRot,label:e.t==="sym"?(e.label||""):undefined,src:e.t}}
 const PP_GROUPS=[["layer","Camada"],["col","Cor"],["lt","Tipo de linha"],["lw","Espessura"],["tr","Transparência"],["exist","Existente (azul)"],["lbv","Etiqueta: visível ou escondida"],["lbp","Etiqueta: posição e rotação"],["lbt","Etiqueta: texto (nome do quadro ou do símbolo)"]];
 function propPaste(){const c=S.propClip; if(!c||!S.sel.size)return; let last={}; try{last=JSON.parse(localStorage.getItem("lc_ppSel")||"{}")}catch(e){}
@@ -1311,7 +1313,7 @@ function propPaste(){const c=S.propClip; if(!c||!S.sel.size)return; let last={};
   rebuildIndex(); refreshQty(); refreshProps(); saveLocal(); draw(); toast("Propriedades coladas em "+S.sel.size+" objeto(s).",2000)},'<div class="small" style="margin-bottom:6px">Escolha o que passar do objeto copiado para a seleção. A escolha fica lembrada.</div>')}
 function refreshProps(){const P=$("props"); const sel=[...S.sel];
  if(sel.length&&!RT.n&&RT.cur!=="props"&&$("rtabs")){RT.back=RT.cur; rtab("props")} else if(!sel.length&&RT.n&&RT.back){rtab(RT.back); RT.back=null} RT.n=sel.length; qpSync();
- if(!sel.length){const c=S.doc.cur||{}; P.innerHTML=`<div class="psec">Nada selecionado</div><div class="small" style="padding:4px 10px 8px">Clique num objeto para ver e mudar a camada, a cor, o tipo de linha, a espessura e a geometria.<br><br>Os objetos novos ficam na camada <b>${uEsc(S.doc.active)}</b>, cor <b>${c.col?c.col.toUpperCase():"por camada"}</b>, linha <b>${c.lt?ltName(c.lt).toLowerCase():"por camada"}</b>, espessura <b>${c.lw?String(c.lw).replace(".",",")+" mm":"por camada"}</b>. Mude-os na faixa de cima, em «Propriedades».</div>`; return}
+ if(!sel.length){const c=S.doc.cur||{}, nl=S.doc.ents.filter(e=>e.locked).length; P.innerHTML=(nl?`<div class="pbtns"><button id="pUnlockAll">🔓 Desbloquear os ${nl} objeto(s) bloqueado(s)</button></div>`:"")+`<div class="psec">Nada selecionado</div><div class="small" style="padding:4px 10px 8px">Clique num objeto para ver e mudar a camada, a cor, o tipo de linha, a espessura e a geometria.<br><br>Os objetos novos ficam na camada <b>${uEsc(S.doc.active)}</b>, cor <b>${c.col?c.col.toUpperCase():"por camada"}</b>, linha <b>${c.lt?ltName(c.lt).toLowerCase():"por camada"}</b>, espessura <b>${c.lw?String(c.lw).replace(".",",")+" mm":"por camada"}</b>. Mude-os na faixa de cima, em «Propriedades».</div>`; if($("pUnlockAll"))$("pUnlockAll").onclick=()=>lockSet(S.doc.ents.filter(e=>e.locked),false); return}
  let L=0; sel.forEach(e=>L+=entLen(e));
  const one=sel.length===1?sel[0]:null;
  const TN={leg:"Simbologia",line:"Reta",pl:"Polilinha",cable:"Cabo",circle:"Círculo",arc:"Arco",text:"Texto",sym:"Símbolo"}; const cnt={}; sel.forEach(e=>{const n=e.t==="pl"&&e.esp?"Espaço":TN[e.t]||e.t; cnt[n]=(cnt[n]||0)+1});
@@ -1327,6 +1329,7 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
   h+=`<div class="row"><label>Etiqueta visível</label><input type="checkbox" id="pLbV" ${vis?"checked":""} data-mix="${!vis&&some?1:""}"></div>`; const lr=selSame(lab,e=>e.lbRot==null?"":String(Math.round(+e.lbRot*10)/10));
   h+=`<div class="row"><label>Rotação da etiqueta (°)</label><input type="number" step="1" id="pLbA" value="${lr===MIX?"":uEsc(lr)}" placeholder="${lr===MIX?"(várias)":"automática"}"></div><div class="pbtns"><button id="pLbL" title="Roda a etiqueta 90° no sentido contrário ao dos ponteiros">↺ 90°</button><button id="pLbH" title="A etiqueta fica na horizontal no ecrã (útil com a vista rodada)">Na horizontal</button>${lab.some(e=>e.lbRot!=null)?'<button id="pLbZ" title="Volta à rotação automática">Automática</button>':""}</div>`;
   if(lab.some(e=>e.lbOff))h+=`<div class="pbtns"><button id="pLbR" title="A etiqueta volta ao sítio automático">Repor posição da etiqueta</button></div>`}}
+ h+=`<div class="pbtns"><button id="pLock" title="Os objetos bloqueados ficam à vista mas não se selecionam nem se mexem; desbloqueia-se com o botão direito em cima deles">🔒 Bloquear</button></div>`;
  h+=`<div class="pbtns"><button id="pSim" title="Seleciona todos os objetos do mesmo tipo e da mesma camada (e o mesmo símbolo)">Semelhantes</button>${one?`<button id="pCpP" title="Guarda camada, cor, tipo de linha, espessura e transparência deste objeto">Copiar prop.</button>`:""}${S.propClip?`<button id="pPsP" title="Aplica as propriedades copiadas à seleção">Colar prop.</button>`:""}</div>`;
  if(one){const m=v=>(v*S.doc.unit).toFixed(3), num=(id,l,v,st)=>`<div class="row"><label>${l}</label><input type="number" step="${st||0.01}" id="${id}" value="${v}"></div>`;
   if(one.t!=="leg")h+='<div class="psec">Geometria</div>';
@@ -1359,7 +1362,7 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  const gv=el=>(parseFloat(String(el.value).replace(",","."))||0)*U(), gch=(id,fn)=>ch(id,el=>{fn(el); setTimeout(refreshProps,0)});
  if($("pCol"))$("pCol").onclick=()=>colorPop($("pCol"),col===MIX?"":col,c=>{pushUndo(); sel.forEach(e=>{ if(c)e.col=c; else delete e.col}); refreshProps(); saveLocal(); draw()});
  ch("pLt",el=>sel.forEach(e=>{ if(el.value)e.lt=el.value; else delete e.lt})); ch("pLw",el=>sel.forEach(e=>{ if(el.value)e.lw=+el.value; else delete e.lw})); ch("pTr",el=>sel.forEach(e=>{ if(+el.value)e.tr=+el.value; else delete e.tr}));
- if($("pSim"))$("pSim").onclick=()=>selSimilar(sel);
+ if($("pSim"))$("pSim").onclick=()=>selSimilar(sel); if($("pLock"))$("pLock").onclick=()=>lockSet(sel,true);
  { const v=$("pLbV"); if(v){ if(v.dataset.mix)v.indeterminate=true; v.onchange=()=>{pushUndo(); sel.forEach(e=>{ if(!((e.t==="sym"&&e.label)||e.t==="cable"))return; if(v.checked){delete e.lbHide; if(e.t==="cable"&&e.c&&e.c.lab===false)e.c.lab=true} else e.lbHide=true}); saveLocal(); draw()}}
   if($("pLbR"))$("pLbR").onclick=()=>{pushUndo(); sel.forEach(e=>delete e.lbOff); refreshProps(); saveLocal(); draw()};
   const labs=sel.filter(e=>(e.t==="sym"&&e.label)||e.t==="cable"), lbSet=f=>{pushUndo(); labs.forEach(e=>{const v=f(e); if(v==null)delete e.lbRot; else e.lbRot=Math.round((((v%360)+540)%360-180)*100)/100}); refreshProps(); saveLocal(); draw()}, cur=e=>{const L=labelOf(e)||{}; return e.lbRot!=null?+e.lbRot:(L.rot||0)};
@@ -4111,7 +4114,7 @@ function openPecas(){ if(!PE_TPL){toast("Os modelos das peças escritas não est
 /* ================= Comandos, linha de comando e menus (à maneira do AutoCAD) ================= */
 const cNorm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
 function startSym(k){ if(!SYM[k])return; S.sel.clear(); refreshProps(); S.sym=k; S.symRot=0; S.symFlip=false; setTool("sym"); S.sym=k; document.querySelectorAll(".sym").forEach(x=>x.classList.toggle("on",x.dataset.k===k)); hint("Clique para colocar «"+SYM[k].n+"». R roda 90° (Shift+R ao contrário), M espelha"+(symOptList(k)?", O opções":"")+". Esc cancela."); symBar(); noteSymCmd(); cmdPrompt()}
-function selAll(){ if(S.tool!=="select")setTool("select"); S.sel=new Set(S.doc.ents.filter(e=>{const L=layerOf(e); return L.visible&&!L.locked})); refreshProps(); draw(); toast(S.sel.size+" objeto(s) selecionado(s).",1200)}
+function selAll(){ if(S.tool!=="select")setTool("select"); S.sel=new Set(S.doc.ents.filter(e=>{const L=layerOf(e); return L.visible&&!L.locked&&!e.locked})); refreshProps(); draw(); toast(S.sel.size+" objeto(s) selecionado(s).",1200)}
 function needSelThen(name,fn){ if(S.sel.size)return fn(); setTool("select"); S.pend={name,fn}; hint(pendHint()); cmdPrompt(); draw()}
 function pendHint(){return S.pend?`${S.pend.name}: selecione os objetos (janela da esquerda para a direita, cruzamento da direita para a esquerda; Shift retira) e carregue Enter, Espaço ou botão direito. ${S.sel.size} selecionado(s).`:""}
 function pendGo(){const p=S.pend; S.pend=null; if(p&&S.sel.size)p.fn(); else cmdPrompt()}
@@ -4182,6 +4185,8 @@ const CMDS=[
  {id:"escalar",n:"Escalar…",g:"Modificar",a:["SC","ESCALAR","SCALE"],f:()=>needSelThen("Escalar",scaleDialog)},
  {id:"alinhar",n:"Alinhar…",g:"Modificar",a:["AL","ALINHAR","ALIGN"],f:()=>needSelThen("Alinhar",alignDialog)},
  {id:"serie",n:"Copiar em série…",g:"Modificar",a:["AR","SERIE","ARRAY"],f:()=>needSelThen("Copiar em série",moveDialog)},
+ {id:"bloq",n:"Bloquear a seleção",g:"Modificar",a:["BLOQ","LOCK","BLOQUEAR"],f:()=>needSelThen("Bloquear",()=>lockSet([...S.sel],true))},
+ {id:"desbloq",n:"Desbloquear todos (desta planta)",g:"Modificar",a:["DESBLOQ","UNLOCK"],f:()=>lockSet(S.doc.ents.filter(e=>e.locked),false)},
  {id:"selsim",n:"Selecionar semelhantes",g:"Modificar",a:["SELSIM","SELECTSIMILAR"],f:()=>needSelThen("Selecionar semelhantes",()=>selSimilar([...S.sel]))},
  {id:"propcp",n:"Copiar propriedades",g:"Modificar",a:["CP_PROP","MA","MATCHPROP"],f:()=>needSelThen("Copiar propriedades",()=>{const e=[...S.sel][0]; propCopy(e); toast("Propriedades copiadas. Selecione os outros objetos e escreva PP (colar propriedades).",3500)})},
  {id:"proppc",n:"Colar propriedades",g:"Modificar",a:["PP","PASTEPROP"],f:()=>needSelThen("Colar propriedades",propPaste)},
@@ -4606,7 +4611,7 @@ const VR_FIELDS=[["pro","Promotor","pro",0,"Sem texto, usa o logótipo do promot
 function vrCbDefaults(p,page,sc){const d=PROJ.pe||{}, pro=d.pro||{}, tec=d.tec||{}, im=d.im||{};
  return {pro:d.logo?"":(pro.nome||""), coord:d.logoCoord?"":(d.coord||""), tecResp:tec.nome?("Eng.º "+tec.nome.trim().split(/\s+/).slice(-2).join(" ")):"",
   oe:(tec.ordem==="OET"?"O.E.T. n.º ":"O.E. n.º ")+(tec.ordem==="OET"?tec.oet||"":String(tec.oe||"").replace(/^(\d{3})(\d{3})$/,"$1 $2")),
-  cont:"M: 918 566 987  --  T: 210 888 990\ngeral@venturarodrigues.pt   www.venturarodrigues.pt\nR. D. Francisco Melo e Noronha, 17 R/C Dto,\n2810-222 Almada",
+  cont:"M: 918 566 987  --  T: 210 888 990\ngeral@venturarodrigues.pt   www.venturarodrigues.pt\nR. D. Francisco de Melo e Noronha, 17, R/C Dto.\n2810-222 Laranjeiro",
   tecnicos:String(d.tecnicos||tec.nome||""), desig:String((page&&page.title)||"").toUpperCase(), obra:String(d.tit||pro.nome||""), espec:d.espec||"Instalações Eléctricas", local:im.rua||"",
   fase:(d.fase||"").charAt(0)+(d.fase||"").slice(1).toLowerCase(), escala:p.se?"S.E.":(sc?plDenTxt(sc):""), data:vrMonth(d.data), ref:d.num?"VRPRO"+d.num:"", num:p.num||""}}
 function vrCbVals(p,page,sc){const D=vrCbDefaults(p,page,sc), V=(p.cb&&p.cb.v)||{}, o={}; for(const k in D)o[k]=V[k]!=null?V[k]:D[k]; return o}
