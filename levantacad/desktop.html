@@ -792,7 +792,8 @@ function rebuildIndex(){ if(typeof LC_VER!=="undefined")LC_VER++;
   if(e.t==="line"){addSeg(e.x1,e.y1,e.x2,e.y2,e);pts.push([e.x1,e.y1,"fim"],[e.x2,e.y2,"fim"],[(e.x1+e.x2)/2,(e.y1+e.y2)/2,"meio"])}
   else if(e.t==="circle"){pts.push([e.x,e.y,"centro"]); addCirc(e.x,e.y,e.r,null,null,true)}
   else if(e.t==="arc"){pts.push([e.x,e.y,"centro"]); addCirc(e.x,e.y,e.r,e.a0,e.a1,true); [e.a0,e.a1].forEach(a=>pts.push([e.x+e.r*Math.cos(a*Math.PI/180),e.y+e.r*Math.sin(a*Math.PI/180),"fim"]))}
-  else if(e.t==="sym"){pts.push([e.x,e.y,"símbolo"]); const def=SYM[e.sym]?{...SYM[e.sym],g:symG(e)}:null; if(def){const X=symXf(e), k=(e.scale||1)*S.doc.symScale*U(), ro=e.rot||0;
+  else if(e.t==="sym"&&SYM[e.sym]){const P=symPrims(e); P.S.forEach(q=>{addSeg(q[0],q[1],q[2],q[3],e); pts.push([q[0],q[1],"aresta"],[q[2],q[3],"aresta"])})}
+  if(e.t==="sym"){pts.push([e.x,e.y,"símbolo"]); const def=SYM[e.sym]?{...SYM[e.sym],g:symG(e)}:null; if(def){const X=symXf(e), k=(e.scale||1)*S.doc.symScale*U(), ro=e.rot||0;
    def.g.forEach(g=>{ if(g[0]==="c"||g[0]==="fc"){const [cx,cy]=X(g[1],g[2]); addCirc(cx,cy,g[3]*k,null,null,false)} else if(g[0]==="a"||g[0]==="fa"){const [cx,cy]=X(g[1],g[2]); addCirc(cx,cy,g[3]*k,(e.flip?180-g[5]:g[4])+ro,(e.flip?180-g[4]:g[5])+ro,false)}})}}
   else if(e.t==="cable"){for(let i=1;i<e.pts.length;i++)addSeg(...e.pts[i-1],...e.pts[i],e); e.pts.forEach(p=>pts.push([p[0],p[1],"cabo"]))}
  }
@@ -807,6 +808,13 @@ function near(map,x,y,r){const c=IDX.cell,out=[];const i0=Math.floor((x-r)/c),i1
 function angIn(a,a0,a1){const n=v=>((v%360)+360)%360; a=n(a); a0=n(a0); a1=n(a1); return a0<=a1?(a>=a0&&a<=a1):(a>=a0||a<=a1)}
 function findSnap(x,y,from){ if(!S.snap||!IDX)return null; const r=12/S.view.s; let best=null,bd=r;
  for(const p of near(IDX.grid,x,y,r)){ if(S.gripSkip&&Math.abs(p[0]-S.gripSkip[0])<1e-9&&Math.abs(p[1]-S.gripSkip[1])<1e-9)continue; const d=Math.hypot(p[0]-x,p[1]-y); if(d<bd){bd=d;best=p}}
+ // centro do objeto (como no AutoCAD): com o cursor por dentro de um símbolo ou de um círculo, a mira vai para o centro, a não ser que esteja mais perto de uma ponta
+ {const pad=3/S.view.s; let bc=null, bcd=Infinity;
+  for(const e of S.doc.ents){ if(!layerOf(e).visible)continue;
+   if(e.t==="sym"&&SYM[e.sym]){const B=symBox(e,pad); if(x<B[0]||x>B[2]||y<B[1]||y>B[3])continue; if(symDist(e,x,y,true)<3/S.view.s)continue; const c0=symBox(e,0), cx=(c0[0]+c0[2])/2, cy=(c0[1]+c0[3])/2, d=Math.hypot(x-cx,y-cy); if(d<bcd){bcd=d; bc=[cx,cy,"centro do objeto"]}}
+   else if(e.t==="circle"||e.t==="arc"){const d=Math.hypot(x-e.x,y-e.y); if(d<e.r*.85&&d<bcd){bcd=d; bc=[e.x,e.y,"centro do objeto"]}}}
+  if(bc&&S.gripSkip&&Math.abs(bc[0]-S.gripSkip[0])<1e-9&&Math.abs(bc[1]-S.gripSkip[1])<1e-9)bc=null;
+  if(bc&&(!best||bcd<bd))return bc}
  if(best)return best;
  const cand=[]; const onArc=(c,px,py)=>c[3]==null||angIn(Math.atan2(py-c[1],px-c[0])*180/Math.PI,c[3],c[4]);
  const circs=IDX.circs.filter(c=>Math.abs(Math.hypot(x-c[0],y-c[1])-c[2])<Math.max(r,c[2]*.6));
@@ -918,6 +926,7 @@ function render(){
  if(S.hover){const [px,py]=W2S(S.hover[0],S.hover[1]); G.strokeStyle="#22c55e"; G.lineWidth=1.5; const k=S.hover[2]; G.beginPath();
   if(k==="tangente"||k==="no círculo"){G.arc(px,py,7,0,Math.PI*2); if(k==="tangente"){G.moveTo(px-9,py-8); G.lineTo(px+9,py-8)}}
   else if(k==="perpendicular"){G.moveTo(px-7,py+6); G.lineTo(px+7,py+6); G.moveTo(px-5,py+6); G.lineTo(px-5,py-8); G.moveTo(px-5,py); G.lineTo(px+1,py); G.lineTo(px+1,py+6)}
+  else if(k==="centro do objeto"){G.arc(px,py,8,0,Math.PI*2); G.moveTo(px-11,py); G.lineTo(px+11,py); G.moveTo(px,py-11); G.lineTo(px,py+11)}
   else if(k==="quadrante"){G.moveTo(px,py-7); G.lineTo(px+7,py); G.lineTo(px,py+7); G.lineTo(px-7,py); G.closePath()}
   else if(k==="sobre a reta"){G.moveTo(px-6,py-6); G.lineTo(px+6,py+6); G.moveTo(px-6,py+6); G.lineTo(px+6,py-6)}
   else G.rect(px-6,py-6,12,12); G.stroke()}
@@ -1195,7 +1204,7 @@ function pick(x,y,inclLocked){const tol=8/S.view.s; let best=null,bd=tol;
   else if((e.t==="pl"||e.t==="cable")){for(let j=1;j<e.pts.length;j++)d=Math.min(d,dSeg(x,y,...e.pts[j-1],...e.pts[j])[0])}
   else if(e.t==="circle")d=Math.abs(Math.hypot(x-e.x,y-e.y)-e.r);
   else if(e.t==="arc"){ if(angIn(Math.atan2(y-e.y,x-e.x)*180/Math.PI,e.a0,e.a1))d=Math.abs(Math.hypot(x-e.x,y-e.y)-e.r)}
-  else if(e.t==="sym"){d=Math.max(0,Math.hypot(x-e.x,y-e.y)-.15*S.doc.symScale*U()*(e.scale||1))-tol*.6}
+  else if(e.t==="sym"){d=symDist(e,x,y); const B=symBox(e,0); if(x>=B[0]&&x<=B[2]&&y>=B[1]&&y<=B[3])d=Math.min(d,tol*.5)}
   else if(e.t==="text"){const w=e.h*.7*String(e.s).length; d=(x>=e.x-tol&&x<=e.x+w&&y>=e.y-tol&&y<=e.y+e.h)?0:Infinity}
   else if(e.t==="leg"){const B=legBox(e); d=(x>=B[0]-tol&&x<=B[2]+tol&&y>=B[1]-tol&&y<=B[3]+tol)?tol*.9:Infinity}
   if(d<bd){bd=d;best=e}}
@@ -2684,8 +2693,8 @@ function autoCable(ents,o){o=o||{}; ents=ents.filter(e=>e.t!=="cable"); if(ents.
   const r=cabCalc(o.edit); toast("Circuito refeito com "+order.length+" objetos: "+r.desig+" ("+r.L.toFixed(1)+" m).",3500); return}
  S.sel.clear(); setTool("select"); S.tmp={pts,taps}; draw(); finishCable()}
 /* ---------- Ferramenta Circuito: escolher os objetos do circuito, pela ordem em que o cabo repica ---------- */
-function pickSym(x,y){const tol=10/S.view.s; let best=null,bd=Infinity; S.doc.ents.forEach(e=>{ if(e.t!=="sym")return; const L=layerOf(e); if(!L.visible||L.locked)return;
-  const d=Math.max(0,Math.hypot(x-e.x,y-e.y)-.18*S.doc.symScale*U()*(e.scale||1)); if(d<tol&&d<bd){bd=d;best=e}}); return best}
+function pickSym(x,y){const tol=8/S.view.s; let best=null,bd=Infinity; S.doc.ents.forEach(e=>{ if(e.t!=="sym")return; const L=layerOf(e); if(!L.visible||L.locked)return;
+  let d=symDist(e,x,y); const B=symBox(e,0); if(x>=B[0]&&x<=B[2]&&y>=B[1]&&y<=B[3])d=Math.min(d,tol*.5); if(d<tol&&d<bd){bd=d;best=e}}); return best}
 function cabRetrace(e){circStart(e); if(S.tmp&&S.tmp.list&&S.tmp.list.length>1)circFinish(); else {setTool("select"); toast("Não encontrei os objetos deste cabo: use «Objetos do circuito…».")}}
 function circStart(edit){ setTool("circ"); S.tmp={list:[],edit:edit||null};
  if(edit){const tol=.12*U(), L=[]; const q0=quadroAt(edit.pts[0]); if(q0)L.push(q0);
@@ -3466,6 +3475,19 @@ function buildUniUI(){const d=document.createElement("div"); d.id="uni";
 
 /* ================= Unifilar a partir dos cabos de um quadro + menu de contexto ================= */
 const UQRANK={cont:4,qge:3,qe:2,qp:1};
+// arestas reais de um símbolo em coordenadas do desenho: segmentos, círculos/arcos e zonas cheias
+function symPrims(e){const def=SYM[e.sym]; const out={S:[],C:[],F:[]}; if(!def)return out; const X=symXf(e), k=(e.scale||1)*S.doc.symScale*U(), ro=e.rot||0;
+ symG(e).forEach(g=>{ if(g[0]==="l"){const a=X(g[1],g[2]), b=X(g[3],g[4]); out.S.push([a[0],a[1],b[0],b[1]])}
+  else if(g[0]==="p"||g[0]==="f"){const P=g[1].map(q=>X(q[0],q[1])); for(let i=0;i<P.length;i++){const a=P[i], b=P[(i+1)%P.length]; out.S.push([a[0],a[1],b[0],b[1]])} if(g[0]==="f")out.F.push(P)}
+  else if(g[0]==="c"||g[0]==="fc"){const c=X(g[1],g[2]); out.C.push([c[0],c[1],g[3]*k,null,null,g[0]==="fc"])}
+  else if(g[0]==="a"||g[0]==="fa"){const c=X(g[1],g[2]); out.C.push([c[0],c[1],g[3]*k,(e.flip?180-g[5]:g[4])+ro,(e.flip?180-g[4]:g[5])+ro,false])}});
+ return out}
+// distância de um ponto ao desenho do símbolo (0 dentro das zonas cheias)
+function symDist(e,x,y,noFill){const P=symPrims(e); let d=Infinity;
+ P.S.forEach(s=>{d=Math.min(d,dSeg(x,y,s[0],s[1],s[2],s[3])[0])});
+ P.C.forEach(c=>{const r=Math.hypot(x-c[0],y-c[1]); if(c[5]&&r<=c[2]&&!noFill){d=0;return} if(c[3]==null||angIn(Math.atan2(y-c[1],x-c[0])*180/Math.PI,c[3],c[4]))d=Math.min(d,Math.abs(r-c[2]))});
+ if(!noFill)P.F.forEach(Q=>{let ins=false; for(let i=0,j=Q.length-1;i<Q.length;j=i++){ if(((Q[i][1]>y)!==(Q[j][1]>y))&&x<(Q[j][0]-Q[i][0])*(y-Q[i][1])/(Q[j][1]-Q[i][1])+Q[i][0])ins=!ins} if(ins)d=0});
+ if(d===Infinity)d=Math.hypot(x-e.x,y-e.y); return d}
 function isQuadro(e){return !!(e&&e.t==="sym"&&SYM[e.sym]&&SYM[e.sym].cat==="Quadros")}
 function quadroName(e){return String(e.label||"").trim()}
 function symBox(e,pad){const def=SYM[e.sym]?{...SYM[e.sym],g:symG(e)}:null, X=symXf(e); let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity; const P=(x,y)=>{const [u,v]=X(x,y); a=Math.min(a,u);c=Math.max(c,u);b=Math.min(b,v);d=Math.max(d,v)};
@@ -3651,14 +3673,15 @@ function offDrawPrev(){ if(S.tool!=="offset"||!S.tmp||!S.tmp.e)return; const c=o
 
 /* ================= Cortar (TRIM) e prolongar (EXTEND), como no AutoCAD em modo rápido ================= */
 // Todos os objetos visíveis e a planta de fundo servem de limite. Shift troca entre cortar e prolongar.
-function teBounds(){ if(S.teB&&S.teB.v===S.doc.ents.length+":"+S.teStamp)return S.teB;
+function teBounds(){const tv=S.doc.ents.length+":"+S.teStamp+":"+LC_VER; if(S.teB&&S.teB.v===tv)return S.teB;
  const Sg=[], C=[]; const bb=(x1,y1,x2,y2)=>[Math.min(x1,x2),Math.min(y1,y2),Math.max(x1,x2),Math.max(y1,y2)];
  const add=(e,src)=>{ if(e.t==="line")Sg.push([e.x1,e.y1,e.x2,e.y2,src,bb(e.x1,e.y1,e.x2,e.y2)]);
   else if(e.t==="pl"||e.t==="cable"){const P=e.pts; for(let i=1;i<P.length;i++)Sg.push([P[i-1][0],P[i-1][1],P[i][0],P[i][1],src,bb(P[i-1][0],P[i-1][1],P[i][0],P[i][1])]); if(e.closed&&P.length>2)Sg.push([P[P.length-1][0],P[P.length-1][1],P[0][0],P[0][1],src,bb(P[P.length-1][0],P[P.length-1][1],P[0][0],P[0][1])])}
   else if(e.t==="circle")C.push([e.x,e.y,e.r,null,null,src,[e.x-e.r,e.y-e.r,e.x+e.r,e.y+e.r]]);
-  else if(e.t==="arc")C.push([e.x,e.y,e.r,e.a0,e.a1,src,[e.x-e.r,e.y-e.r,e.x+e.r,e.y+e.r]])};
+  else if(e.t==="arc")C.push([e.x,e.y,e.r,e.a0,e.a1,src,[e.x-e.r,e.y-e.r,e.x+e.r,e.y+e.r]]);
+  else if(e.t==="sym"&&SYM[e.sym]){const P=symPrims(e); P.S.forEach(q=>Sg.push([q[0],q[1],q[2],q[3],src,bb(q[0],q[1],q[2],q[3])])); P.C.forEach(c=>C.push([c[0],c[1],c[2],c[3],c[4],src,[c[0]-c[2],c[1]-c[2],c[0]+c[2],c[1]+c[2]]]))}};
  S.doc.ref.forEach(r=>{ if(refVisible(r))add(r,null)}); S.doc.ents.forEach(e=>{ if(layerOf(e).visible&&!(e.t==="pl"&&e.esp))add(e,e)});
- S.teB={S:Sg,C,v:S.doc.ents.length+":"+S.teStamp}; return S.teB}
+ S.teB={S:Sg,C,v:tv}; return S.teB}
 function teSegX(P,d,s){const ex=s[2]-s[0], ey=s[3]-s[1], den=d[0]*ey-d[1]*ex; if(Math.abs(den)<1e-14)return null; const wx=s[0]-P[0], wy=s[1]-P[1]; return {t:(wx*ey-wy*ex)/den,u:(wx*d[1]-wy*d[0])/den}}
 function teLineCirc(P,d,c){const fx=P[0]-c[0], fy=P[1]-c[1], a=d[0]*d[0]+d[1]*d[1], b=2*(fx*d[0]+fy*d[1]), cc=fx*fx+fy*fy-c[2]*c[2], D=b*b-4*a*cc; if(D<0||a<1e-18)return [];
  const q=Math.sqrt(D), out=[]; [(-b-q)/(2*a),(-b+q)/(2*a)].forEach(t=>{ if(c[3]!=null){const ang=Math.atan2(P[1]+t*d[1]-c[1],P[0]+t*d[0]-c[0])*180/Math.PI; if(!angIn(ang,c[3],c[4]))return} out.push(t)}); return out}
