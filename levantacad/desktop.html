@@ -901,6 +901,7 @@ function render(){
   G.globalAlpha=1;
  }
  if(FX)fxDraw(FX,fxCol,e=>2*Math.max(.7,Math.min(4,lwOf(e)/.35)));
+ if(typeof sheetDraw==="function")sheetDraw(light);
  riserDrawNotes(light?"#6b21a8":"#c4b5fd");
  wcMarks();
  // pegas das pontas
@@ -918,6 +919,31 @@ function render(){
   else if(k==="sobre a reta"){G.moveTo(px-6,py-6); G.lineTo(px+6,py+6); G.moveTo(px-6,py+6); G.lineTo(px+6,py-6)}
   else G.rect(px-6,py-6,12,12); G.stroke()}
 }
+/* ================= Linhas → circuito: junta retas, polilinhas e arcos ponta a ponta num só cabo ================= */
+function l2cPts(e){ if(e.t==="line")return [[e.x1,e.y1],[e.x2,e.y2]];
+ if(e.t==="pl"){const P=e.pts.map(p=>[p[0],p[1]]); if(e.closed&&P.length>2)P.push([P[0][0],P[0][1]]); return P}
+ if(e.t==="arc"){let a0=e.a0, a1=e.a1; while(a1<=a0)a1+=360; const n=Math.max(4,Math.ceil((a1-a0)/10)), P=[]; for(let i=0;i<=n;i++){const a=(a0+(a1-a0)*i/n)*Math.PI/180; P.push([e.x+e.r*Math.cos(a),e.y+e.r*Math.sin(a)])} return P}
+ return null}
+function l2cChain(list,gapMax){const L=list.map(e=>({e,P:l2cPts(e)})).filter(o=>o.P&&o.P.length>1); if(!L.length)return null;
+ const d=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]); const used=new Set([0]); let path=L[0].P.slice(); let maxGap=0;
+ while(used.size<L.length){let best=null;
+  L.forEach((o,i)=>{ if(used.has(i))return; const s=o.P[0], t=o.P[o.P.length-1], h=path[0], z=path[path.length-1];
+   [[d(z,s),"zs"],[d(z,t),"zt"],[d(h,t),"ht"],[d(h,s),"hs"]].forEach(([g,k])=>{ if(!best||g<best.g)best={g,k,i}})});
+  if(!best||best.g>gapMax)return {path,left:L.length-used.size,maxGap};
+  const P=L[best.i].P; used.add(best.i); maxGap=Math.max(maxGap,best.g);
+  const Rv=P.slice().reverse(); path=best.k==="zs"?path.concat(P):best.k==="zt"?path.concat(Rv):best.k==="ht"?P.concat(path):Rv.concat(path)}
+ const out=[]; path.forEach(p=>{const l=out[out.length-1]; if(!l||d(l,p)>1e-6*U())out.push(p)});
+ // tira os vértices a meio de troços retos
+ const clean=[out[0]]; for(let i=1;i<out.length-1;i++){const a=clean[clean.length-1], b=out[i], c=out[i+1]; const ab=Math.hypot(b[0]-a[0],b[1]-a[1]), bc=Math.hypot(c[0]-b[0],c[1]-b[1]), cr=((b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]))/Math.max(1e-12,ab*bc); if(Math.abs(cr)>1e-4||((b[0]-a[0])*(c[0]-b[0])+(b[1]-a[1])*(c[1]-b[1]))<0)clean.push(b)} if(out.length>1)clean.push(out[out.length-1]);
+ return {path:clean,left:0,maxGap}}
+function linesToCable(){const sel=[...S.sel].filter(e=>(e.t==="line"||e.t==="pl"||e.t==="arc")&&!e.esp&&e.layer!==PLANTA_LAY&&!e.locked&&!layerOf(e).locked);
+ if(!sel.length){toast("Selecione as linhas (retas, polilinhas ou arcos) que formam o percurso do circuito e volte a usar «Linhas → circuito» (comando LC).",6000); return}
+ const R=l2cChain(sel,.5*U()); if(!R||R.path.length<2){toast("Não deu para formar um percurso com estas linhas.",4000); return}
+ if(R.left){toast("As linhas selecionadas não formam um só percurso: há "+R.left+" que ficam a mais de 0,5 m das outras. Selecione só um percurso contínuo.",7000); return}
+ const pts=R.path, kd=cabKindFor(pts), lays=[...new Set(sel.map(e=>e.layer))], lay=lays.length===1?lays[0]:null;
+ cabDialog({...CAB_LAST,...(kd?cabPreset(kd):{kind:""}),circ:circSuggest(pts)},o=>{pushUndo(); const ids=new Set(sel.map(e=>e.id)); S.doc.ents=S.doc.ents.filter(e=>!ids.has(e.id));
+  const e=addEnt({t:"cable",pts,c:o}); if(lay)e.layer=lay; S.sel=new Set([e]); rebuildIndex(); refreshUI(); draw();
+  const r=cabCalc(e); toast((r.ok?"Circuito criado a partir de "+sel.length+" linha(s): "+r.desig+" ("+r.L.toFixed(1)+" m)":"⚠ "+r.errs[0])+(R.maxGap>1e-6*U()?". Havia folgas até "+(R.maxGap*S.doc.unit).toFixed(2)+" m entre linhas, que ficaram ligadas.":""),R.maxGap>1e-6*U()?6000:3500)})}
 /* ================= Feixe de cabos: circuitos que seguem o mesmo caminho desenham-se numa só linha ================= */
 // Só muda o desenho (ecrã, folha, PDF e DXF): cada cabo mantém o seu percurso, o seu comprimento e os seus cálculos.
 let FX=null, FXfull=false;
@@ -3423,7 +3449,7 @@ function ctxMenu(cx,cy,items){ctxClose(); const m=document.createElement("div");
  const r=m.getBoundingClientRect(); m.style.left=Math.max(4,Math.min(cx,innerWidth-r.width-6))+"px"; m.style.top=Math.max(4,Math.min(cy,innerHeight-r.height-6))+"px";
  m.onclick=ev=>{const b=ev.target.closest("button"); if(!b)return; const it=items[+b.dataset.i]; ctxClose(); it[1]()};
  setTimeout(()=>document.addEventListener("pointerdown",ctxOut,true),0)}
-function entCtx(e,cx,cy,wx,wy){const it=[];
+function entCtx(e,cx,cy,wx,wy){const it=[]; if([...S.sel].some(x=>x.t==="line"||x.t==="pl"||x.t==="arc")&&(S.sel.has(e)||e.t==="line"||e.t==="pl"||e.t==="arc"))it.push(["Transformar em circuito (cabo)…",()=>{ if(!S.sel.has(e))S.sel=new Set([e]); linesToCable()}]);
  if((e.t==="pl"||e.t==="cable")&&!e.esp&&wx!=null){const vi=vertAt(e,wx,wy,9/S.view.s);
   if(vi>=0){ if(e.pts.length>2)it.push(["Tirar este nó",()=>nodeDel(e,vi)]); if(e.t==="cable"&&vi>0&&vi<e.pts.length-1)it.push([(e.taps||[]).includes(vi)?"Tirar a derivação deste nó":"Marcar este nó como derivação",()=>nodeTap(e,vi)])}
   else {it.push(["Acrescentar nó aqui",()=>nodeAdd(e,wx,wy,false)]); if(e.t==="cable")it.push(["Acrescentar nó de derivação aqui",()=>nodeAdd(e,wx,wy,true)])}
@@ -4381,6 +4407,7 @@ const CMDS=[
  {id:"fillet",n:"Concordância (fillet)…",g:"Modificar",a:["F","FILLET","CONCORDANCIA"],f:()=>filletDialog(),sep:true},
  {id:"circ",n:"Circuito",g:"Elétrico",a:["CI","CIRCUITO"],f:()=>setTool("circ")},
  {id:"cabo",n:"Cabo à mão",g:"Elétrico",a:["CA","CABO","K"],f:()=>setTool("cable")},
+ {id:"lin2cab",n:"Linhas → circuito (transformar as linhas selecionadas num cabo)",g:"Elétrico",a:["LC","LINHASCABO","L2C","PCABO"],f:()=>linesToCable()},
  {id:"uni",n:"Esquema unifilar…",g:"Elétrico",a:["UN","UNIFILAR"],f:()=>openUni(),sep:true},
  {id:"legenda",n:"Simbologia no desenho",g:"Elétrico",a:["LEG","LEGENDA","SIMBOLOGIA"],f:()=>legPlace()},
  {id:"legnotas",n:"Simbologia e notas da folha…",g:"Elétrico",a:["NOTAS"],f:()=>legEditDialog()},
@@ -4389,6 +4416,7 @@ const CMDS=[
  {id:"inter",n:"Interruptor",g:"Elétrico",a:["IN","INTERRUPTOR"],f:()=>startSym("int1")},
  {id:"quadro",n:"Quadro elétrico",g:"Elétrico",a:["QE","QUADRO"],f:()=>startSym("qe")},
  {id:"vertudo",n:"Ver tudo",g:"Vista",a:["ZE","ZOOM","VERTUDO"],f:()=>fit()},
+ {id:"folhadesenho",n:"Folha no desenho (formato e escala)…",g:"Vista",a:["MOLDURA","VERFOLHA","FRAME"],f:()=>sheetDialog()},
  {id:"feixe",n:"Cabos em feixe (ligar / desligar)",g:"Vista",a:["FEIXE","FX","BUNDLE"],f:()=>fxToggle()},
  {id:"rodvista",n:"Rodar vista…",g:"Vista",a:["RV","RODARVISTA"],f:()=>$("bViewRot").click(),sep:true},
  {id:"orto",n:"Orto",g:"Vista",a:["ORTO","ORTHO"],k:"F8",f:()=>toggle("ortho"),chk:()=>S.ortho},
@@ -4704,6 +4732,29 @@ function openPlot(){ if(!S.doc)return; PL=PL||{pg:0}; const p=plState(); let el=
 function plPickWin(){$("plot").style.display="none"; setTool("plotwin"); hint("Janela a imprimir: clique num canto e depois no canto oposto (ou arraste). Esc volta sem alterar."); toast("Escolha a janela no desenho.",1500)}
 function plWinDone(a,b){const p=plState(); const A=toV(a[0],a[1]), B=toV(b[0],b[1]); if(Math.abs(A[0]-B[0])<1e-6||Math.abs(A[1]-B[1])<1e-6)return; p.win=[Math.min(A[0],B[0]),Math.min(A[1],B[1]),Math.max(A[0],B[0]),Math.max(A[1],B[1])]; p.area="janela"; S.tmp=null; setTool("select"); saveLocal(); openPlot()}
 window.addEventListener("resize",()=>{ if($("plot")&&$("plot").style.display==="flex")plPreview()});
+// ---------- a folha desenhada no próprio desenho: papel, moldura, área útil e carimbo, à escala de impressão ----------
+function plSheetMap(p){const sc=plScale(p), A=plArea(p), uPerMm=sc.den/1000/S.doc.unit, off=p.off||[0,0], VP=plVP(p), ca=(A[0]+A[2])/2-off[0]*uPerMm, cb=(A[1]+A[3])/2+off[1]*uPerMm, Fc=[VP.x+VP.w/2,VP.y+VP.h/2];
+ return {M:(xmm,ymm)=>fromV(ca+(xmm-Fc[0])*uPerMm, cb-(ymm-Fc[1])*uPerMm), sc, uPerMm}}
+function sheetDraw(light){ if(!S.doc.showSheet||S.plotting||!S.doc.plot&&!S.doc.ents.length)return; const p=plState(), P=plPaper(p), F=plFrame(p), VP=plVP(p), {M,sc}=plSheetMap(p);
+ const col=light?"#0284c7":"#38bdf8", poly=(x0,y0,x1,y1)=>{const Q=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(q=>W2S(...M(q[0],q[1]))); G.beginPath(); Q.forEach((q,i)=>i?G.lineTo(q[0],q[1]):G.moveTo(q[0],q[1])); G.closePath()};
+ G.save(); G.globalAlpha=1; G.strokeStyle=col; G.fillStyle=col;
+ G.lineWidth=1; G.setLineDash([]); poly(0,0,P.w,P.h); G.stroke();
+ G.lineWidth=2; poly(F.x,F.y,F.x+F.w,F.y+F.h); G.stroke();
+ if(VP.w<F.w-1){G.globalAlpha=.08; poly(VP.x+VP.w,F.y,F.x+F.w,F.y+F.h); G.fill(); G.globalAlpha=1; G.lineWidth=1; G.setLineDash([6,4]); poly(VP.x+VP.w,F.y,F.x+F.w,F.y+F.h); G.stroke(); G.setLineDash([]);
+  if(p.carimbo){const th=typeof vrTitleH==="function"?vrTitleH(p):60; G.globalAlpha=.16; poly(P.w-88.19,P.h-th,P.w-5,P.h-5); G.fill(); G.globalAlpha=1; poly(P.w-88.19,P.h-th,P.w-5,P.h-5); G.stroke()}}
+ const k=S.view.s*sc.den/1000/S.doc.unit, hmm=6, h=hmm*k; // texto com 6 mm na folha
+ if(h>=5){const fill=sc.fitDen/sc.den, t=(p.fmt||"")+" "+(p.or==="v"?"vertical":"horizontal")+" · "+plDenTxt(sc)+" · área útil "+Math.round(VP.w)+"×"+Math.round(VP.h)+" mm · o desenho ocupa "+Math.round(Math.min(9.99,fill)*100)+"%"+(fill>1.001?" (não cabe!)":"");
+  const [x,y]=W2S(...M(F.x+3,F.y+3+hmm)); G.save(); G.translate(x,y); G.font=Math.round(h)+"px Arial, sans-serif"; G.fillStyle=fill>1.001?"#ef4444":col; G.fillText(t,0,0); G.restore();
+  if(p.carimbo&&VP.w<F.w-1){const th=typeof vrTitleH==="function"?vrTitleH(p):60, [cx,cy]=W2S(...M(P.w-46.6,P.h-th/2)); G.save(); G.translate(cx,cy); G.font=Math.round(h*1.4)+"px Arial, sans-serif"; G.textAlign="center"; G.globalAlpha=.6; G.fillText("CARIMBO",0,0); const [lx,ly]=W2S(...M(P.w-46.6,(F.y+P.h-th)/2)); G.restore(); G.save(); G.translate(lx,ly); G.font=Math.round(h*1.2)+"px Arial, sans-serif"; G.textAlign="center"; G.globalAlpha=.6; G.fillText("SIMBOLOGIA / NOTAS",0,0); G.restore()}}
+ G.restore()}
+function sheetDialog(){const p=plState(); const fm=Object.keys(PL_FMT).map(k=>[k,k]), sc=PL_SCALES.map(v=>[String(v),v==="fit"?"Ajustar à folha":"1:"+v]);
+ ask("Folha no desenho",[{k:"show",l:"Mostrar a folha no desenho",type:"check",v:true},{k:"fmt",l:"Formato",type:"select",v:p.fmt||"A3",opts:fm},{k:"or",l:"Orientação",type:"select",v:p.or||"h",opts:[["h","Horizontal"],["v","Vertical"]]},{k:"sc",l:"Escala de impressão",type:"select",v:String(p.sc),opts:sc}],o=>{
+  S.doc.showSheet=!!o.show; p.fmt=o.fmt; p.or=o.or; p.sc=o.sc; delete p.paper; saveLocal(); if(o.show)sheetFit(); draw();
+  if(o.show){const s=plScale(p), f=s.fitDen/s.den; toast(f>1.001?"Na escala 1:"+s.den+" o desenho não cabe nesta folha: precisa de um formato maior ou de uma escala menor (1:"+Math.ceil(s.fitDen)+" ou mais).":"O desenho ocupa cerca de "+Math.round(f*100)+"% da área útil da folha. Pode mover o desenho dentro da folha na pré-visualização da impressão.",7000)}},
+  '<div class="small" style="margin-bottom:6px">A folha aparece no desenho à escala de impressão: papel, moldura, área útil para o desenho e a coluna da simbologia e do carimbo. É a mesma configuração da impressão (Ficheiro › Imprimir).</div>')}
+function sheetFit(){const p=plState(), P=plPaper(p), {M}=plSheetMap(p); const Q=[[0,0],[P.w,0],[P.w,P.h],[0,P.h]].map(q=>toV(...M(q[0],q[1])));
+ const a=Math.min(...Q.map(q=>q[0])), c=Math.max(...Q.map(q=>q[0])), b=Math.min(...Q.map(q=>q[1])), d=Math.max(...Q.map(q=>q[1])), W=cv.clientWidth, H=cv.clientHeight, s=Math.min(W/((c-a)||1),H/((d-b)||1))*.94;
+ S.view.s=s; S.view.ox=W/2-(a+c)/2*s; S.view.oy=H/2+(b+d)/2*s; draw()}
 
 /* ================= Normas de desenho da Ventura Rodrigues: símbolos, unifilar MT, simbologia, carimbo e diagrama da rede ================= */
 // ---------- símbolos novos (geometria tirada dos blocos dos desenhos da VR, à escala da biblioteca) ----------
