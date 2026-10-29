@@ -1241,7 +1241,7 @@ function rotateDialog(){
  const n=S.sel.size, symOnly=[...S.sel].every(e=>e.t==="sym"||e.t==="text");
  ask("Rodar "+n+" objeto"+(n>1?"s":""),[
   {k:"a",l:"Ângulo em graus (positivo = sentido anti-horário)",v:S.rotLast||"90"},
-  {k:"ref",l:"Ponto de referência",type:"select",v:S.rotRef||"center",opts:[["center","Centro da seleção"],["each","Cada objeto em torno de si próprio"],["pick","Escolher o ponto no desenho"],["xy","Coordenadas (X, Y)"]]},
+  {k:"ref",l:"Ponto de referência",type:"select",v:S.rotRef||"center",opts:[["center","Centro da seleção"],["each","Cada objeto em torno do seu centro (o centro fica no sítio)"],["pick","Escolher o ponto no desenho"],["xy","Coordenadas (X, Y)"]]},
   {k:"x",l:"X da referência (só para «Coordenadas»)",v:""},{k:"y",l:"Y da referência",v:""},
   ...(symOnly?[{k:"abs",l:"Ângulo absoluto: os símbolos/textos ficam exatamente com este ângulo",type:"check",v:false}]:[])],o=>{
   const deg=parseFloat(String(o.a).replace(",",".")); if(!isFinite(deg)){toast("Ângulo inválido.");return} S.rotLast=String(o.a); S.rotRef=o.ref; const ents=[...S.sel];
@@ -2385,7 +2385,7 @@ function cloneEnts(ents){return ents.map(e=>{const c=JSON.parse(JSON.stringify(e
 function addClones(ents){const n=cloneEnts(ents).map(c=>{c.id=S.doc.nextId++; S.doc.ents.push(c); return c}); return n}
 function afterXform(sel){ if(sel)S.sel=new Set(sel); rebuildIndex(); refreshUI(); draw(); saveLocal()}
 function pickPoint(msg,fn){S.pickPend=fn; setTool("pickpt"); hint(msg)}
-function refDialogFields(def,withEach){return [{k:"ref",l:"Ponto de referência",type:"select",v:def,opts:[["center","Centro da seleção"],...(withEach?[["each","Cada objeto em torno de si próprio"]]:[]),["pick","Escolher o ponto no desenho"],["xy","Coordenadas (X, Y)"]]},
+function refDialogFields(def,withEach){return [{k:"ref",l:"Ponto de referência",type:"select",v:def,opts:[["center","Centro da seleção"],...(withEach?[["each","Cada objeto em torno do seu centro (o centro fica no sítio)"]]:[]),["pick","Escolher o ponto no desenho"],["xy","Coordenadas (X, Y)"]]},
  {k:"x",l:"X da referência (só para «Coordenadas»)",v:""},{k:"y",l:"Y da referência",v:""}]}
 function withRef(o,cb){ if(o.ref==="center"){const [cx,cy]=selCenter(); return cb(cx,cy)} if(o.ref==="each")return cb(null,null,true);
  if(o.ref==="xy"){const x=num2(o.x),y=num2(o.y); if(!isFinite(x)||!isFinite(y)){toast("Indique X e Y.");return} return cb(x,y)}
@@ -2415,11 +2415,24 @@ function scaleRefDialog(a,b){const Lm=Math.hypot(b[0]-a[0],b[1]-a[1])*S.doc.unit
   S.teStamp=(S.teStamp||0)+1; rebuildIndex(); refreshQty(); refreshProps(); saveLocal(); setTool("select"); draw();
   toast("Escalado ×"+f.toFixed(4).replace(".",",")+": a medida passou a "+real.toFixed(3).replace(".",",")+" m"+(o.sc!=="sel"&&floor.length>1?" (em todas as "+floor.length+" plantas deste piso)":"")+".",5000)},
   '<div class="small" style="margin-bottom:6px">Tudo é multiplicado pelo mesmo fator, à volta do centro escolhido. Os símbolos e os textos dos seus desenhos mudam de sítio mas mantêm o tamanho.</div>')}
+// centro visível de um objeto: o meio do desenho (símbolos e textos incluídos)
+function visCenter(e){ if(e.t==="sym"&&SYM[e.sym]){const B=symBox(e,0); return [(B[0]+B[2])/2,(B[1]+B[3])/2]} const B=refBox(e); return [(B[0]+B[2])/2,(B[1]+B[3])/2]}
+// escala cada objeto em torno do seu próprio centro: o centro fica no mesmo sítio
+function scaleEach(ents,f){let nc=0; ents.forEach(e=>{ if(e.t==="cable"){nc++; return}
+  // símbolos de parede (tomadas, interruptores…) ficam encostados à parede: escalam a partir do ponto de encosto
+  if(e.t==="sym"&&SYM[e.sym]&&SYM[e.sym].wall){e.scale=(e.scale||1)*f; return}
+  const c0=visCenter(e);
+  if(e.t==="sym"||e.t==="text"||e.t==="leg"){ if(e.t==="text")e.h*=f; else e.scale=(e.scale||1)*f; const c1=visCenter(e); e.x+=c0[0]-c1[0]; e.y+=c0[1]-c1[1]}
+  else xformEnts([e],(x,y)=>[c0[0]+(x-c0[0])*f,c0[1]+(y-c0[1])*f],{scale:f})}); return nc}
+function scaleEachDialog(){ if(!needSel())return;
+ ask("Escalar no lugar: "+S.sel.size+" objeto(s)",[{k:"f",l:"Fator de escala (ex.: 2 duplica, 0,5 reduz para metade)",v:S.scLast||"2"},{k:"cp",l:"Manter o original (cria uma cópia)",type:"check",v:false}],o=>{
+  const f=num2(o.f); if(!(f>0)){toast("Fator inválido.");return} S.scLast=String(o.f); pushUndo(); let ents=[...S.sel]; if(o.cp)ents=addClones(ents);
+  const nc=scaleEach(ents,f); afterXform(ents); toast("Cada objeto escalado ×"+f+" em torno do seu centro."+(nc?" Os "+nc+" cabo(s) da seleção não mudaram (mudava o comprimento).":""),4500)},'<div class="small" style="margin-bottom:6px">Cada objeto cresce ou encolhe à volta do seu próprio centro, que fica no mesmo sítio. Útil para vários símbolos ou textos de uma vez.</div>')}
 function scaleDialog(){ if(!needSel())return;
  ask("Escalar "+S.sel.size+" objeto(s)",[{k:"f",l:"Fator de escala (ex.: 2 duplica, 0,5 reduz para metade)",v:S.scLast||"2"},...refDialogFields(S.scRef||"center",true),{k:"cp",l:"Manter o original (cria uma cópia)",type:"check",v:false}],o=>{
   const f=num2(o.f); if(!(f>0)){toast("Fator inválido.");return} S.scLast=String(o.f); S.scRef=o.ref;
   withRef(o,(cx,cy,each)=>{pushUndo(); let ents=[...S.sel]; if(o.cp)ents=addClones(ents);
-   if(each){ents.forEach(e=>{const [ex,ey]=centerOf(e); xformEnts([e],(x,y)=>[ex+(x-ex)*f,ey+(y-ey)*f],{scale:f,each:true})})}
+   if(each){const nc=scaleEach(ents,f); afterXform(ents); toast("Cada objeto escalado ×"+f+" em torno do seu centro."+(nc?" Os cabos não mudaram.":"")); return}
    else xformEnts(ents,(x,y)=>[cx+(x-cx)*f,cy+(y-cy)*f],{scale:f});
    afterXform(ents); toast("Escalado ×"+f+".")})})}
 function mirrorDialog(){ if(!needSel())return;
@@ -3598,7 +3611,7 @@ function entCtx(e,cx,cy,wx,wy){const it=[]; if([...S.sel].some(x=>x.t==="line"||
  if(isQuadro(e)){it.push(["Esquema unifilar a partir dos cabos (todas as plantas)…",()=>uFromQuadro(e),1]); const n=quadroName(e); if(n&&PROJ.uni&&PROJ.uni.qs.some(q=>q.nome===n))it.push(["Abrir o esquema «"+n+"»",()=>openUni(n)]); it.push("-")}
  if(e.t==="cable")it.push(["Editar cabo…",()=>cabDialog(e.c,o=>{pushUndo(); e.c=o; rebuildIndex(); refreshUI(); draw()})],["Juntar ou tirar objetos do circuito…",()=>circStart(e)],["Voltar a traçar o cabo",()=>cabRetrace(e)],["Inverter sentido do cabo",()=>cabReverse(e)]);
  if(e.t==="sym")it.push(["Editar bloco…",()=>openBlockEditor(e.sym)]);
- it.push(["Rodar…",rotateDialog],["Duplicar",dupSel],["Copiar",()=>copySel(false)],["Apagar",delSel]);
+ it.push(["Rodar…",rotateDialog],["Escalar no lugar…",scaleEachDialog],["Duplicar",dupSel],["Copiar",()=>copySel(false)],["Apagar",delSel]);
  ctxMenu(cx,cy,it)}
 
 /* ================= DWG (LibreDWG em WebAssembly, embebido) ================= */
@@ -4536,6 +4549,7 @@ const CMDS=[
  {id:"rodar90",n:"Rodar 90°",g:"Modificar",a:["R"],f:()=>needSelThen("Rodar 90°",()=>rotateSel(90))},
  {id:"espelhar",n:"Espelhar…",g:"Modificar",a:["MI","ESPELHAR","MIRROR"],f:()=>needSelThen("Espelhar",mirrorDialog)},
  {id:"escalar",n:"Escalar…",g:"Modificar",a:["SC","ESCALAR","SCALE"],f:()=>needSelThen("Escalar",scaleDialog)},
+ {id:"escalarlugar",n:"Escalar no lugar (cada objeto no seu centro)…",g:"Modificar",a:["ESCL","SCL","SCALEEACH"],f:()=>needSelThen("Escalar no lugar",scaleEachDialog)},
  {id:"escref",n:"Escalar pela medida (comprimento real)…",g:"Modificar",a:["ESCREF","SCALEREF","ESCALARMEDIDA"],f:()=>scaleRefStart()},
  {id:"alinhar",n:"Alinhar…",g:"Modificar",a:["AL","ALINHAR","ALIGN"],f:()=>needSelThen("Alinhar",alignDialog)},
  {id:"serie",n:"Copiar em série…",g:"Modificar",a:["AR","SERIE","ARRAY"],f:()=>needSelThen("Copiar em série",moveDialog)},
