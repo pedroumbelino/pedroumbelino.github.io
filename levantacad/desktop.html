@@ -891,7 +891,9 @@ function render(){
  }
  wcMarks();
  // pegas das pontas
- if(S.tool==="select"){G.fillStyle="#3b82f6"; S.sel.forEach(e=>vertsOf(e).forEach(v=>{const [a,b]=W2S(v[0],v[1]); G.fillRect(a-4,b-4,8,8)}))}
+ if(S.tool==="select"){G.fillStyle="#3b82f6"; S.sel.forEach(e=>vertsOf(e).forEach(v=>{const [a,b]=W2S(v[0],v[1]); G.fillRect(a-4,b-4,8,8)}));
+  if(S.sel.size<=20){G.strokeStyle="#3b82f6"; G.lineWidth=1.3; S.sel.forEach(e=>{ if(!(e.t==="pl"||e.t==="cable")||e.esp)return; const P=e.pts, n=P.length, m=e.closed&&n>2?n:n-1;
+   for(let i=0;i<m;i++){const A=P[i], B=P[(i+1)%n]; const [a,b]=W2S((A[0]+B[0])/2,(A[1]+B[1])/2); if(Math.hypot(B[0]-A[0],B[1]-A[1])*S.view.s<=26)continue; G.fillStyle=isLight()?"#fff":"#15181d"; G.fillRect(a-4,b-4,8,8); G.strokeRect(a-4,b-4,8,8); G.beginPath(); G.moveTo(a-2.5,b); G.lineTo(a+2.5,b); G.moveTo(a,b-2.5); G.lineTo(a,b+2.5); G.stroke()}})}}
  // temporários
  drawTemp(); drawPastePreview(); drawCircPick(); teDrawPrev(); offDrawPrev();
  // marcador de snap
@@ -973,6 +975,20 @@ function symPlacement(x,y){const def=SYM[S.sym]; if(def&&def.wall&&S.wall){const
  const sp=S.snap?findSnap(x,y):null; return {x:sp?sp[0]:x,y:sp?sp[1]:y,rot:((S.symRot||0)+VR()*180/Math.PI+360)%360}}
 
 function vertsOf(e){ if(e.t==="line")return [[e.x1,e.y1],[e.x2,e.y2]]; if(e.t==="pl"||e.t==="cable")return e.pts; return []}
+// nós (vértices) de polilinhas e cabos: acrescentar, tirar, marcar derivação
+function segAt(e,x,y){ if(!(e.t==="pl"||e.t==="cable"))return null; const P=e.pts, n=P.length, m=e.closed&&n>2?n:n-1; let best=null;
+ for(let i=0;i<m;i++){const a=P[i], b=P[(i+1)%n], L2=(b[0]-a[0])**2+(b[1]-a[1])**2; if(L2<1e-18)continue; const t=Math.max(0,Math.min(1,((x-a[0])*(b[0]-a[0])+(y-a[1])*(b[1]-a[1]))/L2)), q=[a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1])], d=Math.hypot(x-q[0],y-q[1]);
+  if(!best||d<best.d)best={i,t,p:q,d}} return best}
+function vertAt(e,x,y,tol){ if(!(e.t==="pl"||e.t==="cable"))return -1; let bi=-1, bd=tol; e.pts.forEach((v,i)=>{const d=Math.hypot(v[0]-x,v[1]-y); if(d<bd){bd=d; bi=i}}); return bi}
+function insVert(e,i,p){e.pts.splice(i,0,[p[0],p[1]]); if(e.taps)e.taps=e.taps.map(t=>t>=i?t+1:t)}
+function nodeAdd(e,x,y,tap){const s=segAt(e,x,y); if(!s)return; pushUndo(); const p=snapPt(x,y), q=Math.hypot(p[0]-s.p[0],p[1]-s.p[1])<8/S.view.s?p:s.p, i=s.i+1; insVert(e,i,q);
+ if(tap&&e.t==="cable"){e.taps=[...new Set([...(e.taps||[]),i])].sort((a,b)=>a-b)} S.sel=new Set([e]); rebuildIndex(); refreshQty(); refreshProps(); saveLocal(); draw();
+ toast(tap?"Nó de derivação acrescentado. Arraste a pega azul para o mudar de sítio.":"Nó acrescentado. Arraste a pega azul para o mudar de sítio.",2500)}
+function nodeDel(e,i){ if(e.pts.length<=2){toast("O traçado precisa de pelo menos dois nós.");return} pushUndo(); e.pts.splice(i,1); if(e.taps){e.taps=e.taps.filter(t=>t!==i).map(t=>t>i?t-1:t); if(!e.taps.length)delete e.taps} rebuildIndex(); refreshQty(); refreshProps(); saveLocal(); draw()}
+function nodeTap(e,i){ if(i<=0||i>=e.pts.length-1){toast("A derivação tem de ser num nó a meio do cabo.");return} pushUndo(); const T=new Set(e.taps||[]); T.has(i)?T.delete(i):T.add(i); e.taps=[...T].sort((a,b)=>a-b); if(!e.taps.length)delete e.taps; refreshQty(); saveLocal(); draw()}
+// pegas a meio dos troços: arrastar cria um nó novo
+function pickMidGrip(x,y){const tol=8/S.view.s; let best=null, bd=tol; S.sel.forEach(e=>{ if(!(e.t==="pl"||e.t==="cable")||e.esp)return; const L=layerOf(e); if(!L.visible||L.locked)return; const P=e.pts, n=P.length, m=e.closed&&n>2?n:n-1;
+  for(let i=0;i<m;i++){const a=P[i], b=P[(i+1)%n], q=[(a[0]+b[0])/2,(a[1]+b[1])/2], d=Math.hypot(q[0]-x,q[1]-y); if(Math.hypot(b[0]-a[0],b[1]-a[1])*S.view.s>26&&d<bd){bd=d; best={e,i,p:q}}}}); return best}
 function setVert(e,i,p){ if(e.t==="line"){ if(i===0){e.x1=p[0];e.y1=p[1]} else {e.x2=p[0];e.y2=p[1]} } else {e.pts[i]=[p[0],p[1]]}}
 function pickGrip(x,y){const tol=9/S.view.s; let best=null,bd=tol;
  const test=(e,bonus)=>{const L=layerOf(e); if(!L.visible||L.locked)return; vertsOf(e).forEach((v,i)=>{const d=Math.hypot(v[0]-x,v[1]-y)-bonus; if(d<bd){bd=d;best={e,i}}})};
@@ -1062,12 +1078,14 @@ function onDown(x,y,btn,ev){
  if(btn===2&&S.pend&&t==="select"){pendGo(); return}
  if(t==="mv")return mvClick(x,y,btn);
  if(t==="plotwin"){ if(btn===2){S.tmp=null; setTool("select"); openPlot(); return} if(!S.tmp)S.tmp={pw:[x,y],dn:[x,y]}; else plWinDone(S.tmp.pw,[x,y]); draw(); return}
- if(btn===2){ if(t==="select"&&!S.tmp&&ev&&ev.clientX!=null){const e=pick(x,y); if(e){ if(!S.sel.has(e)){S.sel=new Set([e]); refreshProps(); draw()} entCtx(e,ev.clientX,ev.clientY); return}} finishOrCancel(); return}
+ if(btn===2){ if(t==="select"&&!S.tmp&&ev&&ev.clientX!=null){const e=pick(x,y); if(e){ if(!S.sel.has(e)){S.sel=new Set([e]); refreshProps(); draw()} entCtx(e,ev.clientX,ev.clientY,x,y); return}} finishOrCancel(); return}
  if(t==="esp")return espClick(x,y,ev);
  if(t==="trim"||t==="extend")return teClick(x,y,ev);
  if(t==="legpt"){pushUndo(); const e=addEnt({t:"leg",x,y,scale:1,layer:"Notas"}); S.sel=new Set([e]); setTool("select"); refreshProps(); saveLocal(); draw(); return}
  if(t==="cable"){const p=snapPt(x,y,S.tmp&&S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]); if(!S.tmp)S.tmp={pts:[p]}; else {const lp=S.tmp.pts[S.tmp.pts.length-1]; if(Math.hypot(p[0]-lp[0],p[1]-lp[1])*S.view.s<4){finishCable();return} S.tmp.pts.push(p)} draw(); return}
  if(t==="select"){
+  const mg=!(ev.shiftKey||ev.ctrlKey)&&!pickGrip(x,y)&&pickMidGrip(x,y);
+  if(mg){pushUndo(); insVert(mg.e,mg.i+1,mg.p); const vs=vertsOf(mg.e); S.sel=new Set([mg.e]); S.drag={grip:{e:mg.e,i:mg.i+1},orig:[mg.p[0],mg.p[1]],fix:[vs[mg.i][0],vs[mg.i][1]],moved:true}; hint("Nó novo: arraste para o pôr no sítio."); refreshProps(); draw(); return}
   const gp=!(ev.shiftKey||ev.ctrlKey)&&pickGrip(x,y);
   if(gp){const vs=vertsOf(gp.e); const o=vs[gp.i]; const fix=gp.e.t==="line"?vs[1-gp.i]:(vs[gp.i-1]||vs[gp.i+1]);
    S.sel=new Set([gp.e]); S.drag={grip:gp,orig:[o[0],o[1]],fix:[fix[0],fix[1]],moved:false}; hint("A mover a ponta; a outra fica fixa."); refreshProps(); draw(); return}
@@ -3156,7 +3174,11 @@ function ctxMenu(cx,cy,items){ctxClose(); const m=document.createElement("div");
  const r=m.getBoundingClientRect(); m.style.left=Math.max(4,Math.min(cx,innerWidth-r.width-6))+"px"; m.style.top=Math.max(4,Math.min(cy,innerHeight-r.height-6))+"px";
  m.onclick=ev=>{const b=ev.target.closest("button"); if(!b)return; const it=items[+b.dataset.i]; ctxClose(); it[1]()};
  setTimeout(()=>document.addEventListener("pointerdown",ctxOut,true),0)}
-function entCtx(e,cx,cy){const it=[];
+function entCtx(e,cx,cy,wx,wy){const it=[];
+ if((e.t==="pl"||e.t==="cable")&&!e.esp&&wx!=null){const vi=vertAt(e,wx,wy,9/S.view.s);
+  if(vi>=0){ if(e.pts.length>2)it.push(["Tirar este nó",()=>nodeDel(e,vi)]); if(e.t==="cable"&&vi>0&&vi<e.pts.length-1)it.push([(e.taps||[]).includes(vi)?"Tirar a derivação deste nó":"Marcar este nó como derivação",()=>nodeTap(e,vi)])}
+  else {it.push(["Acrescentar nó aqui",()=>nodeAdd(e,wx,wy,false)]); if(e.t==="cable")it.push(["Acrescentar nó de derivação aqui",()=>nodeAdd(e,wx,wy,true)])}
+  it.push("-")}
  if(isQuadro(e)){it.push(["Esquema unifilar a partir dos cabos (todas as plantas)…",()=>uFromQuadro(e),1]); const n=quadroName(e); if(n&&PROJ.uni&&PROJ.uni.qs.some(q=>q.nome===n))it.push(["Abrir o esquema «"+n+"»",()=>openUni(n)]); it.push("-")}
  if(e.t==="cable")it.push(["Editar cabo…",()=>cabDialog(e.c,o=>{pushUndo(); e.c=o; rebuildIndex(); refreshUI(); draw()})],["Juntar ou tirar objetos do circuito…",()=>circStart(e)],["Voltar a traçar o cabo",()=>cabRetrace(e)],["Inverter sentido do cabo",()=>cabReverse(e)]);
  if(e.t==="sym")it.push(["Editar bloco…",()=>openBlockEditor(e.sym)]);
