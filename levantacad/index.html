@@ -3069,6 +3069,8 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
    hits.push({k:"dev",nid:n.id,i,x:cx-11.5,y,w:23,h:uH(d)});
   });
   for(let i=0;i<=n.devs.length;i++)slots.push({k:"chain",nid:n.id,i,x:cx,y:i<n.devs.length?m.dy[i]:m.ye});
+  // circuito com diferencial próprio: pode receber outros circuitos por baixo do diferencial (passa a grupo)
+  if(!n.kids&&par&&n.devs.length>=2){let si=-1; n.devs.forEach((d,i)=>{ if(d.t==="dif")si=i+1}); if(si<0)si=n.devs.length-1; if(si>=1&&si<=n.devs.length-1)slots.push({k:"join",nid:n.id,i:si,x:cx,y:m.dy[si]})}
   if(n.kids){ // barramento
    L(cx,m.ye,cx,m.by);
    if(n===q.root&&SECT)SECBUS(n,m); else {
@@ -3222,6 +3224,8 @@ function uDrop(pl,slot){const q=uQ(); if(!q)return; if(!slot){toast("Largue o m�
   if(slot.k==="chain"&&slot.nid===pl.nid){let i=slot.i; if(i>pl.i)i--; s.n.devs.splice(pl.i,1); s.n.devs.splice(i,0,dev); UNI.sel={k:"dev",nid:pl.nid,i}; return uDone()}
   s.n.devs.splice(pl.i,1)}
  else if(pl.kind==="node"){const s=M.get(pl.nid); node=s.n; const oi=s.p.kids.indexOf(node); s.p.kids.splice(oi,1); if(slot.nid===s.p.id&&slot.idx>oi)slot={...slot,idx:slot.idx-1}}
+ if(slot.k==="join"){ if(!node)node=uLeaf([dev||uDev("dj",q.ph)]); const Lf=T.n, P=T.p; if(!P){uDone(); return} const up=Lf.devs.slice(0,slot.i); Lf.devs=Lf.devs.slice(slot.i);
+  const Gp=uGroup(up,[Lf,node]); if(Lf.sec!=null)Gp.sec=Lf.sec; delete node.sec; P.kids.splice(P.kids.indexOf(Lf),1,Gp); UNI.sel={k:"node",nid:node.id}; toast("O circuito passou para baixo do mesmo diferencial; o diferencial ficou com barramento próprio.",3500); return uDone()}
  if(slot.k==="chain"){T.n.devs.splice(slot.i,0,dev); UNI.sel={k:"dev",nid:T.n.id,i:slot.i}}
  else { if(!node){node=dev.t==="dif"?uGroup([dev],[]):uLeaf([dev]); if(dev.t==="dif")toast("Diferencial com barramento próprio: largue circuitos por baixo dele.",3500)}
   if(slot.sec!=null)node.sec=slot.sec; T.n.kids.splice(slot.idx,0,node); UNI.sel=pl.kind==="new"&&pl.t!=="circ"?{k:"dev",nid:node.id,i:0}:{k:"node",nid:node.id}}
@@ -3285,7 +3289,7 @@ function uRender(){const q=uQ(), svg=uSvgEl(); if(!svg)return; if(!q){svg.innerH
  svg.innerHTML=h; uView(); uSlots(); uHint()}
 function uPayload(){return UNI.drag?UNI.drag.pl:(UNI.arm?{kind:"new",t:UNI.arm}:null)}
 function uValidSlots(pl){ if(!pl||!UNI.L)return []; const busOnly=pl.kind==="node"||(pl.kind==="new"&&pl.t==="circ");
- let s=UNI.L.slots.filter(x=>!busOnly||x.k==="bus");
+ let s=UNI.L.slots.filter(x=>busOnly?(x.k==="bus"||x.k==="join"):x.k!=="join"); if(pl.kind==="node")s=s.filter(x=>!(x.k==="join"&&x.nid===pl.nid));
  if(pl.kind==="node"){const q=uQ(), n=uMap(q).get(pl.nid).n; s=s.filter(x=>!uDesc(n,x.nid))}
  if(pl.kind==="dev")s=s.filter(x=>!(x.k==="chain"&&x.nid===pl.nid&&(x.i===pl.i||x.i===pl.i+1)));
  return s}
@@ -3293,10 +3297,11 @@ function uNearest(pl,wx,wy){const thr=46/UNI.v.s; let best=null,bd=thr;
  uValidSlots(pl).forEach(s=>{const d=s.k==="chain"?Math.hypot(wx-s.x,wy-s.y):dSeg(wx,wy,s.x,s.y,s.x,s.y2)[0]; if(d<bd){bd=d;best=s}}); return best}
 function uSlots(){const g=document.getElementById("uslots"); if(!g)return; const pl=uPayload(); if(!pl){g.innerHTML=""; return}
  const n=UNI.near; g.innerHTML=uValidSlots(pl).map(s=>{const on=n&&s.k===n.k&&s.nid===n.nid&&(s.i===n.i)&&(s.idx===n.idx); const c=on?"#e8742c":"rgba(232,116,44,.45)", w=on?.9:.4;
+  if(s.k==="join")return `<line x1="${s.x-7}" y1="${s.y}" x2="${s.x+7}" y2="${s.y}" stroke="${on?"#2563eb":"rgba(37,99,235,.55)"}" stroke-width="${w}"/><circle cx="${s.x}" cy="${s.y}" r="${on?1.8:1.2}" fill="${on?"#2563eb":"rgba(37,99,235,.55)"}"/>`;
   return s.k==="chain"?`<line x1="${s.x-6}" y1="${s.y}" x2="${s.x+6}" y2="${s.y}" stroke="${c}" stroke-width="${w}"/><circle cx="${s.x}" cy="${s.y}" r="${on?1.6:1}" fill="${c}"/>`
    :`<line x1="${s.x}" y1="${s.y}" x2="${s.x}" y2="${s.y2}" stroke="${c}" stroke-width="${w}" stroke-dasharray="${on?"":"1.5 1"}"/><circle cx="${s.x}" cy="${s.y}" r="${on?1.6:1}" fill="${c}"/>`}).join("")}
 function uHint(){const e=$("unihint"); if(!e)return; const pl=uPayload();
- if(pl)e.textContent=(pl.kind==="new"?UNAME[pl.t]:pl.kind==="dev"?"Mover aparelho":"Mover circuito")+": "+(pl.kind==="node"||(pl.kind==="new"&&pl.t==="circ")?"largue num barramento":"largue numa saída ou num barramento")+" (pontos a laranja). Esc cancela.";
+ if(pl)e.textContent=(pl.kind==="new"?UNAME[pl.t]:pl.kind==="dev"?"Mover aparelho":"Mover circuito")+": "+(pl.kind==="node"||(pl.kind==="new"&&pl.t==="circ")?"largue num barramento (pontos a laranja) ou por baixo do diferencial de outro circuito (ponto azul)":"largue numa saída ou num barramento (pontos a laranja)")+". Esc cancela.";
  else e.textContent="Arraste os módulos da esquerda para o esquema. Clique num aparelho ou circuito para o editar; arraste-o para o mudar de sítio. Roda do rato faz zoom, arrastar no vazio desloca."}
 function uEscape(){ if(UNI.drag||UNI.pal){UNI.drag=null; UNI.pal=null; UNI.press=null; $("unighost").style.display="none"; UNI.near=null; uSlots(); uHint(); return}
  if(UNI.arm){UNI.arm=null; uPalOn(); UNI.near=null; uSlots(); uHint(); return}
