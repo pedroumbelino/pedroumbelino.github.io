@@ -230,6 +230,7 @@ button.ic small.badge{font-size:10px;font-weight:600}
     <div class="grp" id="tools">
       <button data-tool="select" title="Selecionar (S); arrastar da esquerda para a direita: janela; da direita para a esquerda: cruzamento">Selecionar</button>
       <button data-tool="line" title="Reta, em cadeia (L)">Reta</button>
+      <button data-tool="pline" title="Polilinha (PL): clique nos vértices; Enter ou botão direito termina; F fecha">Polilinha</button>
       <button data-tool="circle" title="Círculo: centro e raio (C)">Círculo</button>
       <button data-tool="circ" title="Circuito (CI): clique no quadro e nos objetos do circuito; Enter regista o circuito para o esquema unifilar. Os cabos desenham-se à parte, com a ferramenta Cabo e o nome do circuito. Para o traçado automático use o comando CIA">Circuito</button>
       <button data-tool="text" title="Texto (T)">Texto</button>
@@ -1137,7 +1138,7 @@ function drawTemp(){
  if(t&&S.tool==="fillet"&&t.e1){G.save(); G.strokeStyle="#22c55e"; G.lineWidth=3; G.beginPath(); drawGeom(t.e1,false); G.stroke(); G.restore()} G.setLineDash([6,4]); G.strokeStyle="#e8742c"; G.lineWidth=1.2; G.beginPath();
  if(t&&(S.tool==="line"||S.tool==="measure"||S.tool==="calib"||S.tool==="scref")&&t.p){const [a,b]=W2S(t.p[0],t.p[1]),[c,d]=W2S(m.x,m.y); G.moveTo(a,b); G.lineTo(c,d);
   G.stroke(); G.setLineDash([]); const L=Math.hypot(m.x-t.p[0],m.y-t.p[1])*S.doc.unit; G.fillStyle="#e8742c"; G.font="12px Arial"; G.fillText(L.toFixed(2)+" m",(a+c)/2+6,(b+d)/2-6); return}
- if(t&&S.tool==="cable"&&t.pts){t.pts.forEach((p,i)=>{const [a,b]=W2S(p[0],p[1]); i?G.lineTo(a,b):G.moveTo(a,b)}); const lp=t.pts[t.pts.length-1],[a,b]=W2S(lp[0],lp[1]),[c,d]=W2S(m.x,m.y); G.lineTo(c,d);
+ if(t&&(S.tool==="cable"||S.tool==="pline")&&t.pts){t.pts.forEach((p,i)=>{const [a,b]=W2S(p[0],p[1]); i?G.lineTo(a,b):G.moveTo(a,b)}); const lp=t.pts[t.pts.length-1],[a,b]=W2S(lp[0],lp[1]),[c,d]=W2S(m.x,m.y); G.lineTo(c,d);
   G.stroke(); G.setLineDash([]); let L=Math.hypot(m.x-lp[0],m.y-lp[1]); for(let i=1;i<t.pts.length;i++)L+=Math.hypot(t.pts[i][0]-t.pts[i-1][0],t.pts[i][1]-t.pts[i-1][1]);
   G.fillStyle="#e8742c"; G.font="12px Arial"; G.fillText((L*S.doc.unit).toFixed(2)+" m  (Enter ou botão direito termina; Esc cancela)",c+10,d-10); return}
  if(t&&S.tool==="esp"&&t.peca&&t.pts.length===1){const a=toV(...t.pts[0]), b=toV(m.x,m.y); [[a[0],a[1]],[b[0],a[1]],[b[0],b[1]],[a[0],b[1]]].forEach((q,i)=>{const [u,v]=W2S(...fromV(q[0],q[1])); i?G.lineTo(u,v):G.moveTo(u,v)}); G.closePath()}
@@ -1275,6 +1276,7 @@ function finishOrCancel(){ // botão direito / toque longo: conclui o que se pod
  if(S.tool==="esp"&&S.tmp&&S.tmp.pts&&S.tmp.pts.length>=3)return espFinish();
  if(S.tool==="circ"&&S.tmp&&S.tmp.list&&S.tmp.list.length>1)return circFinish();
  if(S.tool==="cable"&&S.tmp&&S.tmp.pts&&S.tmp.pts.length>1){finishCable();return}
+ if(S.tool==="pline"&&S.tmp&&S.tmp.pts){plineFinish(false);return}
  if(S.tool==="line"&&S.tmp){S.tmp=null;draw();return}
  escape()}
 
@@ -1288,6 +1290,8 @@ function onDown(x,y,btn,ev){
  if(t==="scref"){const p=snapPt(x,y,S.tmp&&S.tmp.p); if(!S.tmp||!S.tmp.p){S.tmp={p}; hint("Agora a segunda ponta da medida."); draw(); return} const a=S.tmp.p; S.tmp=null; setTool("select"); scaleRefDialog(a,p); return}
  if(t==="trim"||t==="extend")return teClick(x,y,ev);
  if(t==="legpt"){pushUndo(); const e=addEnt({t:"leg",x,y,scale:1,layer:"Notas"}); S.sel=new Set([e]); setTool("select"); refreshProps(); saveLocal(); draw(); return}
+ if(t==="pline"){const p=snapPt(x,y,S.tmp&&S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]); if(!S.tmp)S.tmp={pts:[p]}; else {const lp=S.tmp.pts[S.tmp.pts.length-1], f0=S.tmp.pts[0];
+   if(S.tmp.pts.length>2&&Math.hypot(p[0]-f0[0],p[1]-f0[1])*S.view.s<6){plineFinish(true);return} if(Math.hypot(p[0]-lp[0],p[1]-lp[1])*S.view.s<4){plineFinish(false);return} S.tmp.pts.push(p)} draw(); return}
  if(t==="cable"){const p=snapPt(x,y,S.tmp&&S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]); if(!S.tmp)S.tmp={pts:[p]}; else {const lp=S.tmp.pts[S.tmp.pts.length-1]; if(Math.hypot(p[0]-lp[0],p[1]-lp[1])*S.view.s<4){finishCable();return} S.tmp.pts.push(p)} draw(); return}
  if(t==="select"){
   const lg=!(ev.shiftKey||ev.ctrlKey)&&pickLabelGrip(x,y);
@@ -1298,9 +1302,10 @@ function onDown(x,y,btn,ev){
   if(gp){const vs=vertsOf(gp.e); const o=vs[gp.i]; const fix=gp.e.t==="line"?vs[1-gp.i]:(vs[gp.i-1]||vs[gp.i+1]);
    S.sel=new Set([gp.e]); S.drag={grip:gp,orig:[o[0],o[1]],fix:[fix[0],fix[1]],moved:false,x0:x,y0:y}; hint("A mover a ponta; a outra fica fixa."); refreshProps(); draw(); return}
   const e=pick(x,y);
-  if(e){ if(ev.shiftKey||ev.ctrlKey){S.sel.has(e)?S.sel.delete(e):S.sel.add(e)} else if(!S.sel.has(e)){S.sel=new Set([e])}
-   const bp=snapPt(x,y); S.drag={move:true,x0:bp[0],y0:bp[1],lx:bp[0],ly:bp[1],moved:false}; }
-  else { if(!(ev.shiftKey||ev.ctrlKey)&&!S.pend)S.sel.clear(); S.drag={box:true,x0:x,y0:y,sub:!!ev.shiftKey&&!!S.pend} }
+  // cada clique soma à seleção (Shift ou Ctrl tira); clicar no vazio sem arrastar limpa; arrastar um objeto que não estava escolhido move só esse
+  if(e){let added=null; if(ev.shiftKey||ev.ctrlKey){S.sel.has(e)?S.sel.delete(e):S.sel.add(e)} else if(!S.sel.has(e)){S.sel.add(e); added=e}
+   const bp=snapPt(x,y); S.drag={move:true,x0:bp[0],y0:bp[1],lx:bp[0],ly:bp[1],moved:false,added}; }
+  else { S.drag={box:true,x0:x,y0:y,sub:!!ev.shiftKey,clr:!(ev.shiftKey||ev.ctrlKey)&&!S.pend} }
   refreshProps(); draw(); return}
  if(t==="line"){lineAdd(snapPt(x,y,S.tmp&&S.tmp.p)); return}
  if(t==="circle"){const p=snapPt(x,y); if(!S.tmp){S.tmp={c:p}} else {const r=Math.hypot(p[0]-S.tmp.c[0],p[1]-S.tmp.c[1]); if(r>0){pushUndo(); addEnt({t:"circle",x:S.tmp.c[0],y:S.tmp.c[1],r}); rebuildIndex()} S.tmp=null} draw(); return}
@@ -1335,13 +1340,14 @@ function onMove(x,y,ev){
  S.mouse.x=x;S.mouse.y=y; $("sx").textContent=(x).toFixed(2); $("sy").textContent=(y).toFixed(2);
  // só começa a arrastar depois de o dedo ou o rato andar um pouco (toques e cliques não mexem nos objetos)
  if(S.tool==="select"&&S.drag&&!S.drag.moved&&!S.drag.box&&S.drag.x0!=null){const thr=((ev&&ev.pointerType==="touch")?14:5)/S.view.s; if(Math.hypot(x-S.drag.x0,y-S.drag.y0)<thr){draw(); return}
+  if(S.drag.added&&S.drag.move){S.sel=new Set([S.drag.added]); S.drag.added=null; refreshProps()}
   if(S.drag.mid){const mg=S.drag.mid; pushUndo(); insVert(mg.e,mg.i+1,mg.p); const vs=vertsOf(mg.e); S.sel=new Set([mg.e]); S.drag={grip:{e:mg.e,i:mg.i+1},orig:[mg.p[0],mg.p[1]],fix:[vs[mg.i][0],vs[mg.i][1]],moved:true}; hint("Nó novo: largue onde o quer."); refreshProps()}}
  if(S.tool==="select"&&S.drag&&S.drag.grip){const d=S.drag; S.gripSkip=d.orig; let p=snapPt(x,y,d.fix); S.gripSkip=null; $("sSnap").textContent=S.hover?("Snap: "+S.hover[2]):"";
   S.cons=null; if(ev&&ev.ctrlKey){const c=gripConstrain(d,p,x,y); if(c){p=c.p; S.cons=c; $("sSnap").textContent=c.label}}
   if(!d.moved){pushUndo(); d.moved=true} setVert(d.grip.e,d.grip.i,p); draw(); return}
  if(S.tool==="select"&&S.drag&&S.drag.lab){const d=S.drag, L=d.lab; if(!d.moved){pushUndo(); d.moved=true} L.e.lbOff=[L.o0[0]+x-L.x0,L.o0[1]+y-L.y0]; draw(); return}
  if(S.tool==="select"&&S.drag&&S.drag.move){const p=snapPt(x,y); const dx=p[0]-S.drag.lx,dy=p[1]-S.drag.ly; if(dx||dy){ if(!S.drag.moved){pushUndo();S.drag.moved=true} S.sel.forEach(e=>moveEnt(e,dx,dy)); S.drag.lx=p[0];S.drag.ly=p[1]} draw(); return}
- if(["line","circle","measure","calib","scref","sym","text","cable","rotpick","pickpt","paste","viewalign","mv","plotwin"].includes(S.tool)){ if(S.tool!=="sym")snapPt(x,y,S.tmp&&(S.tmp.p||S.tmp.base||(S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]))); else S.hover=null; if((S.tool==="line"||S.tool==="cable")&&S.tmp&&S.ortho&&!S.hover){const p=snapPt(x,y,S.tmp.p||S.tmp.pts[S.tmp.pts.length-1]); S.mouse.x=p[0];S.mouse.y=p[1]} } else S.hover=null;
+ if(["line","pline","circle","measure","calib","scref","sym","text","cable","rotpick","pickpt","paste","viewalign","mv","plotwin"].includes(S.tool)){ if(S.tool!=="sym")snapPt(x,y,S.tmp&&(S.tmp.p||S.tmp.base||(S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]))); else S.hover=null; if((S.tool==="line"||S.tool==="cable")&&S.tmp&&S.ortho&&!S.hover){const p=snapPt(x,y,S.tmp.p||S.tmp.pts[S.tmp.pts.length-1]); S.mouse.x=p[0];S.mouse.y=p[1]} } else S.hover=null;
  $("sSnap").textContent=S.hover?("Snap: "+S.hover[2]):"";
  draw()}
 // direções possíveis: a do troço original e a perpendicular, e as de uma reta da planta ou do desenho junto ao cursor (paralela e perpendicular a ela)
@@ -1353,7 +1359,7 @@ function gripConstrain(d,p,x,y){const f=d.fix, vx=p[0]-f[0], vy=p[1]-f[1], L=Mat
  const ux=Math.cos(bi[0]), uy=Math.sin(bi[0]), t=vx*ux+vy*uy; return {p:[f[0]+ux*t,f[1]+uy*t],fix:f,ux,uy,label:"Ctrl: "+bi[1]}}
 function onUp(x,y){ S.cons=null;
  if(S.tool==="plotwin"&&S.tmp&&S.tmp.dn){const d=S.tmp.dn; S.tmp.dn=null; if(Math.abs(x-d[0])*S.view.s>6||Math.abs(y-d[1])*S.view.s>6){plWinDone(S.tmp.pw,[x,y]); return}}
- if(S.tool==="circ"&&S.cbox){const b=S.cbox; S.cbox=null; if(Math.abs(x-b.x0)*S.view.s>4||Math.abs(y-b.y0)*S.view.s>4){circAddBox(b.x0,b.y0,x,y); circHint()} draw(); return} if(S.tool==="select"&&S.drag){ if(S.drag.box){const d=S.drag; if(Math.abs(x-d.x0)*S.view.s>4||Math.abs(y-d.y0)*S.view.s>4){const cr=boxIsCross(d.x0,d.y0,x,y); S.doc.ents.forEach(e=>{const L=layerOf(e); if(L.visible&&!L.locked&&!e.locked&&(cr?crossBox(e,d.x0,d.y0,x,y):inBox(e,d.x0,d.y0,x,y))){ if(d.sub)S.sel.delete(e); else S.sel.add(e)}}); if(S.pend)hint(pendHint())}}
+ if(S.tool==="circ"&&S.cbox){const b=S.cbox; S.cbox=null; if(Math.abs(x-b.x0)*S.view.s>4||Math.abs(y-b.y0)*S.view.s>4){circAddBox(b.x0,b.y0,x,y); circHint()} draw(); return} if(S.tool==="select"&&S.drag){ if(S.drag.box){const d=S.drag; if(!(Math.abs(x-d.x0)*S.view.s>4||Math.abs(y-d.y0)*S.view.s>4)&&d.clr)S.sel.clear(); if(Math.abs(x-d.x0)*S.view.s>4||Math.abs(y-d.y0)*S.view.s>4){const cr=boxIsCross(d.x0,d.y0,x,y); S.doc.ents.forEach(e=>{const L=layerOf(e); if(L.visible&&!L.locked&&!e.locked&&(cr?crossBox(e,d.x0,d.y0,x,y):inBox(e,d.x0,d.y0,x,y))){ if(d.sub)S.sel.delete(e); else S.sel.add(e)}}); if(S.pend)hint(pendHint())}}
   if(S.drag.grip){setTool("select")} if(S.drag.moved){rebuildIndex(); refreshQty(); saveLocal()} S.drag=null; refreshProps(); draw()}}
 
 /* ================= Ponteiro, zoom e pan ================= */
@@ -1422,6 +1428,8 @@ window.addEventListener("keydown",ev=>{
  if(S.tool==="esp"){ if(k==="p"){S.espPoly=!S.espPoly; toast(S.espPoly?"Espaço: desenhar o contorno à mão.":"Espaço: deteção automática ao clicar dentro.",1600); hint(espHint()); return}
   if(S.tmp&&S.tmp.pts&&!S.tmp.peca){ if(k==="d"){S.tmp.pts.pop(); if(!S.tmp.pts.length)S.tmp=null; draw(); return} if(k==="f"&&S.tmp.pts.length>=3)return espFinish()}}
  if(S.tool==="line"&&S.tmp){ if(k==="d"){ev.preventDefault(); return lineUndoSeg()} if(k==="f"){ev.preventDefault(); return lineClose()}}
+ if(S.tool==="pline"&&S.tmp&&S.tmp.pts){ if(k==="d"||k==="backspace"){ev.preventDefault(); S.tmp.pts.pop(); if(!S.tmp.pts.length)S.tmp=null; draw(); return} if(k==="f"||k==="c"){ev.preventDefault(); return plineFinish(true)}}
+ if(S.tool==="fillet"&&k==="r"){ev.preventDefault(); return filletDialog()}
  if(S.tool==="circ"&&k==="m"){setTool("cable"); hint("Cabo à mão: clique nos vértices; Enter ou botão direito termina. M volta ao Circuito automático."); return}
  if(S.tool==="cable"&&k==="m"&&!(S.tmp&&S.tmp.pts&&S.tmp.pts.length>1)){setTool("circ"); return}
  if(ev.key.length===1&&ev.key!==" "){ev.preventDefault(); cmdType(ev.key)}
@@ -1433,6 +1441,7 @@ function spaceCmd(){ // como no AutoCAD: dentro de um comando conclui; fora repe
  if(S.pend&&S.tool==="select"){ if(S.sel.size)return pendGo(); toast("Selecione pelo menos um objeto, ou Esc para cancelar.");return}
  if(S.tool==="mv"){S.tmp=null; setTool("select"); return}
  if(S.tool==="cable"&&S.tmp&&S.tmp.pts&&S.tmp.pts.length>1)return finishCable();
+ if(S.tool==="pline"&&S.tmp&&S.tmp.pts)return plineFinish(false);
  if(S.tool==="line"&&S.tmp){S.tmp=null; draw(); return}
  if(S.tool==="esp"&&S.tmp&&S.tmp.pts&&S.tmp.pts.length>=3)return espFinish();
  if(S.tool==="circ"&&S.tmp&&S.tmp.list&&S.tmp.list.length>1)return circFinish();
@@ -2032,6 +2041,27 @@ function cabReverse(e){pushUndo(); e.pts.reverse(); if(e.taps){const n=e.pts.len
 function drawCableDir(e,col){ if(!e.pts||e.pts.length<2)return; const a=e.pts[0], b=e.pts[1]; const [x0,y0]=W2S(a[0],a[1]), [x1,y1]=W2S(b[0],b[1]); const L=Math.hypot(x1-x0,y1-y0); if(L<8)return;
  const ux=(x1-x0)/L, uy=(y1-y0)/L, t=Math.min(26,L*.5), px=x0+ux*t, py=y0+uy*t; G.save(); G.fillStyle=col; G.beginPath(); G.moveTo(px+ux*7,py+uy*7); G.lineTo(px-uy*4.5,py+ux*4.5); G.lineTo(px+uy*4.5,py-ux*4.5); G.closePath(); G.fill();
  G.beginPath(); G.arc(x0,y0,3.5,0,Math.PI*2); G.fill(); G.restore()}
+// explodir: polilinhas e cabos em retas; símbolos e a simbologia nas suas linhas, círculos, arcos e textos
+function explodeSel(){const sel=[...S.sel].filter(e=>!e.locked&&!layerOf(e).locked); let n=0, out=[], kept=[];
+ const base=e=>{const o={layer:e.layer}; ["col","lt","lw","tr","exist"].forEach(k=>{ if(e[k]!=null)o[k]=e[k]}); return o};
+ const parts=e=>{const P=[];
+  if((e.t==="pl"&&!e.esp)||e.t==="cable"){const pts=e.pts.slice(); if(e.closed&&pts.length>2)pts.push(pts[0]); for(let i=1;i<pts.length;i++){const a=pts[i-1], b=pts[i]; if(Math.hypot(b[0]-a[0],b[1]-a[1])>1e-9)P.push({t:"line",x1:a[0],y1:a[1],x2:b[0],y2:b[1],...base(e)})}}
+  else if(e.t==="sym"&&SYM[e.sym]){const X=symXf(e), k=(e.scale||1)*S.doc.symScale*U(), ro=e.rot||0;
+   symG(e).forEach(g=>{ if(g[0]==="l"){const a=X(g[1],g[2]), b=X(g[3],g[4]); P.push({t:"line",x1:a[0],y1:a[1],x2:b[0],y2:b[1],...base(e)})}
+    else if(g[0]==="p"||g[0]==="f"){const Q=g[1].map(q=>X(q[0],q[1])); P.push({t:"pl",pts:Q,closed:true,...base(e)})}
+    else if(g[0]==="c"||g[0]==="fc"){const c=X(g[1],g[2]); P.push({t:"circle",x:c[0],y:c[1],r:g[3]*k,...base(e)})}
+    else if(g[0]==="a"||g[0]==="fa"){const c=X(g[1],g[2]); P.push({t:"arc",x:c[0],y:c[1],r:g[3]*k,a0:(e.flip?180-g[5]:g[4])+ro,a1:(e.flip?180-g[4]:g[5])+ro,...base(e)})}
+    else if(g[0]==="t"){const c=X(g[1],g[2]); P.push({t:"text",x:c[0],y:c[1],h:g[3]*k,s:g[4],rot:0,c:1,...base(e)})}});
+   const L=labelOf(e,true); if(L)P.push({t:"text",x:L.x,y:L.y,h:L.h,s:L.s,rot:L.rot||0,...base(e)})}
+  else if(e.t==="leg"){legExplode(e).forEach(q=>{const c={...q}; delete c._leg; delete c._cab; if(!c.layer)c.layer=e.layer; P.push(c)})}
+  return P};
+ const todo=sel.filter(e=>parts(e).length); if(!todo.length){toast("Nada para explodir: escolha polilinhas, cabos, símbolos ou a simbologia.",3500); return}
+ const nc=todo.filter(e=>e.t==="cable").length, ns=todo.filter(e=>e.t==="sym").length;
+ const go=()=>{pushUndo(); const ids=new Set(todo.map(e=>e.id)); S.doc.ents=S.doc.ents.filter(e=>!ids.has(e.id)); todo.forEach(e=>parts(e).forEach(p=>{const c=addEnt(p); out.push(c)}));
+  S.sel=new Set(out); LC_VER++; rebuildIndex(); refreshUI(); draw(); toast(todo.length+" objeto(s) explodido(s) em "+out.length+" elementos.",3000)};
+ if(nc||ns){ if(!confirm("Explodir "+(nc?nc+" cabo(s)":"")+(nc&&ns?" e ":"")+(ns?ns+" símbolo(s)":"")+"? "+(nc?"Os cabos passam a linhas simples e deixam de contar nos circuitos e nas quantidades. ":"")+(ns?"Os símbolos passam a linhas e deixam de contar como objetos. ":"")+"(Ctrl+Z desfaz)"))return}
+ go()}
+function filletStart(){S.filR=0; S.filM=true; setTool("fillet"); hint("Concordância (raio 0, múltipla): clique na primeira reta e depois na segunda, do lado que quer manter. R muda o raio; Esc termina.")}
 function filletDialog(){ask("Concordância (fillet)",[{k:"r",l:"Raio (m); 0 = canto vivo (prolonga ou corta até se encontrarem)",v:S.filR!=null?String(S.filR):"0"},{k:"m",l:"Múltipla: continua a pedir pares de retas até carregar em Esc",type:"check",v:!!S.filM}],o=>{
   const r=num(o.r); if(r<0){toast("Raio inválido.");return} S.filR=r; S.filM=!!o.m; setTool("fillet")})}
 function doFillet(e1,c1,e2,c2,r){
@@ -2052,6 +2082,8 @@ function doFillet(e1,c1,e2,c2,r){
  if((((a1-a0)%360)+360)%360>180){const tmp=a0; a0=a1; a1=tmp}
  pushUndo(); set(e1,A,T1); set(e2,B,T2); const arc=addEnt({t:"arc",x:Cc[0],y:Cc[1],r,a0,a1,layer:e1.layer}); if(e1.exist)arc.exist=true; else delete arc.exist;
  rebuildIndex(); refreshQty(); draw(); return true}
+function plineFinish(close){const t=S.tmp; S.tmp=null; if(!t||!t.pts||t.pts.length<2){draw(); return} const pts=t.pts.map(p=>[p[0],p[1]]); const cl=!!close&&pts.length>2;
+ pushUndo(); const e=addEnt({t:"pl",pts,closed:cl}); rebuildIndex(); refreshUI(); saveLocal(); draw(); cmdLog("Polilinha com "+pts.length+" vértices"+(cl?" (fechada)":"")+".")}
 function finishCable(){const t=S.tmp; if(!t||!t.pts||t.pts.length<2){S.tmp=null; draw(); return}
  const pts=t.pts.slice(), taps=t.taps; S.tmp=null; draw();
  const kd=cabKindFor(pts); cabDialog({...CAB_LAST,...(kd?cabPreset(kd):{kind:""}),circ:circSuggest(pts)},o=>{pushUndo(); const e=addEnt({t:"cable",pts,c:o}); if(taps&&taps.length)e.taps=taps; S.sel=new Set([e]); rebuildIndex(); refreshUI(); draw();
@@ -2746,6 +2778,7 @@ const ICO={
  line:'<path d="M5 19L19 5"/><rect x="3" y="17" width="4" height="4"/><rect x="17" y="3" width="4" height="4"/>',
  circle:'<circle cx="12" cy="12" r="8"/><path d="M12 12h8"/><circle cx="12" cy="12" r=".8" fill="currentColor"/>',
  cable:'<path d="M3 19h6V8h12 M13 5.5l-2 5 M16 5.5l-2 5 M19 5.5l-2 5"/>',
+ pline:'<path d="M3 18L9 8l6 7 6-10"/><rect x="1.5" y="16.5" width="3" height="3"/><rect x="19.5" y="3.5" width="3" height="3"/>',
  circ:'<rect x="2" y="15" width="5" height="5"/><path d="M7 17.5h4V8h9"/><circle cx="11" cy="17.5" r="1.6" fill="currentColor"/><circle cx="15" cy="8" r="1.6" fill="currentColor"/><circle cx="20" cy="8" r="1.6" fill="currentColor"/>',
  text:'<path d="M5 5h14 M12 5v14 M9 19h6"/>',
  offset:'<path d="M4 15L15 4 M9 20L20 9 M8 9l3 3"/>',
@@ -2800,7 +2833,7 @@ function setupRibbon(){const top=$("top"); if(!top||top.dataset.rb)return; top.d
   <button id="qCol" class="swb sm" data-tip="Cor dos objetos novos (ou da seleção)"></button>
   <span id="qLtW"><select id="qLt" data-tip="Tipo de linha"></select></span><span id="qLwW"><select id="qLw" data-tip="Espessura"></select></span>`;
  const G=[["",["bNew","bOpen","bSave","bExport"],"Ficheiro"],["",["bUndo","bRedo","bDel"],"Editar"],
-  ["",['[data-tool="select"]','[data-tool="line"]','[data-tool="circle"]','[data-tool="text"]','[data-tool="esp"]'],"Desenhar"],
+  ["",['[data-tool="select"]','[data-tool="line"]','[data-tool="pline"]','[data-tool="circle"]','[data-tool="text"]','[data-tool="esp"]'],"Desenhar"],
   ["",[bMv,bCp,"bRot","bScale","bMir",'[data-tool="offset"]',bTr,bEx,"bFillet"],"Modificar"],
   ["",['[data-tool="circ"]',bLeg,"bUni","bPE"],"Elétrico"],["",['[data-tool="measure"]','[data-tool="calib"]'],"Medir"],
   ["",[qp],"Propriedades"]];
@@ -2835,7 +2868,7 @@ function setupIcons(){
   bedfill:["fill","Cheio"],bedDup:["dup","Duplicar"],bedCopy:["copy","Copiar"],bedPaste:["paste","Colar"],bedDelSel:["del","Apagar"],bedUndo:["undo","Anular (Ctrl+Z)"],bedRedo:["redo","Refazer (Ctrl+Y)"],
   bedRot:["rotate","Rodar"],bedMir:["mirror","Espelhar"],bedScale:["scale","Escalar"],bedMove:["move","Mover"],bedOrig:["origin","Ponto de inserção"],bedFit:["fit","Ver tudo (F)"]};
  for(const id in M)iconify($(id),M[id][0],M[id][1]);
- const T={select:"Selecionar",line:"Reta",circle:"Círculo",cable:"Cabo",circ:"Circuito",text:"Texto",offset:"Paralela",measure:"Medir",calib:"Calibrar",esp:"Espaço"};
+ const T={select:"Selecionar",line:"Reta",pline:"Polilinha",circle:"Círculo",cable:"Cabo",circ:"Circuito",text:"Texto",offset:"Paralela",measure:"Medir",calib:"Calibrar",esp:"Espaço"};
  document.querySelectorAll("#tools button[data-tool]").forEach(b=>iconify(b,b.dataset.tool,T[b.dataset.tool]));
  const E={sel:["select","Selecionar"],line:["line","Linha"],rect:["rect","Retângulo"],poly:["poly","Polígono"],circle:["circle","Círculo"],arc:["arc","Arco (centro, início, fim)"],text:["text","Texto"]};
  document.querySelectorAll("#bedtools button[data-t]").forEach(b=>{const m=E[b.dataset.t]; if(m)iconify(b,m[0],m[1])});
@@ -4546,6 +4579,7 @@ const CMDS=[
  {id:"apagar",n:"Apagar",g:"Editar",a:["E","APAGAR","ERASE"],k:"Del",f:()=>needSelThen("Apagar",delSel)},
  {id:"cancelar",n:"Cancelar",g:"Editar",a:["CANCELAR"],k:"Esc",f:()=>escape()},
  {id:"reta",n:"Reta",g:"Desenho",a:["L","RETA","LINE"],f:()=>setTool("line")},
+ {id:"polilinha",n:"Polilinha",g:"Desenho",a:["PL","PLINE","POLILINHA"],f:()=>setTool("pline")},
  {id:"circulo",n:"Círculo",g:"Desenho",a:["C","CIRCULO","CIRCLE"],f:()=>setTool("circle")},
  {id:"texto",n:"Texto",g:"Desenho",a:["T","DT","TEXTO","TEXT"],f:()=>setTool("text")},
  {id:"paralela",n:"Paralela",g:"Desenho",a:["O","PARALELA","OFFSET"],f:()=>setTool("offset")},
@@ -4572,7 +4606,9 @@ const CMDS=[
  {id:"props",n:"Propriedades",g:"Vista",a:["PR","PROPRIEDADES","PROPERTIES"],k:"Ctrl+1",f:()=>{ if($("right").classList.contains("hide"))$("bR").click(); rtab("props")}},
  {id:"trim",n:"Cortar (trim)",g:"Modificar",a:["TR","TRIM","CORTAR"],f:()=>teStart(false)},
  {id:"extend",n:"Prolongar (extend)",g:"Modificar",a:["EX","EXTEND","PROLONGAR"],f:()=>teStart(true)},
- {id:"fillet",n:"Concordância (fillet)…",g:"Modificar",a:["F","FILLET","CONCORDANCIA"],f:()=>filletDialog(),sep:true},
+ {id:"fillet",n:"Concordância (fillet)",g:"Modificar",a:["F","FILLET","CONCORDANCIA"],f:()=>filletStart()},
+ {id:"filletr",n:"Concordância com raio…",g:"Modificar",a:["FR","FILLETR"],f:()=>filletDialog()},
+ {id:"explode",n:"Explodir (polilinhas, cabos, símbolos, simbologia)",g:"Modificar",a:["X","EXPLODE","EXPLODIR"],f:()=>needSelThen("Explodir",explodeSel),sep:true},
  {id:"circ",n:"Circuito (quadro e objetos; os cabos desenham-se à parte)",g:"Elétrico",a:["CI","CIRCUITO"],f:()=>{S.circAuto=false; setTool("circ"); circHint()}},
  {id:"circauto",n:"Circuito com traçado automático do cabo",g:"Elétrico",a:["CIA","CIRCAUTO"],f:()=>{S.circAuto=true; setTool("circ"); circHint()}},
  {id:"circlist",n:"Circuitos desta planta…",g:"Elétrico",a:["CIRCUITOS","LCI"],f:()=>circListDialog()},
@@ -4635,6 +4671,7 @@ function cmdClear(){const inp=$("cmd"); if(!inp)return; inp.value=""; $("cmdsug"
 function cmdPrompt(){const el=$("cmdPr"); if(!el)return; const t=S.tmp, tool=S.tool; let p="Comando:";
  if(S.pend)p=S.pend.name+": selecione objetos [Enter confirma]"; else if(tool==="mv"&&t)p=(t.copy?"Copiar":"Mover")+(t.base?": destino ou distância [@dx,dy]":": ponto base ou deslocamento [x;y]");
  else if(tool==="line")p=t?"Reta: próximo ponto ou comprimento [Desfazer (D) / Fechar (F)]":"Reta: primeiro ponto";
+ else if(tool==="pline")p=t?"Polilinha: próximo ponto [Desfazer (D) / Fechar (F) / Enter termina]":"Polilinha: primeiro ponto";
  else if(tool==="circle")p=t&&t.c?"Círculo: raio (m)":"Círculo: centro"; else if(tool==="sym")p="Símbolo: ponto [Rodar (R) / Espelhar (M)"+(S.sym&&symOptList(S.sym)?" / Opções (O)":"")+"]";
  else if(tool==="circ")p=S.circAuto?"Circuito automático: quadro e objetos [À mão (M) / Enter liga]":"Circuito: quadro e objetos [Enter regista]"; else if(tool==="cable")p="Cabo: vértices ou distância [Circuito (M) / Enter termina]";
  else if(tool==="esp")p=t&&t.pts&&!t.peca?"Espaço: cantos ou distância [Desfazer (D) / Fechar (F)]":"Espaço: clique dentro [À mão (P)]"; else if(tool!=="select")p=(CMDN[tool]||tool)+":";
