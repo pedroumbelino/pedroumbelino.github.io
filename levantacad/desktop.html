@@ -394,6 +394,7 @@ ${L}
 // Edição: <html data-ed="desktop"> na versão desktop; cada edição tem a sua gravação automática
 const LC_ED=document.documentElement.dataset.ed||"lite", LC_DOCKEY=LC_ED==="desktop"?"levantacad_desktop_doc":"levantacad_doc";
 /* ================= Símbolos (coordenadas em metros; parede em y=0, o símbolo abre para +y) ================= */
+var SW_TYPES=["intg","int1","int2p","int2","comut","comut2","inver","intcord","botao"];
 const SYM={
   terra:{n:"Ligação à terra (geral)",cat:"Terras",lay:null,wall:false,g:[["l",0,0.2,0,0],["l",-0.12,0,0.12,0],["l",-0.08,-0.04,0.08,-0.04],["l",-0.04,-0.08,0.04,-0.08]]},
   terrap:{n:"Terra de proteção",cat:"Terras",lay:null,wall:false,g:[["c",0,0,0.13],["l",0,0.09,0,0.02],["l",-0.08,0.02,0.08,0.02],["l",-0.055,-0.025,0.055,-0.025],["l",-0.03,-0.07,0.03,-0.07]]},
@@ -409,6 +410,7 @@ const SYM={
   rj45:{n:"Tomada telecom. RJ45",cat:"ITED",lay:"ITED",wall:true,g:[["l",-0.1,0,-0.1,0.08],["l",-0.1,0.08,0.1,0.08],["l",0.1,0.08,0.1,0],["l",0,0.08,0,0.22],["t",0.2,0.13,0.07,"RJ"]]},
   tv:{n:"Tomada telecom. TV (COAX)",cat:"ITED",lay:"ITED",wall:true,g:[["l",-0.1,0,-0.1,0.08],["l",-0.1,0.08,0.1,0.08],["l",0.1,0.08,0.1,0],["l",0,0.08,0,0.22],["t",0.2,0.13,0.07,"TV"]]},
   fo:{n:"Tomada telecom. fibra ótica",cat:"ITED",lay:"ITED",wall:true,g:[["l",-0.1,0,-0.1,0.08],["l",-0.1,0.08,0.1,0.08],["l",0.1,0.08,0.1,0],["l",0,0.08,0,0.22],["t",0.2,0.13,0.07,"FO"]]},
+  intg:{n:"Interruptor (tipo por definir)",cat:"Comandos",lay:"Iluminação",wall:true,g:[["c",0,0.05,0.05],["l",0.025,0.0933,0.135,0.2838],["t",0.2,0.12,0.09,"?"]]},
   int1:{n:"Interruptor unipolar",cat:"Comandos",lay:"Iluminação",wall:true,g:[["c",0,0.05,0.05],["l",0.025,0.0933,0.135,0.2838],["l",0.135,0.2838,0.1956,0.2488]]},
   intcord:{n:"Interruptor unipolar de cordão",cat:"Comandos",lay:"Iluminação",wall:true,g:[["c",0,0.05,0.05],["l",0.025,0.0933,0.135,0.2838],["l",0.135,0.2838,0.1956,0.2488],["l",0.17,0.2238,0.17,0.1138],["f",[[0.145,0.1138],[0.195,0.1138],[0.17,0.0638]]]]},
   int2p:{n:"Interruptor bipolar",cat:"Comandos",lay:"Iluminação",wall:true,g:[["c",0,0.05,0.05],["l",0.025,0.0933,0.135,0.2838],["l",0.135,0.2838,0.1956,0.2488],["l",0.1125,0.2449,0.1731,0.2099]]},
@@ -1560,6 +1562,9 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  }
  if(one&&one.t==="sym"){h+=`<div class="small">${symName(one)}</div><div class="row"><label>Etiqueta</label><input type="text" id="pLab" value="${(one.label||"").replace(/"/g,"&quot;")}"></div>
    <div class="row"><label>Rotação (°)</label><input type="number" id="pRot" value="${Math.round(one.rot||0)}"></div><div class="row"><label>Escala</label><input type="number" step="0.1" id="pSc" value="${one.scale||1}"></div><div class="row"><button id="pBlk" style="flex:1">Editar bloco…</button></div>`+(SYM[one.sym]&&SYM[one.sym].cat==="Quadros"?`<div class="row"><button id="pUni" style="flex:1" title="Cria ou atualiza o esquema unifilar a partir dos cabos que saem deste quadro (também no botão direito)">Esquema unifilar…</button></div>`:"")}
+ // interruptores: o tipo real escolhe-se aqui (genérico → unipolar, bipolar, comutador…), para um ou vários de uma vez
+ {const sw=sel.length&&sel.every(e=>e.t==="sym"&&SW_TYPES.includes(e.sym))?sel:null; if(sw){const ks=new Set(sw.map(e=>e.sym));
+  h+=`<div class="row"><label>Tipo de interruptor</label><select id="pSwT">${ks.size>1?'<option value="__" selected>(vários)</option>':''}${SW_TYPES.map(k=>`<option value="${k}" ${ks.size===1&&ks.has(k)?"selected":""}>${uEsc(SYM[k].n)}</option>`).join("")}</select></div>`}}
  const oSel=sel.length&&sel.every(e=>e.t==="sym"&&e.sym===sel[0].sym)&&symOptList(sel[0].sym)?sel:null;
  if(oSel){const k0=oSel[0].sym, vals=oSel.map(symOptVal); if(!one)h+=`<div class="small">${oSel.length} × ${SYM[k0].n}</div>`; h+=`<div class="small" style="margin-top:6px"><b>Opções</b></div>`;
   symOptList(k0).forEach(f=>{const vs=vals.map(v=>v[f.k]), mix=new Set(vs.map(String)).size>1, v=vs[0];
@@ -1602,6 +1607,7 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  if($("pUni"))$("pUni").onclick=()=>uFromQuadro(one);
  if($("pRev"))$("pRev").onclick=()=>cabReverse(one); if($("pCirc"))$("pCirc").onclick=()=>circStart(one); if($("pRetr"))$("pRetr").onclick=()=>cabRetrace(one); if($("pCab"))$("pCab").onclick=()=>cabDialog(one.c,o=>{pushUndo(); one.c=o; rebuildIndex(); refreshUI(); draw()});
  ch("pLay",el=>{ensureLayer(el.value); sel.forEach(e=>e.layer=el.value)}); ch("pEx",el=>sel.forEach(e=>{if(el.checked)e.exist=true; else delete e.exist}));
+ if($("pSwT"))$("pSwT").onchange=ev=>{const v=ev.target.value; if(v==="__"||!SYM[v])return; pushUndo(); [...S.sel].forEach(x=>{ if(x.t==="sym"&&SW_TYPES.includes(x.sym)){x.sym=v; delete x.opt}}); rebuildIndex(); refreshUI(); draw(); toast("Tipo alterado para «"+SYM[v].n+"».",2000)};
  ch("pLab",el=>one.label=el.value); ch("pRot",el=>one.rot=parseFloat(el.value)||0); ch("pSc",el=>one.scale=parseFloat(el.value)||1);
  ch("pTx",el=>one.s=el.value.replace(/\\n/g,"\n")); ch("pTh",el=>one.h=(parseFloat(el.value)||.15)*U()); ch("pR",el=>one.r=(parseFloat(el.value)||.1)*U());
 }
@@ -4639,7 +4645,7 @@ const CMDS=[
  {id:"legnotas",n:"Simbologia e notas da folha…",g:"Elétrico",a:["NOTAS"],f:()=>legEditDialog()},
  {id:"tomada",n:"Tomada",g:"Elétrico",a:["TO","TOMADA"],f:()=>startSym("tom")},
  {id:"luz",n:"Ponto de luz",g:"Elétrico",a:["LU","LUZ"],f:()=>startSym("luz")},
- {id:"inter",n:"Interruptor",g:"Elétrico",a:["IN","INTERRUPTOR"],f:()=>startSym("int1")},
+ {id:"inter",n:"Interruptor (genérico: o tipo escolhe-se depois nas Propriedades)",g:"Elétrico",a:["IN","INTERRUPTOR"],f:()=>startSym("intg")},
  {id:"quadro",n:"Quadro elétrico",g:"Elétrico",a:["QE","QUADRO"],f:()=>startSym("qe")},
  {id:"vertudo",n:"Ver tudo",g:"Vista",a:["ZE","ZOOM","VERTUDO"],f:()=>fit()},
  {id:"folhadesenho",n:"Folha no desenho (formato e escala)…",g:"Vista",a:["MOLDURA","VERFOLHA","FRAME"],f:()=>sheetDialog()},
