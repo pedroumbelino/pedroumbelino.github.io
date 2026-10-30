@@ -1134,6 +1134,8 @@ function drawText(e,col){const hp=e.h*S.view.s; if(hp<3)return; const [px,py]=W2
  String(e.s).split("\n").forEach((ln,i)=>G.fillText(ln,0,i*hp*1.6)); G.restore()}
 function drawTemp(){
  const t=S.tmp, m=S.mouse;
+ if(S.teF&&Math.hypot(S.teF.x1-S.teF.x0,S.teF.y1-S.teF.y0)*S.view.s>6){const [a,b]=W2S(S.teF.x0,S.teF.y0),[c,d]=W2S(S.teF.x1,S.teF.y1); G.save(); G.setLineDash([6,4]); G.strokeStyle="#ef4444"; G.lineWidth=1.6; G.beginPath(); G.moveTo(a,b); G.lineTo(c,d); G.stroke();
+  G.setLineDash([]); G.fillStyle="#ef4444"; teFenceHits(S.teF).forEach(h=>{const [u,v]=W2S(h.p[0],h.p[1]); G.beginPath(); G.moveTo(u-5,v-5); G.lineTo(u+5,v+5); G.moveTo(u+5,v-5); G.lineTo(u-5,v+5); G.strokeStyle="#ef4444"; G.stroke()}); G.restore(); return}
  if(S.cons&&S.drag&&S.drag.grip){const c=S.cons, k=1e3*U(), [a,b]=W2S(c.fix[0]-c.ux*k,c.fix[1]-c.uy*k), [e,f]=W2S(c.fix[0]+c.ux*k,c.fix[1]+c.uy*k); G.save(); G.setLineDash([3,5]); G.strokeStyle="#22c55e"; G.lineWidth=1; G.beginPath(); G.moveTo(a,b); G.lineTo(e,f); G.stroke(); G.restore()}
  if(t&&S.tool==="fillet"&&t.e1){G.save(); G.strokeStyle="#22c55e"; G.lineWidth=3; G.beginPath(); drawGeom(t.e1,false); G.stroke(); G.restore()} G.setLineDash([6,4]); G.strokeStyle="#e8742c"; G.lineWidth=1.2; G.beginPath();
  if(t&&(S.tool==="line"||S.tool==="measure"||S.tool==="calib"||S.tool==="scref")&&t.p){const [a,b]=W2S(t.p[0],t.p[1]),[c,d]=W2S(m.x,m.y); G.moveTo(a,b); G.lineTo(c,d);
@@ -1288,7 +1290,7 @@ function onDown(x,y,btn,ev){
  if(btn===2){ if(t==="select"&&!S.tmp&&ev&&ev.clientX!=null){const lk=pick(x,y,true); if(lk&&lk.locked){ctxMenu(ev.clientX,ev.clientY,[["Desbloquear este objeto",()=>lockSet([lk],false)],["Desbloquear todos os objetos desta planta",()=>lockSet(S.doc.ents.filter(o=>o.locked),false)]]); return} const e=pick(x,y); if(e){ if(!S.sel.has(e)){S.sel=new Set([e]); refreshProps(); draw()} entCtx(e,ev.clientX,ev.clientY,x,y); return}} finishOrCancel(); return}
  if(t==="esp")return espClick(x,y,ev);
  if(t==="scref"){const p=snapPt(x,y,S.tmp&&S.tmp.p); if(!S.tmp||!S.tmp.p){S.tmp={p}; hint("Agora a segunda ponta da medida."); draw(); return} const a=S.tmp.p; S.tmp=null; setTool("select"); scaleRefDialog(a,p); return}
- if(t==="trim"||t==="extend")return teClick(x,y,ev);
+ if(t==="trim"||t==="extend"){S.teF={x0:x,y0:y,x1:x,y1:y,shift:!!(ev&&ev.shiftKey)}; return}
  if(t==="legpt"){pushUndo(); const e=addEnt({t:"leg",x,y,scale:1,layer:"Notas"}); S.sel=new Set([e]); setTool("select"); refreshProps(); saveLocal(); draw(); return}
  if(t==="pline"){const p=snapPt(x,y,S.tmp&&S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]); if(!S.tmp)S.tmp={pts:[p]}; else {const lp=S.tmp.pts[S.tmp.pts.length-1], f0=S.tmp.pts[0];
    if(S.tmp.pts.length>2&&Math.hypot(p[0]-f0[0],p[1]-f0[1])*S.view.s<6){plineFinish(true);return} if(Math.hypot(p[0]-lp[0],p[1]-lp[1])*S.view.s<4){plineFinish(false);return} S.tmp.pts.push(p)} draw(); return}
@@ -1337,6 +1339,7 @@ function onDown(x,y,btn,ev){
   return}
 }
 function onMove(x,y,ev){
+ if(S.teF){S.teF.x1=x; S.teF.y1=y}
  S.mouse.x=x;S.mouse.y=y; $("sx").textContent=(x).toFixed(2); $("sy").textContent=(y).toFixed(2);
  // só começa a arrastar depois de o dedo ou o rato andar um pouco (toques e cliques não mexem nos objetos)
  if(S.tool==="select"&&S.drag&&!S.drag.moved&&!S.drag.box&&S.drag.x0!=null){const thr=((ev&&ev.pointerType==="touch")?14:5)/S.view.s; if(Math.hypot(x-S.drag.x0,y-S.drag.y0)<thr){draw(); return}
@@ -1358,6 +1361,7 @@ function gripConstrain(d,p,x,y){const f=d.fix, vx=p[0]-f[0], vy=p[1]-f[1], L=Mat
  const ang=Math.atan2(vy,vx); let bi=null,bd=Infinity; C.forEach(c=>{let df=Math.abs(((ang-c[0])%Math.PI+Math.PI)%Math.PI); df=Math.min(df,Math.PI-df); if(df<bd){bd=df;bi=c}});
  const ux=Math.cos(bi[0]), uy=Math.sin(bi[0]), t=vx*ux+vy*uy; return {p:[f[0]+ux*t,f[1]+uy*t],fix:f,ux,uy,label:"Ctrl: "+bi[1]}}
 function onUp(x,y){ S.cons=null;
+ if(S.teF){const f=S.teF; S.teF=null; f.x1=x; f.y1=y; if(Math.hypot(f.x1-f.x0,f.y1-f.y0)*S.view.s>6)teFence(f); else teClick(f.x0,f.y0,{shiftKey:f.shift}); draw(); return}
  if(S.tool==="plotwin"&&S.tmp&&S.tmp.dn){const d=S.tmp.dn; S.tmp.dn=null; if(Math.abs(x-d[0])*S.view.s>6||Math.abs(y-d[1])*S.view.s>6){plWinDone(S.tmp.pw,[x,y]); return}}
  if(S.tool==="circ"&&S.cbox){const b=S.cbox; S.cbox=null; if(Math.abs(x-b.x0)*S.view.s>4||Math.abs(y-b.y0)*S.view.s>4){circAddBox(b.x0,b.y0,x,y); circHint()} draw(); return} if(S.tool==="select"&&S.drag){ if(S.drag.box){const d=S.drag; if(!(Math.abs(x-d.x0)*S.view.s>4||Math.abs(y-d.y0)*S.view.s>4)&&d.clr)S.sel.clear(); if(Math.abs(x-d.x0)*S.view.s>4||Math.abs(y-d.y0)*S.view.s>4){const cr=boxIsCross(d.x0,d.y0,x,y); S.doc.ents.forEach(e=>{const L=layerOf(e); if(L.visible&&!L.locked&&!e.locked&&(cr?crossBox(e,d.x0,d.y0,x,y):inBox(e,d.x0,d.y0,x,y))){ if(d.sub)S.sel.delete(e); else S.sel.add(e)}}); if(S.pend)hint(pendHint())}}
   if(S.drag.grip){setTool("select")} if(S.drag.moved){rebuildIndex(); refreshQty(); saveLocal()} S.drag=null; refreshProps(); draw()}}
@@ -3765,7 +3769,7 @@ function teArcCuts(e,B){const out=[], c0=[e.x,e.y,e.r,null,null], bx=[e.x-e.r,e.
  B.S.forEach(s=>{ if(s[4]===e||!teOv(bx,s[5],1e-9))return; const a=[s[0],s[1]], d=[s[2]-s[0],s[3]-s[1]]; teLineCirc(a,d,c0).forEach(t=>{ if(t>-1e-9&&t<1+1e-9)out.push(teAng(e,[a[0]+t*d[0],a[1]+t*d[1]]))})});
  B.C.forEach(c=>{ if(c[5]===e||!teOv(bx,c[6],1e-9))return; teCircCirc(c0,c).forEach(p=>out.push(teAng(e,p)))}); return out}
 // calcula o resultado sem alterar nada: {e, rep:[objetos que substituem e], rm:[pedaços que saem], ext:[[a,b]...]}
-function teCompute(x,y,ext){const e=pick(x,y); if(!e)return null; const B=teBounds();
+function teCompute(x,y,ext,ent){const e=ent||pick(x,y); if(!e)return null; const B=teBounds();
  if(e.t==="cable")return {e,err:"Os cabos ajustam-se pelo circuito ou pelas pegas, não com cortar ou prolongar."};
  if(!["line","pl","arc","circle"].includes(e.t)||(e.t==="pl"&&e.esp))return {e,err:"Cortar e prolongar funcionam em retas, polilinhas, arcos e círculos."};
  const clone=g=>{const c=JSON.parse(JSON.stringify(e)); delete c.id; return Object.assign(c,g)};
@@ -3798,11 +3802,27 @@ function teCompute(x,y,ext){const e=pick(x,y); if(!e)return null; const B=teBoun
  const A=[...new Set(teArcCuts(e,B).map(v=>+v.toFixed(7)))].sort((a,b)=>a-b); if(A.length<2)return {e,err:"O círculo precisa de cruzar pelo menos dois limites para ser cortado."};
  const c=teAng(e,[x,y]); let lo=A.filter(v=>v<c).pop(), hi=A.find(v=>v>c); if(lo==null)lo=A[A.length-1]; if(hi==null)hi=A[0];
  return {e,rep:[clone({t:"arc",a0:hi,a1:lo})],rmArc:{x:e.x,y:e.y,r:e.r,a0:lo,a1:hi}}}
+// vedação (fence): arrastar uma linha corta (ou prolonga) todos os troços que ela atravessa, de uma vez
+function teFenceHits(f){const P=[f.x0,f.y0], d=[f.x1-f.x0,f.y1-f.y0], out=[];
+ S.doc.ents.forEach(e=>{const L=layerOf(e); if(!L.visible||L.locked||e.locked)return; if(!["line","pl","arc","circle"].includes(e.t)||(e.t==="pl"&&e.esp))return;
+  if(e.t==="line"||e.t==="pl"){const Q=e.t==="line"?[[e.x1,e.y1],[e.x2,e.y2]]:e.pts.concat(e.closed&&e.pts.length>2?[e.pts[0]]:[]); for(let i=1;i<Q.length;i++){const r=teSegX(P,d,[Q[i-1][0],Q[i-1][1],Q[i][0],Q[i][1]]); if(r&&r.t>=0&&r.t<=1&&r.u>=0&&r.u<=1)out.push({t:r.t,p:[P[0]+d[0]*r.t,P[1]+d[1]*r.t]})}}
+  else {teLineCirc(P,d,[e.x,e.y,e.r]).forEach(t=>{ if(t<0||t>1)return; const p=[P[0]+d[0]*t,P[1]+d[1]*t]; if(e.t==="arc"&&!angIn(Math.atan2(p[1]-e.y,p[0]-e.x)*180/Math.PI,e.a0,e.a1))return; out.push({t,p})})}});
+ return out.sort((a,b)=>a.t-b.t)}
+function teAt(p){let best=null, bd=1e-6*U()+1e-9; S.doc.ents.forEach(e=>{const L=layerOf(e); if(!L.visible||L.locked||e.locked)return; let dd=Infinity;
+  if(e.t==="line")dd=dSeg(p[0],p[1],e.x1,e.y1,e.x2,e.y2)[0]; else if(e.t==="pl"&&!e.esp){const Q=e.pts.concat(e.closed&&e.pts.length>2?[e.pts[0]]:[]); for(let i=1;i<Q.length;i++)dd=Math.min(dd,dSeg(p[0],p[1],...Q[i-1],...Q[i])[0])}
+  else if(e.t==="circle"||e.t==="arc"){dd=Math.abs(Math.hypot(p[0]-e.x,p[1]-e.y)-e.r); if(e.t==="arc"&&!angIn(Math.atan2(p[1]-e.y,p[0]-e.x)*180/Math.PI,e.a0,e.a1))dd=Infinity}
+  if(dd<=bd){bd=dd; best=e}}); return best}
+function teFence(f){const ext=(S.tool==="extend")!==!!f.shift, hits=teFenceHits(f); if(!hits.length){toast("A linha não atravessa nada para "+(ext?"prolongar":"cortar")+".",2000); return}
+ pushUndo(); let n=0;
+ hits.forEach(h=>{const e=teAt(h.p); if(!e)return; S.teStamp=(S.teStamp||0)+1; const R=teCompute(h.p[0],h.p[1],ext,e); if(!R||R.err)return;
+  const i=S.doc.ents.indexOf(R.e); if(i<0)return; const nw=R.rep.map(c=>{c.id=S.doc.nextId++; return c}); S.doc.ents.splice(i,1,...nw); n++; S.teStamp++});
+ if(!n){S.undo.pop(); toast("Nada foi "+(ext?"prolongado":"cortado")+" (sem limites na direção certa).",2500); return}
+ S.sel.clear(); rebuildIndex(); refreshQty(); refreshProps(); saveLocal(); draw(); cmdLog((ext?"Prolongados ":"Cortados ")+n+" troço(s) com a vedação.")}
 function teClick(x,y,ev){const ext=(S.tool==="extend")!==!!(ev&&ev.shiftKey); const R=teCompute(x,y,ext); if(!R){toast(ext?"Clique perto da ponta a prolongar.":"Clique na parte a cortar.",1800); return}
  if(R.err){toast(R.err,3500); return}
  pushUndo(); const i=S.doc.ents.indexOf(R.e); const nw=R.rep.map(c=>{c.id=S.doc.nextId++; return c}); S.doc.ents.splice(i,1,...nw); S.sel.clear(); S.teStamp=(S.teStamp||0)+1;
  rebuildIndex(); refreshQty(); refreshProps(); saveLocal(); draw(); cmdLog(ext?"Prolongado.":(R.all?"Objeto apagado (não cruza nenhum limite).":"Cortado."))}
-function teStart(ext){S.teStamp=(S.teStamp||0)+1; setTool(ext?"extend":"trim"); hint(ext?"Prolongar: clique perto da ponta de uma reta, polilinha ou arco; vai até ao limite mais próximo (qualquer objeto ou a planta de fundo). Shift+clique corta. Esc termina.":"Cortar: clique na parte a retirar; todos os objetos e a planta de fundo servem de limite. Sem limites, o objeto é apagado. Shift+clique prolonga. Esc termina.")}
+function teStart(ext){S.teStamp=(S.teStamp||0)+1; setTool(ext?"extend":"trim"); hint(ext?"Prolongar: clique perto da ponta de uma reta, polilinha ou arco, ou arraste uma linha (vedação) por cima de várias pontas; vai até ao limite mais próximo. Shift corta. Esc termina.":"Cortar: clique na parte a retirar, ou arraste uma linha (vedação) por cima de várias e corta todas de uma vez; todos os objetos e a planta de fundo servem de limite. Shift prolonga. Esc termina.")}
 function teDrawPrev(){ if(S.tool!=="trim"&&S.tool!=="extend")return; const m=S.mouse; const ext=(S.tool==="extend")!==!!S.shiftDown; const key=m.x+","+m.y+","+ext+","+S.teStamp;
  if(S.tePv&&S.tePv.key===key)var R=S.tePv.R; else {R=teCompute(m.x,m.y,ext); S.tePv={key,R}} if(!R||R.err)return;
  G.save(); G.setLineDash([5,4]); G.lineWidth=2.4; G.strokeStyle=ext?"#22c55e":"#ef4444"; G.beginPath();
