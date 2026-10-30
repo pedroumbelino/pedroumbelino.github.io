@@ -3352,10 +3352,16 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
    if(r.p===q.root&&uSecs(q).NS>1){const {S,NS}=uSecs(q); h+=uFields([["sec","Barramento","sel",Array.from({length:NS},(_,i)=>[String(i),"Barramento "+String.fromCharCode(65+i)+" (Entrada "+(S.indexOf(i)+1)+")"])]],{get sec(){return String(+n.circ.__s||+n.sec||0)}}).replace('data-k="sec"','data-k="sec" data-sec="1"')}
    if(q.ph==="3F")h+=uFields([["fase","Fase","sel",[["auto","Automática ("+(fa||"-")+")"],"L1","L2","L3",["3F","Trifásico"]]]],n.circ);
    if(!cabById(n.circ.src))h+=uFields([["L","Comprimento (m)","num"]],n.circ); else h+=`<div class="small">Comprimento, cabo e proteção vêm do cabo desenhado na planta.</div>`;
-   if(q.root.kids&&uDoc().qs.length>1)h+=uFields([["to","Alimenta o quadro","sel",[["","(não alimenta outro quadro)"],...uDoc().qs.filter(o=>o!==q).map(o=>[o.nome,o.nome])]]],n.circ);
+   {const have=new Set(uDoc().qs.map(o=>o.nome)), opts=uDoc().qs.filter(o=>o!==q).map(o=>[o.nome,o.nome]);
+    // quadros desenhados nas plantas que ainda não têm esquema também podem ser alimentados (o esquema cria-se ao escolher)
+    const seen=new Set([q.nome,...have]); (PROJ?PROJ.plantas:[S.doc]).forEach(p=>p.ents.forEach(e=>{ if(isQuadro(e)){const nm=quadroName(e); if(nm&&!seen.has(nm)){seen.add(nm); opts.push([nm,nm+" (ainda sem esquema)"])}}}));
+    if(n.circ.to&&!seen.has(n.circ.to)&&n.circ.to!==q.nome)opts.push([n.circ.to,n.circ.to]);
+    if(q.root.kids&&opts.length)h+=uFields([["to","Alimenta o quadro","sel",[["","(não alimenta outro quadro)"],...opts]]],n.circ).replace('data-k="to"','data-k="to" data-to="1"')}
    h+=uFields([["ex","Existente (azul)","chk"]],n.circ)+'<h3>Cálculo</h3><div id="unileaf">'+uLeafHTML(n)+'</div>';
    h+=uBtns([["ubL","← Esquerda"],["ubR","Direita →"],["ubDup","Duplicar"],["ubGrp","Criar barramento por baixo","Os aparelhos até ao último diferencial ou interruptor ficam a alimentar um barramento novo, para poder pendurar mais circuitos"],["ubDel","Apagar circuito"]]);
-   box.innerHTML=h; uBind(box,n.circ); const se=box.querySelector("[data-sec]"); if(se)se.onchange=()=>{uPush(); n.sec=+se.value; uDone()};}
+   box.innerHTML=h; uBind(box,n.circ);
+   {const ts=box.querySelector("[data-to]"); if(ts)ts.addEventListener("change",()=>{const nm=ts.value; if(!nm||uDoc().qs.some(o=>o.nome===nm))return; const nq=uTemplate("vazio",nm); nq.ph=q.ph==="3F"&&n.circ.fase==="3F"?"3F":"1F"; nq.root.devs=[uDev("int",nq.ph)]; nq.orig=q.nome; uDoc().qs.push(nq); uFillQ&&uFillQ(); toast("Criado o esquema do «"+nm+"», alimentado por este circuito. Abra-o na lista de quadros para lhe pôr os circuitos (ou use «Esquema unifilar» no quadro da planta).",6000)})}
+   const se=box.querySelector("[data-sec]"); if(se)se.onchange=()=>{uPush(); n.sec=+se.value; uDone()};}
   else {$("uniPT").textContent="Grupo / barramento"; h+=`<div class="small">${n.kids.length} saída(s) neste barramento. Os aparelhos do grupo editam-se clicando neles.</div>`;
    h+=uBtns([["ubAdd","+ Circuito neste barramento"],["ubL","← Esquerda"],["ubR","Direita →"],["ubDup","Duplicar"],["ubUng","Desfazer grupo"],["ubDel","Apagar grupo"]]);
    box.innerHTML=h; uOn("ubAdd",()=>uAddCirc(n.id)); uOn("ubUng",uUngroup)}
