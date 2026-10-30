@@ -3294,7 +3294,7 @@ function uValidSlots(pl){ if(!pl||!UNI.L)return []; const busOnly=pl.kind==="nod
  if(pl.kind==="dev")s=s.filter(x=>!(x.k==="chain"&&x.nid===pl.nid&&(x.i===pl.i||x.i===pl.i+1)));
  return s}
 function uNearest(pl,wx,wy){const thr=46/UNI.v.s; let best=null,bd=thr;
- uValidSlots(pl).forEach(s=>{const d=s.k==="chain"?Math.hypot(wx-s.x,wy-s.y):dSeg(wx,wy,s.x,s.y,s.x,s.y2)[0]; if(d<bd){bd=d;best=s}}); return best}
+ uValidSlots(pl).forEach(s=>{let d=s.k==="chain"||s.k==="join"?Math.hypot(wx-s.x,wy-s.y):dSeg(wx,wy,s.x,s.y,s.x,s.y2)[0]; if(s.k==="join")d=d*.35; if(d<bd){bd=d;best=s}}); return best}
 function uSlots(){const g=document.getElementById("uslots"); if(!g)return; const pl=uPayload(); if(!pl){g.innerHTML=""; return}
  const n=UNI.near; g.innerHTML=uValidSlots(pl).map(s=>{const on=n&&s.k===n.k&&s.nid===n.nid&&(s.i===n.i)&&(s.idx===n.idx); const c=on?"#e8742c":"rgba(232,116,44,.45)", w=on?.9:.4;
   if(s.k==="join")return `<line x1="${s.x-7}" y1="${s.y}" x2="${s.x+7}" y2="${s.y}" stroke="${on?"#2563eb":"rgba(37,99,235,.55)"}" stroke-width="${w}"/><circle cx="${s.x}" cy="${s.y}" r="${on?1.8:1.2}" fill="${on?"#2563eb":"rgba(37,99,235,.55)"}"/>`;
