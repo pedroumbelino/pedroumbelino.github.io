@@ -3215,7 +3215,7 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
  M(25,5,Wd-5,5,.5); M(Wd-5,5,Wd-5,Hd-5,.5); M(Wd-5,Hd-5,25,Hd-5,.5); M(25,Hd-5,25,5,.5);
  TM(32,15,"Esquema unifilar · "+(q.nome||"Quadro"),{h:4.5,b:true});
  const sub=[]; if(q.local)sub.push("Local: "+q.local); sub.push((tri?"Trifásico 400/230 V":"Monofásico 230 V")+" · potência instalada "+uF(tot)+" kW"+(leaves.length?" · "+leaves.length+" circuito"+(leaves.length>1?"s":""):""));
- if(NQ)sub.push("Queda de tensão até ao quadro "+uF(NQ.du)+" % · Icc máx. no barramento "+uF(NQ.iccMax/1000,2)+" kA · Ib "+uF(NQ.Ib,1)+" A (ks "+uF(uKs(q))+") · "+NQ.esq+(uN(q.preq)>0?" · potência a requisitar "+uF(uN(q.preq))+" kVA":NQ.root===q.nome&&NQ.pc!==undefined?" · potência a contratar "+(NQ.pc?uF(NQ.pc)+" kVA":"BTE"):""));
+ if(NQ)sub.push("Queda de tensão até ao quadro "+uF(NQ.du)+" % · Icc máx. no barramento "+uF(NQ.iccMax/1000,2)+" kA · Ib "+uF(NQ.Ib,1)+" A (ks "+uF(uKs(q))+") · "+NQ.esq+(uN(q.preq)>0?" · potência a requisitar "+uF(uN(q.preq))+" kVA":NQ.root===q.nome&&NQ.pc!==undefined&&!q.gen?" · potência a contratar "+(NQ.pc?uF(NQ.pc)+" kVA":"BTE"):""));
  {const mc=Math.max(30,Math.floor((Wd-5-88.19-6-32)/(2.4*.7))); sub.flatMap(s2=>uWrap(s2.replace(/ · /g," ·\u00a0"),mc,4)).forEach((s2,j)=>TM(32,21+j*3.6,s2.replace(/\u00a0/g," "),{h:2.4}))}
  uSheetColumn(q,P,Wd,Hd);
  return {P,hits,slots,W:Wd,H:Hd,leaves,fit,need:[needW,needH]}}
@@ -4108,6 +4108,8 @@ function cabSec(cabo){const c0=String(cabo||"");
  // cabos unipolares, opcionalmente em paralelo: «3x1x240+1x120», «2x(3x1x240+1x120)»
  {const u=c0.match(/(\d+)\s*[xX×]\s*1\s*[xX×]\s*(\d+(?:[.,]\d+)?)/); if(u){const pm=c0.match(/^\D*?(\d+)\s*[xX×]\s*\(/), k=pm?+pm[1]:1, sn=uN(u[2]); const nn=c0.match(/\+\s*1\s*[xX×]\s*(\d+(?:[.,]\d+)?)/), pe=c0.match(/\+\s*(\d+(?:[.,]\d+)?)\s*G/i);
   if(sn>0)return {n:+u[1]+(nn?1:0),s:sn*k,spe:(pe?uN(pe[1]):nn?uN(nn[1]):sn)*k,par:k}}}
+ // cabos multipolares em paralelo: «2x(XV 4x240+120G)»
+ {const pm=c0.match(/^\s*(\d+)\s*[xX×]\s*\(/); if(pm){const r=cabSec0(c0.slice(pm[0].length)); if(r){const k=+pm[1]; return {...r,s:r.s*k,spe:r.spe*k,par:k}}}}
  return cabSec0(cabo)}
 function cabSec0(cabo){const m=String(cabo||"").match(/(\d+)\s*[GgxX×]\s*(\d+(?:[.,]\d+)?)/); if(!m)return null; const s=uN(m[2]); if(!(s>0))return null; const pe=String(cabo).match(/\+\s*(\d+(?:[.,]\d+)?)\s*G/i); return {n:+m[1],s,spe:pe?uN(pe[1]):s}}
 function cabById(id){ if(id==null)return null; for(const p of (PROJ?PROJ.plantas:[S.doc])){const c=p.ents.find(e=>e.id===id&&e.t==="cable"); if(c)return c} const f=allCircs().find(x=>x.ci.id===id); if(f)return circV(f.ci,f.pl); return null}
@@ -4514,6 +4516,7 @@ function peMDBody(M){const d=peData(), S=PE_TPL._samples, al=d.al, im=d.im, pro=
   P(`Nos locais contendo banheiras ou duches (${M.wc.map(e=>e.esp.nome).join(", ")}) serão cumpridas as regras da secção 701 das RTIEBT, nomeadamente quanto à classificação dos volumes 0, 1, 2 e 3, indicados nas peças desenhadas, à aparelhagem admitida em cada volume, aos índices de protecção mínimos (IPX7, IPX5, IPX4 e IPX1) e à protecção dos circuitos por dispositivos diferenciais de corrente diferencial estipulada não superior a 30 mA.`);
   P("Será executada uma ligação equipotencial suplementar que interligue todos os elementos condutores existentes nos volumes 0, 1, 2 e 3 com os condutores de protecção dos equipamentos colocados nesses volumes (secção 701.413.1.6)."); E()}
  if(d.md.dst||al.dst){H("DESCARREGADORES DE SOBRETENSÕES"); P("A fim de proteger os bens contra eventuais sobretensões de origem atmosférica ou de manobra, serão instalados descarregadores de sobretensões nos quadros principais, coordenados com os dispositivos a jusante, de acordo com a secção 443 das RTIEBT."); E()}
+ if(typeof gerMD==="function")gerMD({H,H2,P,E,B,T});
  if(d.md.div){H("DIVERSOS"); P("Todos os materiais que constituem as instalações eléctricas deverão obedecer às disposições do regulamento e ainda às normas e especificações nacionais ou, na sua falta, às da CENELEC e/ou IEC."); E();
   P("Em tudo o omisso nas partes integrantes deste projecto, prevalecerão os regulamentos, normas e demais disposições regulamentares em vigor e, ainda, as prescrições da Entidade Gestora das Instalações e Fiscalização."); E()}
  return x}
@@ -4659,6 +4662,277 @@ function lineAdd(p){const t=S.tmp; if(!t){S.tmp={p,p0:p,made:[]}; draw(); cmdPro
  if(Math.hypot(p[0]-t.p[0],p[1]-t.p[1])>1e-9){pushUndo(); const e=addEnt({t:"line",x1:t.p[0],y1:t.p[1],x2:p[0],y2:p[1]}); t.made.push(e); rebuildIndex(); refreshQty()} t.p=p; draw(); cmdPrompt()}
 function lineUndoSeg(){const t=S.tmp; if(!t)return; const e=t.made.pop(); if(!e){S.tmp=null; draw(); cmdPrompt(); return} S.doc.ents=S.doc.ents.filter(q=>q!==e); t.p=[e.x1,e.y1]; rebuildIndex(); refreshQty(); draw(); cmdPrompt()}
 function lineClose(){const t=S.tmp; if(!t||t.made.length<2){toast("Faça pelo menos dois troços para fechar.");return} lineAdd(t.p0); S.tmp=null; draw(); cmdPrompt()}
+/*GER-BEGIN*/
+/* ================= Módulos: grupo gerador ================= */
+// Pergunta os dados, dimensiona (potência, proteção, cabo, combustível, ventilação, sala) e cria no projeto:
+// o esquema unifilar do quadro do grupo, a planta de implantação com perspetiva e o capítulo da memória descritiva.
+const GER_KVA=[10,15,20,30,40,50,60,80,100,125,150,175,200,250,275,300,350,400,450,500,550,630,700,800,900,1000,1100,1250,1400,1500,1650,1800,2000,2250,2500,2800,3000];
+const GER_IN=[16,20,25,32,40,50,63,80,100,125,160,200,250,320,400,500,630,800,1000,1250,1600,2000,2500,3200,4000,5000,6300];
+const GER_TIPOS={
+ res:{n:"Resistiva (aquecimento, AQS)",pf:1,st:1,nl:0},
+ ilum:{n:"Iluminação",pf:.95,st:1,nl:0},
+ misto:{n:"Quadro / tomadas (misto)",pf:.9,st:1,nl:0},
+ it:{n:"Informática / eletrónica",pf:.9,st:1,nl:1.25},
+ ups:{n:"UPS",pf:.9,st:1,nl:1.5},
+ dol:{n:"Motor, arranque direto",pf:.85,st:6,nl:0,mot:1},
+ yd:{n:"Motor, estrela-triângulo",pf:.85,st:2.3,nl:0,mot:1},
+ soft:{n:"Motor, arrancador suave",pf:.85,st:3,nl:0,mot:1},
+ vfd:{n:"Motor com variador",pf:.95,st:1.2,nl:1.3,mot:1},
+ elev:{n:"Elevador",pf:.8,st:2.5,nl:1.2,mot:1}};
+const GER_FIN={soc:"Socorro (falha da rede, sem serviços de segurança)",emg:"Emergência (serviços de segurança, SCIE)",se:"Socorro e emergência",prime:"Produção principal (prime, sem rede)",est:"Estaleiro de obra (prime)"};
+// grupo aberto: kVA, comprimento, largura, altura (m), massa (t)
+const GER_DIM=[[20,1.6,.8,1.2,.6],[60,2.0,.9,1.4,1.0],[100,2.5,1.0,1.5,1.4],[200,3.0,1.2,1.8,2.2],[300,3.3,1.3,1.9,3.0],[500,3.9,1.6,2.1,4.5],[800,4.6,1.8,2.3,6.5],[1000,4.9,1.9,2.3,8],[1500,5.8,2.1,2.5,11],[2000,6.4,2.3,2.6,15],[3000,7.5,2.5,2.8,22]];
+// Iz (A): cobre, isolamento PEX, 3 condutores carregados, cabo multipolar em caminho de cabos (método E)
+const GER_IZ={1.5:23,2.5:32,4:42,6:54,10:75,16:100,25:127,35:158,50:192,70:246,95:298,120:346,150:399,185:456,240:538};
+const GER_FG=[1,1,.88,.82,.79,.78,.76,.75,.74,.73,.72]; // cabos multipolares encostados num caminho de cabos
+const GER_SEC=[1.5,2.5,4,6,10,16,25,35,50,70,95,120,150,185,240];
+function gerN(v){const x=parseFloat(String(v==null?"":v).replace(",",".")); return isFinite(x)?x:0}
+function gerF(v,d){return (+v).toFixed(d==null?1:d).replace(".",",")}
+function gerDef(){return {fin:"se",inst:"sala",com:"auto",ng:1,red:0,q:"QGBT",ats:true,alt:100,temp:35,aut:8,L:20,du:1.5,dmax:15,RA:10,tanque:"auto",md:true,
+ cargas:[{d:"Iluminação normal e de segurança",p:6,t:"ilum",n:1,ks:1},{d:"Tomadas e equipamentos",p:25,t:"misto",n:1,ks:.6},{d:"Bombas do sistema de incêndio",p:15,t:"yd",n:1,ks:1},{d:"Elevador",p:11,t:"elev",n:1,ks:1}]}}
+function gerData(){ if(!PROJ.mods)PROJ.mods={}; if(!PROJ.mods.ger)PROJ.mods.ger={G:gerDef()}; return PROJ.mods.ger}
+function gerDims(S,canopy){const T=GER_DIM; let a=T[0], b=T[T.length-1]; for(let i=1;i<T.length;i++)if(T[i][0]>=S){a=T[i-1]; b=T[i]; break}
+ const t=S<=a[0]?0:S>=b[0]?1:(Math.log(S)-Math.log(a[0]))/(Math.log(b[0])-Math.log(a[0])), f=k=>a[k]+(b[k]-a[k])*t;
+ const d={L:f(1),W:f(2),H:f(3),m:f(4)}; if(canopy){d.L+=.8; d.W+=.3; d.H+=.4; d.m*=1.25} return d}
+function gerCalc(G){const R={warn:[],notes:[]}; const prime=G.fin==="prime"||G.fin==="est";
+ let P=0,Q=0,Snl=0,st=null; const rows=[];
+ (G.cargas||[]).forEach(c=>{const T=GER_TIPOS[c.t]||GER_TIPOS.misto, n=Math.max(1,Math.round(gerN(c.n)||1)), ks=Math.min(1,Math.max(0,gerN(c.ks)||1)), p=gerN(c.p)*n*ks, pf=T.pf;
+  P+=p; Q+=p*Math.tan(Math.acos(pf)); if(T.nl)Snl+=p/pf*T.nl;
+  if(T.mot&&gerN(c.p)>0){const s1=gerN(c.p)/pf*T.st; if(!st||s1>st.s)st={s:s1,c,T}} rows.push({c,p,T})});
+ const Srun=Math.hypot(P,Q); R.P=P; R.Q=Q; R.Srun=Srun; R.pf=Srun?P/Srun:1; R.st=st; R.Snl=Snl;
+ const ng=Math.max(1,Math.min(6,Math.round(gerN(G.ng)||1))), red=ng>1?Math.min(ng-1,Math.max(0,Math.round(gerN(G.red)))):0, nu=ng-red; R.ng=ng; R.red=red;
+ const fl=prime?.8:.9, d=Math.min(.35,Math.max(.05,gerN(G.dmax)/100||.15)), xd=.2;
+ const cRun=Srun/fl, cSt=st?xd*st.s*(1-d)/d:0, cNl=Snl;
+ const fa=1-Math.max(0,gerN(G.alt)-1000)/100*.01, ft=1-Math.max(0,gerN(G.temp)-40)*.004, fd=Math.max(.5,fa*ft); R.fd=fd;
+ const need=Math.max(cRun,cSt,cNl,1)/fd; R.need=need; R.crit=need*fd===cRun?"run":need*fd===cSt?"st":"nl"; R.cRun=cRun; R.cSt=cSt; R.cNl=cNl;
+ const per=need/nu; R.Sg=GER_KVA.find(v=>v>=per)||Math.ceil(per/100)*100; R.Stot=R.Sg*nu;
+ R.load=Srun/(R.Stot*fd); R.rating=prime?"PRP (potência contínua, ISO 8528-1)":"ESP (potência de emergência, ISO 8528-1)";
+ R.dip=st?xd*st.s/(R.Stot+xd*st.s):0;
+ R.In=R.Sg*1000/(Math.sqrt(3)*400); R.Idj=GER_IN.find(v=>v>=R.In)||Math.ceil(R.In/100)*100;
+ R.Ik=R.In/.12; R.Iks=3*R.In; // inicial subtransitório (x"d ≈ 12 %) e mantida com excitação auxiliar (PMG/AREP)
+ const pdc=[6,10,15,25,36,50,70,100].find(v=>v*1000>=R.Ik*ng)||100; R.pdc=pdc;
+ // cabo do grupo ao quadro: n cabos multipolares em paralelo, Iz ≥ In do disjuntor e queda de tensão ≤ limite
+ const L=Math.max(1,gerN(G.L)), duMax=gerN(G.du)||1.5, Ib=R.In*nu, Ireq=R.Idj*nu; R.IbC=Ib; R.IreqC=Ireq; const du=(n,S)=>Math.sqrt(3)*Ib*L*(.0225/S*.8+.00008*.6)/n/400*100; let best=null;
+ // um só cabo sempre que possível; em paralelo só a partir de 120 mm²
+ for(let n=1;n<=10&&!best;n++)for(const S of GER_SEC){ if(n>1&&S<120)continue; const Iz=n*GER_IZ[S]*GER_FG[Math.min(n,10)], u=du(n,S); if(Iz>=Ireq&&u<=duMax){best={n,S,Iz,du:u,cu:n*S}; break}}
+ if(!best){R.warn.push("Não encontrei cabo multipolar até 10 × 240 mm² que cumpra a corrente e a queda de tensão. Reveja a distância ou use barras / cabos unipolares."); best={n:10,S:240,Iz:10*538*.72,du:du(10,240),cu:2400}}
+ const pe=best.S<=16?best.S:best.S<=35?16:GER_SEC.find(v=>v>=best.S/2);
+ best.pe=pe; const one=best.S<=35?"XV 5G"+String(best.S).replace(".",","):"XV 4x"+best.S+"+"+pe+"G"; best.desig=best.n>1?best.n+"x("+one+")":one; R.cab=best;
+ // inversor de fontes no quadro socorrido
+ let Iq=0; try{const tq=uDoc().qs.find(q=>q.nome===G.q); if(tq){const d0=tq.root.devs.find(x=>x.t==="int"||x.t==="dj"); if(d0)Iq=gerN(d0.In)}}catch(e){}
+ R.Iats=GER_IN.find(v=>v>=Math.max(R.Idj*nu,Iq))||R.Idj; R.Iq=Iq;
+ // combustível: consumo específico aproximado de um diesel moderno
+ const kWe=R.Stot*.8, lf=Math.min(1,Math.max(.25,P/Math.max(1,kWe))); R.kWe=kWe;
+ R.cons=(.08*kWe+.22*Math.max(P,.25*kWe)); R.cons100=.08*kWe+.22*kWe; R.V=R.cons*Math.max(0,gerN(G.aut))*1.1;
+ const Vbase=Math.max((.08*kWe+.22*.75*kWe)*8/nu,2.5*R.Sg); R.Vbase=Vbase; R.tankExt=G.tanque==="ext"||(G.tanque==="auto"&&R.V/nu>Vbase); R.Vret=R.V*1.1;
+ // ventilação e escape (valores de pré-dimensionamento; confirmar com o fabricante)
+ R.Qrad=.025*kWe; R.Qcomb=.0016*kWe; R.Ain=(R.Qrad+R.Qcomb)/2.5; R.Aout=R.Qrad/3; R.Desc=Math.max(50,Math.round(12*Math.sqrt(kWe/nu)/10)*10);
+ // dimensões e sala
+ const can=G.inst!=="sala"; R.dim=gerDims(R.Sg,can);
+ const tw=R.tankExt&&G.inst==="sala"?1.4:0; R.room={L:Math.ceil((R.dim.L+2.0)*10)/10, W:Math.ceil((R.dim.W*ng+1.0*(ng+1)+tw)*10)/10, H:Math.max(3,Math.ceil((R.dim.H+1.2)*10)/10)};
+ if(R.load>1)R.warn.push("Carga acima da potência do grupo."); if(R.dip>d+1e-6)R.warn.push("A queda de tensão no arranque passa o limite.");
+ if(!(G.cargas||[]).length)R.warn.push("Indique as cargas a alimentar.");
+ if(prime&&R.load<.3)R.warn.push("Carga média abaixo de 30 %: um diesel em regime contínuo com pouca carga suja (wet stacking). Considere um grupo mais pequeno ou um banco de carga.");
+ if(ng>1)R.notes.push("Grupos em paralelo: quadro de sincronização e repartição de carga, com proteções de potência inversa (32) e de sincronismo (25).");
+ return R}
+// linhas do quadro de resultados [rótulo, valor, justificação]
+function gerRows(G,R){const s=R.st, rt=[];
+ rt.push(["Carga a alimentar",gerF(R.P)+" kW · "+gerF(R.Srun)+" kVA (cos φ "+gerF(R.pf,2)+")","Soma das cargas × quantidade × simultaneidade"]);
+ rt.push(["Pelo funcionamento",gerF(R.cRun)+" kVA","Carga ÷ "+(G.fin==="prime"||G.fin==="est"?"0,8 (PRP)":"0,9 (ESP)")]);
+ rt.push(["Pelo maior arranque",s?gerF(R.cSt)+" kVA":"(sem motores)",s?"«"+s.c.d+"»: "+gerF(s.s)+" kVA no arranque ("+s.T.n.toLowerCase()+"), queda ≤ "+gerF(gerN(G.dmax),0)+" % com x'd ≈ 0,20":""]);
+ rt.push(["Pelas cargas não lineares",R.cNl?gerF(R.cNl)+" kVA":"(sem cargas não lineares)",R.cNl?"UPS × 1,5, variadores × 1,3, eletrónica × 1,25":""]);
+ rt.push(["Correção de altitude e temperatura","× "+gerF(R.fd,3),"1 % por 100 m acima de 1000 m e 0,4 % por °C acima de 40 °C"]);
+ rt.push(["Potência necessária",gerF(R.need)+" kVA","Manda "+(R.crit==="run"?"o funcionamento":R.crit==="st"?"o arranque do maior motor":"a carga não linear")]);
+ rt.push(["Grupo escolhido",(R.ng>1?R.ng+" × ":"")+R.Sg+" kVA "+R.rating.split(" (")[0]+" · 400/230 V · 50 Hz",(R.ng>1?(R.red?"N+"+R.red+", ":"")+"total útil "+gerF(R.Sg*(R.ng-R.red),0)+" kVA · ":"")+"carga "+gerF(R.load*100,0)+" %"+(s?" · queda no arranque "+gerF(R.dip*100,1)+" %":"")]);
+ rt.push(["Corrente nominal",gerF(R.In,0)+" A","In = S ÷ (√3 × 400 V)"]);
+ rt.push(["Disjuntor do grupo",R.Idj+" A · 4P · "+R.pdc+" kA","Disparo de curto-circuito regulado baixo (≈ 2 a 3 × In): o grupo dá Icc ≈ "+gerF(R.Ik/1000,1)+" kA no início e ≈ "+gerF(R.Iks/1000,1)+" kA mantida"]);
+ rt.push(["Cabo até ao "+G.q,R.cab.desig,"Iz = "+gerF(R.cab.Iz,0)+" A ≥ "+gerF(R.IreqC,0)+" A · ΔU = "+gerF(R.cab.du,2)+" % em "+gerF(gerN(G.L),0)+" m (método E, PEX)"]);
+ rt.push(["Inversor de fontes",R.Iats+" A · 4P · "+(G.com==="auto"?"automático (ATS)":"manual"),"Corta o neutro, para separar os neutros da rede e do grupo"+(R.Iq?" · ≥ "+R.Iq+" A do aparelho geral do "+G.q:"")]);
+ rt.push(["Combustível","≈ "+gerF(R.cons,0)+" L/h à carga prevista ("+gerF(R.cons100,0)+" L/h a 100 %)","Gasóleo, ≈ 0,22 L/kWh + perdas em vazio"]);
+ rt.push(["Depósito",gerF(R.V,0)+" L para "+gerF(gerN(G.aut),0)+" h",(R.tankExt?"Depósito exterior ao grupo, com bacia de retenção ≥ "+gerF(R.Vret,0)+" L":"Cabe no depósito da base (≈ "+gerF(R.Vbase,0)+" L para 8 h a 75 %)")]);
+ rt.push(["Ar de arrefecimento",gerF(R.Qrad,1)+" m³/s · combustão "+gerF(R.Qcomb*60,1)+" m³/min","Admissão livre ≥ "+gerF(R.Ain,2)+" m² · saída do radiador ≥ "+gerF(R.Aout,2)+" m² (grelhas com ≈ 50 % de área livre: o dobro em área bruta)"]);
+ rt.push(["Escape","Ø ≈ "+R.Desc+" mm"+(R.ng>1?" por grupo":""),"Silenciador residencial, tubo isolado e com dilatador; saída acima das aberturas e longe da admissão"]);
+ rt.push(["Grupo (aprox.)",gerF(R.dim.L,1)+" × "+gerF(R.dim.W,1)+" × "+gerF(R.dim.H,1)+" m · "+gerF(R.dim.m,1)+" t",G.inst==="sala"?"Aberto, em sala":"Com canópia insonorizada"]);
+ if(G.inst==="sala")rt.push(["Sala (interior)",gerF(R.room.L,1)+" × "+gerF(R.room.W,1)+" m · pé-direito ≥ "+gerF(R.room.H,1)+" m","≥ 1 m livre à volta do grupo"+(R.tankExt?", com o depósito ao lado":"")+"; maciço antivibrático; porta para fora"]);
+ rt.push(["Terra","Neutro do grupo ligado à terra · RA ≤ "+gerF(gerN(G.RA),0)+" Ω","Massas, chassis e depósito ligados ao barramento de terra; ligação equipotencial"]);
+ return rt}
+/* ---------- janela do módulo ---------- */
+function gerOpen(){ if(!PROJ){toast("Abra ou crie um projeto primeiro.");return} const D=gerData(), G=D.G; let el=$("gerDlg");
+ if(!el){el=document.createElement("div"); el.id="gerDlg"; el.style.cssText="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center"; document.body.appendChild(el)}
+ const qs=(()=>{try{return uDoc().qs.map(q=>q.nome)}catch(e){return []}})();
+ const opt=(v,L)=>L.map(([a,b])=>`<option value="${uEsc(a)}" ${String(v)===String(a)?"selected":""}>${uEsc(b)}</option>`).join("");
+ const fld=(k,l,ty,ops,ph)=>`<label style="display:block;margin:6px 0 2px;font-size:12px;opacity:.85">${l}</label>`+(ty==="sel"?`<select data-g="${k}" style="width:100%">${opt(G[k],ops)}</select>`:ty==="chk"?`<input type="checkbox" data-g="${k}" ${G[k]?"checked":""}>`:`<input type="text" data-g="${k}" inputmode="decimal" value="${uEsc(G[k]==null?"":String(G[k]).replace(".",","))}" ${ph?`placeholder="${uEsc(ph)}"`:""} style="width:100%"${ops?` list="${ops}"`:""}>`);
+ const tops=Object.entries(GER_TIPOS).map(([k,t])=>[k,t.n]);
+ el.innerHTML=`<div style="background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:10px;width:min(1180px,96vw);height:min(860px,94vh);display:flex;flex-direction:column;overflow:hidden">
+ <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)"><b style="font-size:15px">Grupo gerador</b><span class="small" style="flex:1">Dimensionamento, esquema unifilar, planta de implantação com perspetiva e capítulo da memória descritiva</span><button id="gerX">Fechar</button></div>
+ <div style="flex:1;display:grid;grid-template-columns:minmax(300px,380px) 1fr;min-height:0">
+  <div style="overflow:auto;padding:8px 14px;border-right:1px solid var(--line)">
+   <b>Finalidade e instalação</b>
+   ${fld("fin","Finalidade","sel",Object.entries(GER_FIN))}
+   ${fld("inst","Instalação","sel",[["sala","Interior, em sala própria"],["ext","Exterior, com canópia insonorizada"],["cont","Em contentor"]])}
+   ${fld("com","Comutação rede / grupo","sel",[["auto","Automática (ATS), arranque por falta de rede"],["man","Manual"]])}
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("ng","N.º de grupos")}${fld("red","Grupos de reserva (N+1)","sel",[["0","Nenhum"],["1","1"],["2","2"]])}</div>
+   <b style="display:block;margin-top:12px">Ligação ao quadro</b>
+   ${fld("q","Quadro socorrido",null,"gerQs","ex.: QGBT")}<datalist id="gerQs">${qs.map(n=>`<option value="${uEsc(n)}">`).join("")}</datalist>
+   <label class="chk" style="display:block;margin-top:6px"><input type="checkbox" data-g="ats" ${G.ats?"checked":""}> Pôr o inversor de fontes à entrada desse quadro (no esquema unifilar)</label>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("L","Distância grupo → quadro (m)")}${fld("du","Queda de tensão máx. no cabo (%)")}</div>
+   <b style="display:block;margin-top:12px">Condições e autonomia</b>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("alt","Altitude (m)")}${fld("temp","Temperatura máx. do ar (°C)")}${fld("aut","Autonomia (h)")}${fld("dmax","Queda máx. no arranque (%)")}${fld("RA","Resistência de terra (Ω)")}${fld("tanque","Depósito","sel",[["auto","Escolher pela autonomia"],["base","Na base do grupo"],["ext","Exterior ao grupo"]])}</div>
+   <label class="chk" style="display:block;margin-top:10px"><input type="checkbox" data-g="md" ${G.md!==false?"checked":""}> Incluir o capítulo «Grupo gerador» na memória descritiva</label>
+  </div>
+  <div style="overflow:auto;padding:8px 14px">
+   <div style="display:flex;align-items:center;gap:8px"><b style="flex:1">Cargas a alimentar pelo grupo</b><button id="gerImp" title="Traz os circuitos do esquema unifilar do quadro socorrido">Importar do quadro</button><button id="gerAdd">+ Carga</button></div>
+   <table id="gerTab" style="width:100%;border-collapse:collapse;margin-top:6px;font-size:12px"></table>
+   <div class="small" style="margin:4px 0 10px">Potência elétrica absorvida de cada unidade. Ks = simultaneidade (0 a 1). Nos motores conta o arranque da maior unidade, que é o caso pior.</div>
+   <b>Dimensionamento</b><div id="gerRes" style="margin-top:6px"></div>
+   <div class="small" style="margin-top:8px;line-height:1.5">Valores de pré-dimensionamento para projeto. As dimensões, o consumo, o caudal de ar e as reactâncias variam com o fabricante: confirme com a ficha técnica do grupo escolhido antes da execução.</div>
+  </div></div>
+ <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line)">
+  <button id="gerUni">Criar o esquema unifilar</button><button id="gerPl">Criar a planta de implantação e a perspetiva</button><button id="gerAll" class="on">Criar tudo</button><span style="flex:1"></span><button id="gerCopy" title="Copia o dimensionamento como texto">Copiar o dimensionamento</button></div></div>`;
+ const tab=()=>{const T=$("gerTab"); T.innerHTML=`<tr style="text-align:left;opacity:.8"><th>Designação</th><th style="width:70px">kW</th><th style="width:190px">Tipo</th><th style="width:46px">Qt.</th><th style="width:50px">Ks</th><th style="width:26px"></th></tr>`+
+   G.cargas.map((c,i)=>`<tr><td><input data-c="${i}" data-f="d" value="${uEsc(c.d||"")}" style="width:100%"></td><td><input data-c="${i}" data-f="p" inputmode="decimal" value="${uEsc(String(c.p??"").replace(".",","))}" style="width:100%"></td><td><select data-c="${i}" data-f="t" style="width:100%">${opt(c.t,tops)}</select></td><td><input data-c="${i}" data-f="n" inputmode="numeric" value="${uEsc(String(c.n??1))}" style="width:100%"></td><td><input data-c="${i}" data-f="ks" inputmode="decimal" value="${uEsc(String(c.ks??1).replace(".",","))}" style="width:100%"></td><td><button data-cx="${i}" title="Apagar">✕</button></td></tr>`).join("");
+  T.querySelectorAll("[data-c]").forEach(x=>x.onchange=()=>{const c=G.cargas[+x.dataset.c], f=x.dataset.f; c[f]=f==="d"||f==="t"?x.value:gerN(x.value); res()});
+  T.querySelectorAll("[data-cx]").forEach(x=>x.onclick=()=>{G.cargas.splice(+x.dataset.cx,1); tab(); res()})};
+ const res=()=>{const R=gerCalc(G); D.R=R; const rows=gerRows(G,R);
+  $("gerRes").innerHTML=(R.warn.length?`<div style="color:#e8742c;margin-bottom:6px">${R.warn.map(uEsc).join("<br>")}</div>`:"")+`<table style="width:100%;border-collapse:collapse;font-size:12px">${rows.map(([a,b,c])=>`<tr style="border-top:1px solid var(--line)"><td style="padding:4px 6px 4px 0;opacity:.8;white-space:nowrap;vertical-align:top">${uEsc(a)}</td><td style="padding:4px 6px;vertical-align:top"><b>${uEsc(b)}</b>${c?`<div class="small" style="opacity:.75">${uEsc(c)}</div>`:""}</td></tr>`).join("")}</table>`+(R.notes.length?`<div class="small" style="margin-top:6px">${R.notes.map(uEsc).join("<br>")}</div>`:"");
+  try{saveLocal()}catch(e){}};
+ el.querySelectorAll("[data-g]").forEach(x=>x.onchange=()=>{const k=x.dataset.g; G[k]=x.type==="checkbox"?x.checked:["fin","inst","com","q","tanque"].includes(k)?x.value:gerN(x.value); res()});
+ $("gerX").onclick=()=>{el.remove()}; $("gerAdd").onclick=()=>{G.cargas.push({d:"",p:0,t:"misto",n:1,ks:1}); tab(); res()};
+ $("gerImp").onclick=()=>{const q=(()=>{try{return uDoc().qs.find(x=>x.nome===G.q)}catch(e){return null}})(); if(!q){toast("Não há esquema unifilar do quadro «"+G.q+"». Escreva o nome de um quadro que já tenha esquema.",5000); return}
+  const LV=uLeafPath(q).map(x=>x.leaf); if(!LV.length){toast("O esquema do «"+G.q+"» ainda não tem circuitos.");return}
+  if(G.cargas.length&&!confirm("Substituir as cargas da lista pelos "+LV.length+" circuitos do «"+G.q+"»?"))return;
+  G.cargas=LV.map((l,i)=>{const des=String(l.circ.des||"").replace(/\s*\n\s*/g," "), s=des.toLowerCase(); const t=/ilumin/.test(s)?"ilum":/ups/.test(s)?"ups":/elevad/.test(s)?"elev":/bomba|motor|ventil|uta|chiller|compress/.test(s)?"yd":/aquec|termo|forno|aqs|resist/.test(s)?"res":/inform|rack|servid|bastidor/.test(s)?"it":"misto";
+   return {d:(l.circ.ref||("C"+(i+1)))+" "+des,p:uLeafP(l)||gerN(l.circ.p),t,n:1,ks:1}}); tab(); res(); toast("Cargas importadas. Ajuste o tipo dos motores e a simultaneidade.",4000)};
+ $("gerUni").onclick=()=>{gerMakeUni(G,D.R); el.remove()}; $("gerPl").onclick=()=>{gerMakePlanta(G,D.R); el.remove()};
+ $("gerAll").onclick=()=>{const n=gerMakeUni(G,D.R,true); gerMakePlanta(G,D.R,true); el.remove(); toast("Criados o esquema «"+n+"» e a planta «Grupo gerador». "+(G.md!==false?"O capítulo entra na memória descritiva nas Peças escritas.":""),7000)};
+ $("gerCopy").onclick=()=>{const t=gerRows(G,D.R).map(r=>r[0]+": "+r[1]+(r[2]?" ("+r[2]+")":"")).join("\n"); try{navigator.clipboard.writeText(t); toast("Dimensionamento copiado.")}catch(e){toast("Não foi possível copiar.")}};
+ tab(); res()}
+/* ---------- esquema unifilar ---------- */
+function gerMakeUni(G,R,quiet){const d=uDoc(); UNI.undo.push(JSON.stringify(d)); UNI.redo=[];
+ let nome="QGG", k=2; while(d.qs.some(q=>q.nome===nome))nome="QGG"+(k++);
+ const q=uTemplate("vazio",nome); q.ph="3F"; q.local=G.inst==="sala"?"Sala do grupo gerador":"Junto ao grupo gerador"; q.orig=(R.ng>1?R.ng+" grupos geradores":"Grupo gerador")+" "+R.Sg+" kVA"; q.ks="1";
+ const reg=G.fin==="prime"||G.fin==="est"?"Prime":G.fin==="soc"?"Socorro":"Emergência";
+ const ent=()=>[{...uDev("ger","3F"),s:String(R.Sg),u:"400/230 V",reg},{...uDev("dj","3F"),In:R.Idj,curva:"C",pol:"4P",icc:String(R.pdc),tag:"Disjuntor do grupo"}];
+ q.root.devs=ent(); if(R.ng>1){q.root.par=[]; for(let i=1;i<R.ng;i++)q.root.par.push({id:uId(),devs:ent()})}
+ q.root.kids=[uLeaf([{...uDev("int","3F"),In:R.Iats,pol:"4P",fn:"is"}],{ref:"C1",des:"Alimentação do "+G.q+"\n(rede socorrida)",cabo:R.cab.desig,p:+R.P.toFixed(2),L:gerN(G.L),fase:"3F"}),
+  uLeaf([{...uDev("dj","1F"),In:16,curva:"C",pol:"1P+N",dif:true,idn:"30"}],{ref:"C2",des:"Serviços auxiliares do grupo\n(pré-aquecimento, carregador)",cabo:"XV 3G2,5",p:2,L:10,fase:"auto"})];
+ q.gen=true; q.src={tipo:"rede",icc:gerF(R.Ik*R.ng/1000,1),esq:"TN",RA:String(gerN(G.RA))};
+ q.notas=["Grupo gerador "+(R.ng>1?R.ng+" × ":"")+R.Sg+" kVA "+R.rating.split(" (")[0]+", 400/230 V, 50 Hz, com neutro ligado à terra.","Disjuntor do grupo com disparo de curto-circuito regulado para a corrente de curto-circuito do grupo.","Inversor de fontes de 4 polos, com encravamento mecânico e elétrico"+(G.com==="auto"?", comandado pelo controlador do grupo (arranque por falta de rede).":".")].join("\n");
+ d.qs.push(q);
+ if(G.ats){const tq=d.qs.find(x=>x.nome===G.q); if(tq){const i=tq.root.devs.findIndex(x=>x.t==="ats"); const a={...uDev("ats","3F"),In:R.Iats,pol:"4P",fontes:"Rede / "+nome,ctrl:G.com==="auto"?"auto":"man"}; if(i>=0)tq.root.devs[i]={...tq.root.devs[i],...a}; else tq.root.devs.unshift(a)}}
+ saveLocal(); if(!quiet){toast("Esquema «"+nome+"» criado"+(G.ats&&d.qs.some(x=>x.nome===G.q)?", com o inversor de fontes à entrada do «"+G.q+"»":"")+".",5000); openUni(nome)} return nome}
+/* ---------- planta de implantação e perspetiva ---------- */
+function gerMakePlanta(G,R,quiet){const cur=S.doc;
+ const p=newDoc(); p.id="p"+(++PROJ.pseq); p.pname="Grupo gerador · implantação"; p.unit=1; p.textH=.15; p.symScale=cur.symScale||1;
+ p.layers=cur.layers.map(l=>({...l,visible:true,locked:false})); if(!p.layers.some(l=>l.name==="Grupo gerador"))p.layers.push({name:"Grupo gerador",color:"#f59e0b",aci:7,visible:true,locked:false}); p.active="Grupo gerador";
+ const E=[], LY="Grupo gerador", id=()=>PROJ.nextId++;
+ const ln=(x1,y1,x2,y2,o)=>E.push({id:id(),t:"line",x1,y1,x2,y2,layer:LY,...(o||{})});
+ const pl=(pts,cl,o)=>E.push({id:id(),t:"pl",pts,closed:!!cl,layer:LY,...(o||{})});
+ const tx=(x,y,s,h,o)=>E.push({id:id(),t:"text",x,y,h:h||.15,s,rot:0,layer:LY,...(o||{})});
+ const rect=(x,y,w,h,o)=>pl([[x,y],[x+w,y],[x+w,y+h],[x,y+h]],true,o);
+ const dimH=(x1,x2,y,off,txt)=>{const yy=y+off; ln(x1,y,x1,yy+Math.sign(off)*.1); ln(x2,y,x2,yy+Math.sign(off)*.1); ln(x1,yy,x2,yy); [x1,x2].forEach(x=>ln(x-.07,yy-.07,x+.07,yy+.07)); tx((x1+x2)/2,yy+.08,txt||gerF(x2-x1,2),.13,{c:1})};
+ const dimV=(y1,y2,x,off,txt)=>{const xx=x+off; ln(x,y1,xx+Math.sign(off)*.1,y1); ln(x,y2,xx+Math.sign(off)*.1,y2); ln(xx,y1,xx,y2); [y1,y2].forEach(y=>ln(xx-.07,y-.07,xx+.07,y+.07)); tx(xx-.08,(y1+y2)/2,txt||gerF(y2-y1,2),.13,{c:1,rot:90})};
+ const nu=R.ng, g=R.dim, sala=G.inst==="sala"; // nu = grupos desenhados (incluindo os de reserva)
+ let Lr,Wr; if(sala){Lr=R.room.L; Wr=R.room.W} else {Lr=g.L+3; Wr=g.W*nu+1.5*(nu+1)+(R.tankExt?1.6:0)}
+ const t=.2, gx=1.0, tankW=R.tankExt&&sala?1.4:0;
+ if(sala){ // paredes com porta na parede da frente (y = 0)
+  const dw=Math.min(1.6,Math.max(1.0,Lr*.3)), d0=.6, wall=(pts)=>pl(pts,true,{lw:.5});
+  wall([[-t,-t],[d0,-t],[d0,0],[0,0],[0,Wr],[Lr,Wr],[Lr,0],[d0+dw,0],[d0+dw,-t],[Lr+t,-t],[Lr+t,Wr+t],[-t,Wr+t]]);
+  // porta de duas folhas a abrir para fora
+  const h2=dw/2; ln(d0,0,d0,-h2); ln(d0+dw,0,d0+dw,-h2); E.push({id:id(),t:"arc",x:d0,y:0,r:h2,a0:270,a1:360,layer:LY}); E.push({id:id(),t:"arc",x:d0+dw,y:0,r:h2,a0:180,a1:270,layer:LY});
+  tx(d0+dw/2,-h2-.25,"Porta corta-fogo a abrir para fora",.12,{c:1});
+  // grelhas de admissão (parede esquerda) e de saída do radiador (parede direita)
+  const ga=Math.min(Wr-.4,Math.max(.6,R.Ain*2/1.2)), go=Math.min(Wr-.4,Math.max(.6,R.Aout*2/1.2));
+  [[0,ga,"Admissão de ar"],[Lr,go,"Saída do radiador"]].forEach(([x,w,s],i)=>{const y0=(Wr-w)/2; rect(x-(i?0:t),y0,t,w,{lt:"dash"}); tx(i?Lr+t+.25:-t-.25,Wr/2,s+" ≥ "+gerF(i?R.Aout:R.Ain,2)+" m²",.11,{c:1,rot:90})});
+ } else {rect(-.5,-.5,Lr+1,Wr+1,{lt:"dashdot"}); tx(Lr/2,Wr+.75,"Zona vedada e de acesso reservado",.13,{c:1})}
+ // grupos
+ const ys=[]; for(let i=0;i<R.ng;i++)ys.push(1.0+(tankW&&sala?0:0)+i*(g.W+1.0)+(sala?0:.5));
+ ys.forEach((y,i)=>{const x=sala?gx:1.5; rect(x,y,g.L,g.W,{lw:.5}); const rl=Math.min(.6,g.L*.15); ln(x+g.L-rl,y,x+g.L-rl,y+g.W); tx(x+g.L-rl/2,y+g.W/2,"Radiador",.1,{c:1,rot:90});
+  const al=g.L*.3; ln(x+al,y,x+al,y+g.W,{lt:"hidden"}); tx(x+al/2,y+g.W/2,"Alternador",.11,{c:1}); tx(x+al+(g.L-al-rl)/2,y+g.W/2+.12,(nu>1?"G"+(i+1)+" · ":"")+R.Sg+" kVA",.16,{c:1}); tx(x+al+(g.L-al-rl)/2,y+g.W/2-.15,"Motor diesel",.11,{c:1});
+  if(!R.tankExt)rect(x+.15,y+.12,g.L-.3,g.W-.24,{lt:"hidden"});
+  // quadro de comando no lado da porta e escape
+  rect(x+al*.2,y-.12,.5,.12); tx(x+al*.2+.25,y-.3,"Comando",.1,{c:1});
+  if(sala){const ey=y+g.W*.7; ln(x+g.L*.55,ey,Lr+t+.9,ey,{lw:.4}); rect(x+g.L*.55+.2,ey-.2,Math.min(1.2,g.L*.3),.4); tx(Lr+t+1.0,ey-.05,"Escape Ø"+R.Desc,.11)}
+  // maciço
+  rect(x-.15,y-.15,g.L+.3,g.W+.3,{lt:"dash"})});
+ if(sala&&!ys.length){}
+ const lastY=ys.length?ys[ys.length-1]+g.W:1;
+ if(R.tankExt){const tl=Math.min(Math.max(1,Lr-2.2),Math.max(1.0,R.V/1000)), tw2=Math.min(1.0,Math.max(.6,R.V/1000/tl)); const tx0=sala?gx:1.5, ty0=sala?lastY+.5:lastY+.8; rect(tx0,ty0,tl,tw2,{lw:.5}); rect(tx0-.1,ty0-.1,tl+.2,tw2+.2,{lt:"dash"}); tx(tx0+tl/2,ty0+.4,"Depósito "+gerF(R.V,0)+" L",.12,{c:1}); tx(tx0+tl/2,ty0+.2,"bacia de retenção "+gerF(R.Vret,0)+" L",.09,{c:1})}
+ // cabo para o quadro e elétrodo de terra
+ const cx=(sala?gx:1.5)+g.L*.2, cy=(ys[0]||1); ln(cx,cy,cx,-t-.9,{lt:"dash",lw:.4}); tx(cx+.1,-t-1.05,"Para o "+G.q+": "+R.cab.desig,.12);
+ const ex=Lr+t+1.2, ey2=-t-.6; E.push({id:id(),t:"circle",x:ex,y:ey2,r:.15,layer:LY}); ln(ex-.25,ey2,ex+.25,ey2); ln(ex,ey2-.25,ex,ey2+.25); tx(ex+.3,ey2-.05,"Elétrodo de terra (RA ≤ "+gerF(gerN(G.RA),0)+" Ω)",.11);
+ // cotas
+ dimH(0,Lr,Wr+(sala?t:0),.7); dimV(0,Wr,0-(sala?t:0),-.9);
+ if(ys.length){const x=sala?gx:1.5; dimH(x,x+g.L,ys[0],-.45); dimH(0,x,ys[0]+g.W/2,0,gerF(x,2))}
+ tx(0,Wr+(sala?t:0)+1.4,"PLANTA DE IMPLANTAÇÃO DO GRUPO GERADOR",.22,{b:1});
+ tx(0,Wr+(sala?t:0)+1.1,(nu>1?nu+" grupos de ":"Grupo de ")+R.Sg+" kVA "+R.rating.split(" (")[0]+(sala?" · sala "+gerF(Lr,1)+" × "+gerF(Wr,1)+" m, pé-direito ≥ "+gerF(R.room.H,1)+" m":" · exterior com canópia"),.14);
+ // perspetiva isométrica (linhas escondidas retiradas)
+ gerIso(E,Lr+(sala?t:0)+4.5,0,G,R,{Lr,Wr,sala,ys,gx:sala?gx:1.5,t},{ln,tx});
+ p.ents=E; p.nextId=PROJ.nextId;
+ try{p.plot={...plDefaults(),sc:"50",tit:"Grupo gerador · implantação e perspetiva"}}catch(e){}
+ PROJ.plantas.push(p); projLink(PROJ); activatePlanta(PROJ.plantas.length-1,true); try{fit()}catch(e){}
+ if(!quiet)toast("Planta «"+p.pname+"» criada, com a perspetiva ao lado. As cotas e os textos editam-se como qualquer outro desenho.",6000)}
+// perspetiva isométrica de caixas, com remoção de linhas escondidas (o observador está à frente, à esquerda e por cima)
+function gerIso(E,ox,oy,G,R,P,api){const c30=Math.cos(Math.PI/6), s30=.5, K=.75;
+ const pr=(x,y,z)=>[ox+(x+y)*c30*K, oy+(y-x)*s30*K+z*K]; // observador à frente (y < 0), à direita (x grande) e por cima
+ const B=[]; const box=(x0,y0,z0,x1,y1,z1,o)=>B.push({x0,y0,z0,x1,y1,z1,...(o||{})});
+ const g=R.dim, nu=R.ng, H=P.sala?R.room.H:0;
+ if(P.sala){box(-P.t,-P.t,-.15,P.Lr+P.t,P.Wr+P.t,0,{nm:"laje"}); box(-P.t,P.Wr,0,P.Lr+P.t,P.Wr+P.t,H,{nm:"parede"}); box(-P.t,-P.t,0,0,P.Wr,H,{nm:"parede"})}
+ P.ys.forEach(y=>{const x=P.gx; box(x-.15,y-.15,0,x+g.L+.15,y+g.W+.15,.15); const z=.15, al=g.L*.3, rl=Math.min(.6,g.L*.15);
+  box(x,y,z,x+g.L,y+g.W,z+.25); box(x+.1,y+.1,z+.25,x+al,y+g.W-.1,z+.25+g.H*.55); box(x+al,y+.05,z+.25,x+g.L-rl,y+g.W-.05,z+.25+g.H*.7); box(x+g.L-rl,y,z+.25,x+g.L,y+g.W,z+g.H-.05);
+  box(x+al*.2,y-.12,z+.4,x+al*.2+.5,y,z+1.1); if(P.sala){const ey=y+g.W*.7, d=R.Desc/1000; box(x+g.L*.55,ey-d/2,z+g.H*.7+.25,x+g.L-Math.min(.6,g.L*.15),ey+d/2,z+g.H*.7+.25+d)}});
+ if(R.tankExt){const lastY=P.ys.length?P.ys[P.ys.length-1]+g.W:1, tl=Math.min(Math.max(1,P.Lr-2.2),Math.max(1.0,R.V/1000)), tw2=Math.min(1.0,Math.max(.6,R.V/1000/tl)); box(P.gx,lastY+.5,0,P.gx+tl,lastY+.5+tw2,1.0)}
+ // arestas visíveis: faces y = y0 (frente), x = x1 (direita) e z = z1 (topo)
+ const front=(A,Bx)=>A.x0>=Bx.x1-1e-9||A.y1<=Bx.y0+1e-9||A.z0>=Bx.z1-1e-9; // A está à frente de B?
+ const hull=b=>{const C=[[b.x0,b.y0,b.z0],[b.x1,b.y0,b.z0],[b.x1,b.y1,b.z0],[b.x0,b.y1,b.z0],[b.x0,b.y0,b.z1],[b.x1,b.y0,b.z1],[b.x1,b.y1,b.z1],[b.x0,b.y1,b.z1]].map(q=>pr(...q));
+  // invólucro convexo 2D (monotone chain)
+  const pts=C.slice().sort((a,b2)=>a[0]-b2[0]||a[1]-b2[1]), cr=(o,a,b2)=>(a[0]-o[0])*(b2[1]-o[1])-(a[1]-o[1])*(b2[0]-o[0]); const lo=[],up=[];
+  pts.forEach(p=>{while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop(); lo.push(p)}); pts.slice().reverse().forEach(p=>{while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0)up.pop(); up.push(p)});
+  return lo.slice(0,-1).concat(up.slice(0,-1))};
+ B.forEach(b=>b.h=hull(b));
+ const clip=(a,b2,poly)=>{let t0=0,t1=1; const d=[b2[0]-a[0],b2[1]-a[1]];
+  for(let i=0;i<poly.length;i++){const p=poly[i], q=poly[(i+1)%poly.length], n=[q[1]-p[1],-(q[0]-p[0])]; // normal para fora (polígono CCW)
+   const num=n[0]*(p[0]-a[0])+n[1]*(p[1]-a[1]), den=n[0]*d[0]+n[1]*d[1];
+   if(Math.abs(den)<1e-12){ if(num<1e-9)return null; continue} const tt=num/den; if(den<0){ if(tt>t0)t0=tt} else { if(tt<t1)t1=tt} if(t0>=t1-1e-9)return null}
+  return [t0,t1]};
+ B.forEach(b=>{const {x0,y0,z0,x1,y1,z1}=b, ed=[
+   [[x0,y0,z1],[x1,y0,z1]],[[x0,y0,z1],[x0,y1,z1]],[[x1,y0,z1],[x1,y1,z1]],[[x0,y1,z1],[x1,y1,z1]], // topo
+   [[x0,y0,z0],[x1,y0,z0]],[[x0,y0,z0],[x0,y0,z1]],[[x1,y0,z0],[x1,y0,z1]], // frente
+   [[x1,y0,z0],[x1,y1,z0]],[[x1,y1,z0],[x1,y1,z1]]]; // lado direito
+  const occ=B.filter(o=>o!==b&&front(o,b));
+  ed.forEach(([A,C])=>{const a=pr(...A), c=pr(...C); let vis=[[0,1]];
+   occ.forEach(o=>{const r=clip(a,c,o.h); if(!r)return; const [u0,u1]=r; if(u1-u0<1e-6)return; const nv=[]; vis.forEach(([v0,v1])=>{ if(u1<=v0||u0>=v1){nv.push([v0,v1]);return} if(u0>v0)nv.push([v0,u0]); if(u1<v1)nv.push([u1,v1])}); vis=nv});
+   vis.forEach(([v0,v1])=>{ if(v1-v0<1e-4)return; const P0=[a[0]+(c[0]-a[0])*v0,a[1]+(c[1]-a[1])*v0], P1=[a[0]+(c[0]-a[0])*v1,a[1]+(c[1]-a[1])*v1]; api.ln(P0[0],P0[1],P1[0],P1[1])})})});
+ const top=pr(0,P.Wr,H+.8); api.tx(ox,Math.max(top[1],pr(P.Lr,P.Wr,H)[1])+.9,"PERSPETIVA (sem escala)",.22,{b:1})}
+/* ---------- memória descritiva ---------- */
+function gerMD(api){const D=PROJ&&PROJ.mods&&PROJ.mods.ger; if(!D||D.G.md===false)return; const G=D.G, R=gerCalc(G), {H,H2,P,E,B,T}=api;
+ H("GRUPO GERADOR"); H2("FINALIDADE");
+ const fin={soc:"de socorro, assegurando a alimentação das cargas prioritárias em caso de falha da rede de distribuição",emg:"de emergência, alimentando os serviços de segurança da instalação",se:"de socorro e emergência, alimentando as cargas prioritárias e os serviços de segurança em caso de falha da rede",prime:"de produção principal, alimentando a instalação sem ligação à rede",est:"de alimentação do estaleiro de obra"}[G.fin];
+ P(`Será instalad${R.ng>1?"os "+R.ng+" grupos geradores":"o um grupo gerador"} a gasóleo de **${R.Sg} kVA** (${R.rating}), 400/230 V, 50 Hz, com a função ${fin}.`);
+ P(`O grupo ficará ${G.inst==="sala"?"instalado em sala própria, com as dimensões interiores mínimas de "+gerF(R.room.L,1)+" × "+gerF(R.room.W,1)+" m e pé-direito não inferior a "+gerF(R.room.H,1)+" m":G.inst==="ext"?"instalado no exterior, em canópia insonorizada e em zona vedada":"instalado em contentor insonorizado"}, conforme a planta de implantação.`); E();
+ H2("DIMENSIONAMENTO");
+ P(`As cargas a alimentar pelo grupo totalizam **${gerF(R.P)} kW** (${gerF(R.Srun)} kVA, cos φ ${gerF(R.pf,2)}), consideradas as respetivas simultaneidades.`);
+ if(R.st)P(`Foi verificado o arranque da maior carga motorizada («${R.st.c.d}», ${R.st.T.n.toLowerCase()}), com uma potência de arranque de ${gerF(R.st.s)} kVA, resultando uma queda de tensão transitória de ${gerF(R.dip*100,1)} %, inferior ao limite de ${gerF(gerN(G.dmax),0)} %.`);
+ if(R.cNl)P("Foi considerado o sobredimensionamento do alternador para as cargas não lineares (UPS e variadores de velocidade).");
+ P(`Com a correção para a altitude e a temperatura do local, a potência necessária é de ${gerF(R.need)} kVA, tendo sido escolhid${R.ng>1?"os "+R.ng+" grupos":"o o grupo"} de ${R.Sg} kVA, com uma taxa de carga de ${gerF(R.load*100,0)} %.`); E();
+ T(["Grandeza","Valor"],gerRows(G,R).map(r=>[r[0],r[1]]),[3,6]);
+ H2("PROTEÇÃO E LIGAÇÃO AO QUADRO");
+ P(`À saída do grupo será instalado um disjuntor tetrapolar de ${R.Idj} A, com poder de corte não inferior a ${R.pdc} kA e disparo de curto-circuito regulado para a corrente de curto-circuito do grupo (cerca de ${gerF(R.Iks/1000,1)} kA mantida), de modo a garantir o corte automático também quando alimentado pelo grupo.`);
+ P(`A ligação ao ${G.q} será feita em cabo ${R.cab.desig}, com uma queda de tensão de ${gerF(R.cab.du,2)} % para ${gerF(gerN(G.L),0)} m.`);
+ P(`A comutação entre a rede e o grupo será feita por inversor de fontes tetrapolar de ${R.Iats} A, com encravamento mecânico e elétrico${G.com==="auto"?", comandado pelo controlador do grupo, que arranca o grupo por falta ou anomalia da rede e repõe a rede quando esta regressar":", de comando manual"}. O corte do neutro garante a separação dos neutros das duas fontes.`);
+ if(R.ng>1)P("O funcionamento em paralelo será assegurado por quadro de sincronização e repartição de carga, com proteções de potência inversa e de sincronismo.");
+ E(); H2("LIGAÇÕES À TERRA");
+ P(`O neutro do grupo será ligado à terra (esquema TN-S do lado do grupo). As massas, o chassis, o depósito de combustível e as condutas metálicas serão ligados ao barramento de terra, ligado ao elétrodo de terra, cujo valor de resistência não deverá ser superior a ${gerF(gerN(G.RA),0)} Ω.`); E();
+ H2("COMBUSTÍVEL, VENTILAÇÃO E ESCAPE");
+ P(`A autonomia prevista é de ${gerF(gerN(G.aut),0)} h, o que corresponde a cerca de ${gerF(R.V,0)} L de gasóleo à carga prevista, ${R.tankExt?"em depósito exterior ao grupo, instalado em bacia de retenção com capacidade não inferior a "+gerF(R.Vret,0)+" L":"no depósito incorporado na base do grupo"}.`);
+ if(G.inst==="sala")P(`A sala terá admissão de ar com área livre não inferior a ${gerF(R.Ain,2)} m² e saída do ar do radiador, ligada por conduta flexível, com área livre não inferior a ${gerF(R.Aout,2)} m², dispostas de modo a varrer o grupo e a evitar a recirculação do ar quente.`);
+ P(`O escape, com diâmetro de cerca de ${R.Desc} mm, terá silenciador, tubo isolado termicamente e troço flexível, e descarregará para o exterior em local que não afete aberturas, admissões de ar ou zonas de permanência de pessoas.`); E();
+ H2("SEGURANÇA");
+ if(G.fin==="emg"||G.fin==="se")P("Por alimentar serviços de segurança, a instalação do grupo, da sala e dos circuitos de segurança cumprirá o Regulamento Técnico de Segurança contra Incêndio em Edifícios (Portaria n.º 1532/2008, na redação atual) quanto às fontes centrais de energia de emergência, ao isolamento e proteção do local e ao arranque automático, e a secção 56 das RTIEBT quanto à alimentação dos serviços de segurança.");
+ P("O grupo gerador cumprirá a secção 551 das RTIEBT (grupos geradores de baixa tensão), nomeadamente quanto à proteção contra contactos indiretos quando alimentado pelo grupo e à impossibilidade de paralelo acidental com a rede.");
+ P("A sala será de acesso reservado, com sinalização de perigo, iluminação normal e de emergência, botoneira de paragem de emergência junto à porta e extintor adequado."); E()}
+
+/*GER-END*/
 // lista de comandos: id, nome, grupo, nomes curtos (o primeiro aparece no menu), tecla, ação
 const CMDS=[
  {id:"novo",n:"Novo…",g:"Ficheiro",a:["NOVO","NEW"],k:"Ctrl+N",f:()=>newDialog()},
@@ -4719,6 +4993,7 @@ const CMDS=[
  {id:"cabo",n:"Cabo à mão",g:"Elétrico",a:["CA","CABO","K"],f:()=>setTool("cable")},
  {id:"lin2cab",n:"Linhas → cabos (transformar as linhas selecionadas em cabos, um por troço)",g:"Elétrico",a:["LC","LINHASCABO","L2C","PCABO"],f:()=>linesToCable()},
  {id:"uni",n:"Esquema unifilar…",g:"Elétrico",a:["UN","UNIFILAR"],f:()=>openUni(),sep:true},
+ {id:"modger",n:"Grupo gerador (dimensionamento, unifilar, implantação, memória)…",g:"Módulos",a:["GERADOR","GG","GRUPO"],f:()=>gerOpen()},
  {id:"legenda",n:"Simbologia no desenho",g:"Elétrico",a:["LEG","LEGENDA","SIMBOLOGIA"],f:()=>legPlace()},
  {id:"legnotas",n:"Simbologia e notas da folha…",g:"Elétrico",a:["NOTAS"],f:()=>legEditDialog()},
  {id:"tomada",n:"Tomada",g:"Elétrico",a:["TO","TOMADA"],f:()=>startSym("tom")},
@@ -4745,7 +5020,7 @@ const CMDS=[
  {id:"ajuda",n:"Comandos e atalhos…",g:"Ajuda",a:["?","AJUDA","HELP"],k:"?",f:()=>cmdHelp()},
  {id:"selhelp",n:"Como selecionar…",g:"Ajuda",a:["SELAJUDA"],f:()=>ask("Seleção como no AutoCAD",[],()=>{},'<div class="small" style="line-height:1.6"><b style="color:#3b82f6">Da esquerda para a direita (janela, azul):</b> só os objetos totalmente dentro.<br><b style="color:#22c55e">Da direita para a esquerda (cruzamento, verde tracejado):</b> tudo o que toca ou está dentro.<br>Shift ou Ctrl + clique junta ou retira um objeto. Ctrl+A seleciona tudo.<br>Num comando à espera de seleção (M, CO, RO…), Shift + janela retira; Enter, Espaço ou botão direito confirma.</div>')}
 ];
-const CMD_GROUPS=["Ficheiro","Editar","Desenho","Modificar","Elétrico","Vista","Ajuda"];
+const CMD_GROUPS=["Ficheiro","Editar","Desenho","Modificar","Elétrico","Módulos","Vista","Ajuda"];
 function cmdAvail(c){return !(c.desk&&LC_ED!=="desktop")}
 function cmdRun(c,repeat){cmdClear(); cmdLog("Comando: "+c.a[0]+"  ("+c.n.replace("…","")+")"); try{c.f()}catch(e){console.error(e); toast("Erro: "+e.message)}
  if(!["anular","refazer","cancelar","hist","ajuda","tudo","guardar","guardarc"].includes(c.id))S.lastCmd={k:"cmd",id:c.id,name:c.n.replace("…","")}; menuClose()}
