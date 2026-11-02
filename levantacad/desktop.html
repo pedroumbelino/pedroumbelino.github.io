@@ -4929,10 +4929,12 @@ function gerPlantaEnts(G,R){const Gm=gerGeom(G,R), E=[], LY="Grupo gerador", id=
  const lay={Lr,Wr,t,H:R.room.H,sala,door,vista:G.vista||"SE",tY};
  return {E,lay}}
 /* ---------- perspetiva: prismas lidos da planta, com as linhas escondidas retiradas ---------- */
-function gerPrisms(doc){const L=doc.gerLay, B=[]; if(!L)return B;
- doc.ents.forEach(e=>{const p=e.gm&&e.gm.p3; if(!p||e.t!=="pl"||!e.pts||e.pts.length<3)return; let P=e.pts.map(q=>[q[0],q[1]]);
+// modelo 3D da planta: prismas (que tapam) e linhas de pormenor (que se veem se não estiverem tapadas); peças com «tpl» são desenvolvidas pelo módulo
+function gerModel(doc,filt){const L=doc.gerLay, B=[], D=[], T=[]; if(!L)return {B,D,T};
+ doc.ents.forEach(e=>{const p=e.gm&&e.gm.p3; if(!p||e.t!=="pl"||!e.pts||e.pts.length<3)return; if(filt&&!filt(e))return; let P=e.pts.map(q=>[q[0],q[1]]);
+  if(p.tpl&&typeof ptTpl==="function"){const r=ptTpl(e,P,p); if(r){B.push(...r.B); D.push(...(r.D||[])); T.push(...(r.T||[])); return}}
   let A=0; for(let i=0;i<P.length;i++){const a=P[i], b=P[(i+1)%P.length]; A+=a[0]*b[1]-b[0]*a[1]} if(A<0)P=P.reverse(); B.push({P,z0:p.z0,z1:p.z0+p.h})});
- if(L.sala){const {Lr,Wr,t,H,door}=L, vh=gerView(L.vista).vh;
+ if(L.sala&&!filt){const {Lr,Wr,t,H,door}=L, vh=gerView(L.vista).vh;
   B.push({P:[[-t,-t],[Lr+t,-t],[Lr+t,Wr+t],[-t,Wr+t]],z0:-.15,z1:0,slab:1});
   const walls={S:[[-t,-t],[Lr+t,0]],N:[[-t,Wr],[Lr+t,Wr+t]],W:[[-t,0],[0,Wr]],E:[[Lr,0],[Lr+t,Wr]]}, nrm={S:[0,-1],N:[0,1],W:[-1,0],E:[1,0]};
   Object.entries(walls).forEach(([w,[a,b]])=>{ if(nrm[w][0]*vh[0]+nrm[w][1]*vh[1]>1e-6)return; // paredes do lado do observador ficam de fora (corte)
@@ -4940,32 +4942,49 @@ function gerPrisms(doc){const L=doc.gerLay, B=[]; if(!L)return B;
    if(door.w!==w){R2(a[0],a[1],b[0],b[1],0,H); return}
    const h=w==="S"||w==="N", d0=door.c-door.W/2, d1=door.c+door.W/2, hd=Math.min(H-.1,2.1);
    if(h){R2(a[0],a[1],d0,b[1],0,H); R2(d1,a[1],b[0],b[1],0,H); R2(d0,a[1],d1,b[1],hd,H)} else {R2(a[0],a[1],b[0],d0,0,H); R2(a[0],d1,b[0],b[1],0,H); R2(a[0],d0,b[0],d1,hd,H)}})}
- return B}
-function gerView(v){const az={SE:-45,SW:-135,NE:45,NW:135}[v||"SE"]*Math.PI/180, el=30*Math.PI/180;
+ return {B,D,T}}
+function gerPrisms(doc){return gerModel(doc).B}
+function gerView(v){ if(v==="FR")return {V:[0,-1,0],r:[1,0,0],u:[0,0,1],vh:[0,-1]};
+ const az={SE:-45,SW:-135,NE:45,NW:135}[v||"SE"]*Math.PI/180, el=30*Math.PI/180;
  const V=[Math.cos(el)*Math.cos(az),Math.cos(el)*Math.sin(az),Math.sin(el)], r=[-Math.sin(az),Math.cos(az),0], u=[-Math.sin(el)*Math.cos(az),-Math.sin(el)*Math.sin(az),Math.cos(el)];
  return {V,r,u,vh:[Math.cos(az),Math.sin(az)]}}
-function gerIsoLines(B,vista){const {V,r,u}=gerView(vista), F=[], dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2], sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]], crs=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
- const EDG=[];
+// linhas visíveis (arestas dos prismas e pormenores), com uma grelha no plano da vista para só testar as faces que podem tapar cada ponto
+function gerIsoLines(B,vista,Dl){const {V,r,u}=gerView(vista), F=[], dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2], sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]], crs=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+ const EDG=[], pr=P=>[dot(P,r),dot(P,u)];
  B.forEach((b,bi)=>{const n=b.P.length, lo=b.P.map(p=>[p[0],p[1],b.z0]), hi=b.P.map(p=>[p[0],p[1],b.z1]);
-  F.push({V:hi,bi},{V:lo.slice().reverse(),bi}); for(let i=0;i<n;i++){const j=(i+1)%n; F.push({V:[lo[i],lo[j],hi[j],hi[i]],bi})}
-  for(let i=0;i<n;i++){const j=(i+1)%n; EDG.push([lo[i],lo[j],bi],[hi[i],hi[j],bi],[lo[i],hi[i],bi])}});
- F.forEach(f=>{f.n=crs(sub(f.V[1],f.V[0]),sub(f.V[2],f.V[0])); const l=Math.hypot(...f.n)||1; f.n=f.n.map(v=>v/l); f.d=dot(f.n,f.V[0]); f.nv=dot(f.n,V)});
- const hidden=P=>{for(const f of F){ if(Math.abs(f.nv)<1e-9)continue; const t=(f.d-dot(f.n,P))/f.nv; if(t<=1e-4)continue; const Q=[P[0]+V[0]*t,P[1]+V[1]*t,P[2]+V[2]*t]; let ok=true;
+  F.push({V:hi},{V:lo.slice().reverse()}); for(let i=0;i<n;i++){const j=(i+1)%n; F.push({V:[lo[i],lo[j],hi[j],hi[i]]})}
+  // nos cilindros (smooth) só ficam as geratrizes do contorno aparente
+  const fac=i=>{const p=b.P[i], q=b.P[(i+1)%n]; return (q[1]-p[1])*V[0]-(q[0]-p[0])*V[1]>0};
+  for(let i=0;i<n;i++){const j=(i+1)%n; EDG.push([lo[i],lo[j]],[hi[i],hi[j]]); if(!b.smooth||fac((i-1+n)%n)!==fac(i))EDG.push([lo[i],hi[i]])}});
+ F.forEach(f=>{f.n=crs(sub(f.V[1],f.V[0]),sub(f.V[2],f.V[0])); const l=Math.hypot(...f.n)||1; f.n=f.n.map(v=>v/l); f.d=dot(f.n,f.V[0]); f.nv=dot(f.n,V); const q=f.V.map(pr); f.bb=[Math.min(...q.map(v=>v[0])),Math.min(...q.map(v=>v[1])),Math.max(...q.map(v=>v[0])),Math.max(...q.map(v=>v[1]))]});
+ let X0=Infinity,Y0=Infinity,X1=-Infinity,Y1=-Infinity; F.forEach(f=>{X0=Math.min(X0,f.bb[0]);Y0=Math.min(Y0,f.bb[1]);X1=Math.max(X1,f.bb[2]);Y1=Math.max(Y1,f.bb[3])});
+ const NG=48, gx=(X1-X0)/NG||1, gy=(Y1-Y0)/NG||1, GR=Array.from({length:NG*NG},()=>[]), ci=(v,a,g)=>Math.max(0,Math.min(NG-1,Math.floor((v-a)/g)));
+ F.forEach(f=>{ if(Math.abs(f.nv)<1e-9)return; for(let i=ci(f.bb[0],X0,gx);i<=ci(f.bb[2],X0,gx);i++)for(let j=ci(f.bb[1],Y0,gy);j<=ci(f.bb[3],Y0,gy);j++)GR[j*NG+i].push(f)});
+ const hidden=P=>{const q=pr(P); if(q[0]<X0||q[0]>X1||q[1]<Y0||q[1]>Y1)return false; const L=GR[ci(q[1],Y0,gy)*NG+ci(q[0],X0,gx)];
+  for(const f of L){ if(q[0]<f.bb[0]-1e-6||q[0]>f.bb[2]+1e-6||q[1]<f.bb[1]-1e-6||q[1]>f.bb[3]+1e-6)continue; const t=(f.d-dot(f.n,P))/f.nv; if(t<=1e-4)continue; const Q=[P[0]+V[0]*t,P[1]+V[1]*t,P[2]+V[2]*t]; let ok=true;
    for(let i=0;i<f.V.length;i++){const a=f.V[i], b=f.V[(i+1)%f.V.length]; if(dot(crs(sub(b,a),sub(Q,a)),f.n)<-1e-7){ok=false; break}} if(ok)return true} return false};
- const pr=P=>[dot(P,r),dot(P,u)], out=[];
- const at=(A,C,s)=>[A[0]+(C[0]-A[0])*s,A[1]+(C[1]-A[1])*s,A[2]+(C[2]-A[2])*s];
- EDG.forEach(([A,C])=>{const L=Math.hypot(...sub(C,A)); if(L<1e-6)return; const N=Math.max(6,Math.min(240,Math.ceil(L/.03))), runs=[]; let run=null;
-  for(let k=0;k<=N;k++){const s=k/N, vis=!hidden(at(A,C,s)); if(vis){ if(!run)run=[s,s]; else run[1]=s} else if(run){runs.push(run); run=null}} if(run)runs.push(run);
-  runs.forEach(([s0,s1])=>out.push({a:pr(at(A,C,s0)),b:pr(at(A,C,s1))}))});
+ const at=(A,C,s)=>[A[0]+(C[0]-A[0])*s,A[1]+(C[1]-A[1])*s,A[2]+(C[2]-A[2])*s], out=[];
+ const run=(A,C,st)=>{const L=Math.hypot(...sub(C,A)); if(L<1e-6)return; const N=Math.max(4,Math.min(240,Math.ceil(L/(st||.03)))), runs=[]; let ru=null;
+  for(let k=0;k<=N;k++){const s=k/N, vis=!hidden(at(A,C,s)); if(vis){ if(!ru)ru=[s,s]; else ru[1]=s} else if(ru){runs.push(ru); ru=null}} if(ru)runs.push(ru);
+  runs.forEach(([s0,s1])=>out.push({a:pr(at(A,C,s0)),b:pr(at(A,C,s1))}))};
+ EDG.forEach(([A,C])=>run(A,C)); (Dl||[]).forEach(([A,C])=>run(A,C,.015));
  return out.filter(o=>Math.hypot(o.a[0]-o.b[0],o.a[1]-o.b[1])>1e-4)}
 let GER_ISO_T=null;
-function gerIsoSig(doc){return JSON.stringify([gerPrisms(doc).map(b=>[b.P.map(p=>p.map(v=>+v.toFixed(3))),+b.z0.toFixed(3),+b.z1.toFixed(3)]),doc.gerLay&&doc.gerLay.vista])}
+function gerIsoSig(doc){return JSON.stringify([doc.ents.filter(e=>e.gm&&e.gm.p3&&e.pts).map(e=>[e.pts.map(p=>p.map(v=>+(+v).toFixed(3))),e.gm.p3]),doc.gerLay&&[doc.gerLay.vista,doc.gerLay.alc]])}
 function gerIsoRefresh(doc,force){doc=doc||S.doc; const L=doc&&doc.gerLay; if(!L)return false; const sig=gerIsoSig(doc); if(!force&&sig===L.sig&&doc.ents.some(e=>e.gm&&e.gm.k==="iso"))return false;
- const B=gerPrisms(doc), seg=gerIsoLines(B,L.vista); let mx=Infinity,my=Infinity,Mx=-Infinity,My=-Infinity; seg.forEach(s=>[s.a,s.b].forEach(p=>{mx=Math.min(mx,p[0]);my=Math.min(my,p[1]);Mx=Math.max(Mx,p[0]);My=Math.max(My,p[1])}));
+ const M=gerModel(doc), seg=gerIsoLines(M.B,L.vista,M.D); let mx=Infinity,my=Infinity,Mx=-Infinity,My=-Infinity; seg.forEach(s=>[s.a,s.b].forEach(p=>{mx=Math.min(mx,p[0]);my=Math.min(my,p[1]);Mx=Math.max(Mx,p[0]);My=Math.max(My,p[1])}));
  const ox=L.Lr+L.t+3.5-mx, oy=-L.t-my;
- doc.ents=doc.ents.filter(e=>!(e.gm&&e.gm.k==="iso")); const LY=L.ly||"Grupo gerador";
- seg.forEach(s=>doc.ents.push({id:PROJ.nextId++,t:"line",x1:+(s.a[0]+ox).toFixed(4),y1:+(s.a[1]+oy).toFixed(4),x2:+(s.b[0]+ox).toFixed(4),y2:+(s.b[1]+oy).toFixed(4),layer:LY,gm:{k:"iso"},locked:true}));
- if(isFinite(My))doc.ents.push({id:PROJ.nextId++,t:"text",x:L.Lr+L.t+3.5,y:My+oy+.6,h:.22,s:"PERSPETIVA (sem escala) · vista "+GER_VISTA[L.vista].toLowerCase(),rot:0,b:1,layer:LY,gm:{k:"iso"},locked:true});
+ doc.ents=doc.ents.filter(e=>!(e.gm&&e.gm.k==="iso")); const LY=L.ly||"Grupo gerador", add=o=>doc.ents.push({id:PROJ.nextId++,layer:LY,gm:{k:"iso"},locked:true,...o});
+ seg.forEach(s=>add({t:"line",x1:+(s.a[0]+ox).toFixed(4),y1:+(s.a[1]+oy).toFixed(4),x2:+(s.b[0]+ox).toFixed(4),y2:+(s.b[1]+oy).toFixed(4)}));
+ if(isFinite(My))add({t:"text",x:L.Lr+L.t+3.5,y:My+oy+.6,h:.22,s:"PERSPETIVA (sem escala) · vista "+GER_VISTA[L.vista].toLowerCase(),rot:0,b:1});
+ // alçado do equipamento visto do corredor (as mesmas peças, de frente), por baixo da planta
+ if(L.alc){const filt=e=>/^(cela|transformador)/.test(e.gm.k), A=gerModel(doc,filt), s2=gerIsoLines(A.B,"FR",A.D);
+  if(s2.length){let ax=Infinity,ay=Infinity,AX=-Infinity,AY=-Infinity; s2.forEach(s=>[s.a,s.b].forEach(p=>{ax=Math.min(ax,p[0]);ay=Math.min(ay,p[1]);AX=Math.max(AX,p[0]);AY=Math.max(AY,p[1])}));
+   const pmin=Math.min(...doc.ents.filter(e=>e.gm&&e.gm.k!=="iso").flatMap(e=>e.pts?e.pts.map(p=>p[1]):e.t==="line"?[e.y1,e.y2]:[e.y]).filter(v=>isFinite(v)));
+   const dx=0-ax, dy=pmin-1.6-AY; s2.forEach(s=>add({t:"line",x1:+(s.a[0]+dx).toFixed(4),y1:+(s.a[1]+dy).toFixed(4),x2:+(s.b[0]+dx).toFixed(4),y2:+(s.b[1]+dy).toFixed(4)}));
+   add({t:"line",x1:ax+dx-.3,y1:ay+dy,x2:AX+dx+.3,y2:ay+dy,lw:.5});
+   A.T.forEach(t=>{const p=[t.p[0],t.p[1],t.p[2]], q=[p[0],p[2]]; add({t:"text",x:+(q[0]+dx).toFixed(4),y:+(ay+dy-.28-(t.row||0)*.2).toFixed(4),h:t.h||.12,s:t.s,rot:0,c:1})});
+   add({t:"text",x:ax+dx,y:AY+dy+.45,h:.22,s:"ALÇADO DO EQUIPAMENTO (visto do corredor)",rot:0,b:1})}}
  L.sig=sig; doc.nextId=PROJ.nextId; return true}
 // depois de cada alteração na planta do módulo, a perspetiva volta a desenhar-se se o equipamento mudou
 {const _ri=rebuildIndex; rebuildIndex=function(){const r=_ri.apply(this,arguments); if(S.doc&&S.doc.gerLay&&!GER_ISO_T)GER_ISO_T=setTimeout(()=>{GER_ISO_T=null; try{if(gerIsoRefresh(S.doc)){_ri(); draw(); saveLocal()}}catch(e){console.error(e)}},0); return r}}
@@ -5080,7 +5099,8 @@ function ptCalc(G){const R={warn:[],notes:[]}, TP=PT_TIPOS[G.tipo]||PT_TIPOS.cab
  R.Iccbt=R.Inbt/(R.ucc/100); R.pdc=[10,15,25,36,50,65,70,85,100,150].find(v=>v*1000>=R.Iccbt*nT)||150;
  // cabo do transformador ao QGBT: cabos unipolares em paralelo (Iz de cabos unipolares PEX em caminho de cabos, trevo)
  const IZ1={95:328,120:382,150:441,185:506,240:599,300:693}, SEC=[95,120,150,185,240,300], L=Math.max(1,gerN(G.Lbt)||6), du=(n,s)=>Math.sqrt(3)*R.Inbt*L*(.0225/s*.8+.00008*.6)/n/400*100; let best=null;
- for(let n=1;n<=12&&!best;n++)for(const s of SEC){const Iz=n*IZ1[s]*(n===1?1:n<=3?.9:.82); if(Iz>=R.Ibt&&du(n,s)<=(gerN(G.du)||1)){best={n,s,Iz,du:du(n,s)}; break}}
+ const nF=Math.round(gerN(G.nBT)); for(let n=nF>0?nF:1;n<=(nF>0?nF:12)&&!best;n++)for(const s of SEC){const Iz=n*IZ1[s]*(n===1?1:n<=3?.9:.82); if(Iz>=R.Ibt&&du(n,s)<=(gerN(G.du)||1)){best={n,s,Iz,du:du(n,s)}; break}}
+ if(!best&&nF>0){best={n:nF,s:300,Iz:nF*693*(nF===1?1:nF<=3?.9:.82),du:du(nF,300)}; R.warn.push("Com "+nF+" cabo(s) por fase nem 300 mm² chega para "+R.Ibt+" A: aumente o número de cabos.")}
  if(!best){best={n:12,s:300,Iz:12*693*.82,du:du(12,300)}; R.warn.push("O cabo do transformador ao QGBT não chega com 12 × 300 mm² por fase: use barramento pré-fabricado (canalização blindada).")}
  const sn=best.s/2>=150?150:best.s/2>=120?120:best.s/2>=95?95:70; best.desig=(best.n>1?best.n+"x":"")+"(3x1x"+best.s+")+"+(best.n>1?best.n+"x":"")+"1x"+(G.esq==="TN"&&best.n===1?best.s:sn)+" XV"+(best.n*best.s>=1200?" ou barramento pré-fabricado":""); R.cab=best;
  // ventilação natural (perdas totais à potência nominal; ΔT ≈ 15 K): S = 0,18 P / √H (entrada), S' = 1,1 S (saída)
@@ -5114,13 +5134,75 @@ function ptRows(G,R){const TP=PT_TIPOS[G.tipo], rt=[], tr=R.tr;
  if(!TP.aereo)rt.push([TP.comp?"Compacto (aprox.)":"Posto (interior)",gerF(R.room.L,1)+" × "+gerF(R.room.W,1)+" m · pé-direito ≥ "+gerF(R.room.H,1)+" m","Corredor ≥ 1,2 m em frente às celas · porta de extração do transformador ≥ "+gerF(Math.max(1.4,tr.W+.4),1)+" m"]);
  rt.push(["Terras","Proteção ≤ "+gerF(gerN(G.RP),0)+" Ω · serviço (neutro) ≤ "+gerF(gerN(G.RS),0)+" Ω","Elétrodos separados, a ≥ "+gerF(gerN(G.dT),0)+" m (valores do projeto, confirmar no RSSPTS e com o ORD) · esquema "+(G.esq==="TN"?"TN-S":G.esq)]);
  return rt}
+/* ---------- pormenor 3D das peças (celas, transformadores, quadro): a perspetiva e o alçado saem daqui ---------- */
+// referencial da peça: origem num canto da frente, x ao longo da frente, y para dentro, z para cima (fe = aresta da frente)
+function ptFrame(P,fe){fe=fe||0; const n=P.length, a=P[fe%n], b=P[(fe+1)%n], c=P[(fe+2)%n], L=Math.hypot(b[0]-a[0],b[1]-a[1])||1, u=[(b[0]-a[0])/L,(b[1]-a[1])/L], i=[-u[1],u[0]];
+ return {o:a,u,i,w:L,d:Math.abs((c[0]-b[0])*i[0]+(c[1]-b[1])*i[1])}}
+function ptKit(F,z0){const B=[], D=[], T=[]; const W=(x,y)=>[F.o[0]+F.u[0]*x+F.i[0]*y, F.o[1]+F.u[1]*x+F.i[1]*y];
+ const box=(x0,x1,y0,y1,za,zb)=>{ if(zb-za<1e-4||x1-x0<1e-4||y1-y0<1e-4)return; B.push({P:[W(x0,y0),W(x1,y0),W(x1,y1),W(x0,y1)],z0:z0+za,z1:z0+zb})};
+ const cyl=(cx,cy,r,za,zb,ns)=>{ns=ns||12; const P=[]; for(let k=0;k<ns;k++){const a=k/ns*Math.PI*2; P.push(W(cx+r*Math.cos(a),cy+r*Math.sin(a)))} B.push({P,z0:z0+za,z1:z0+zb,smooth:ns>=10})};
+ const P3=(x,y,z)=>{const p=W(x,y); return [p[0],p[1],z0+z]};
+ // pormenores desenhados na face da frente (ligeiramente para fora, para não ficarem tapados pela própria face)
+ const fy=-.004, fl=(x1,z1,x2,z2,y)=>D.push([P3(x1,y==null?fy:y,z1),P3(x2,y==null?fy:y,z2)]);
+ const fr=(x0,z0_,x1,z1,y)=>{fl(x0,z0_,x1,z0_,y); fl(x1,z0_,x1,z1,y); fl(x1,z1,x0,z1,y); fl(x0,z1,x0,z0_,y)};
+ const fc=(cx,cz,r,y,ns)=>{ns=ns||12; for(let k=0;k<ns;k++){const a=k/ns*Math.PI*2, b=(k+1)/ns*Math.PI*2; fl(cx+r*Math.cos(a),cz+r*Math.sin(a),cx+r*Math.cos(b),cz+r*Math.sin(b),y)}};
+ const lab=(x,s,row,h)=>T.push({p:P3(x,0,0),s,row,h});
+ return {B,D,T,box,cyl,fl,fr,fc,lab,P3,W}}
+// frente de uma cela modular (tipo SM6): painel de comando com sinóptico, orifícios de manobra, indicadores, cadeados; porta do compartimento de cabos
+function ptCellFront(K,k,w,h){const {fl,fr,fc}=K, m=w/2;
+ fr(.015,.02,w-.015,1.0); fr(.015,1.04,w-.015,h-.02); fr(.04,h-.09,w-.04,h-.04); // porta de cabos, painel de comando, chapa de identificação
+ fr(w-.075,.42,w-.05,.62); fc(w-.0625,.68,.012); // puxador e fechadura da porta de cabos
+ fl(.02,.5,.035,.5); fl(.02,.54,.035,.54); // dobradiças
+ const sw=(z1,z2,brk)=>{fl(m,1.08,m,z1); fl(m,z1,m+.05,z2-.02); fl(m,z2,m,h-.12); if(brk){fl(m-.012,z1-.012,m+.012,z1+.012); fl(m-.012,z1+.012,m+.012,z1-.012)}};
+ const earth=z=>{fl(m,z,m-.06,z); fl(m-.06,z,m-.06,z-.03); fl(m-.08,z-.03,m-.04,z-.03); fl(m-.072,z-.04,m-.048,z-.04)};
+ const vpis=()=>{for(let i=0;i<3;i++)fc(w-.14+i*.035,h-.17,.009,null,8)};
+ const hole=(x,z)=>{fc(x,z,.02); fc(x,z,.009,null,8)};
+ const padlock=(x,z)=>{fr(x-.012,z-.015,x+.012,z+.005); fc(x,z+.012,.008,null,8)};
+ if(k==="im"||k==="sm"){sw(1.24,1.33); if(k==="im")earth(1.16); hole(.09,1.3); if(k==="im")hole(.09,1.16); padlock(.16,1.3); vpis(); fr(w-.13,1.2,w-.07,1.26)}
+ else if(k==="qm"){sw(1.3,1.38); fr(m-.012,1.13,m+.012,1.22); earth(1.12); hole(.09,1.32); hole(.09,1.16); padlock(.16,1.32); vpis(); fr(w-.13,1.22,w-.07,1.28);
+  fr(.06,.3,w-.11,.78); for(let i=0;i<3;i++){const x=.1+i*(w-.22)/2.6; fr(x,.4,x+.035,.68)}} // visor dos fusíveis
+ else if(k==="dm"){sw(1.26,1.36,1); hole(.09,1.32); padlock(.16,1.32); vpis(); fr(w*.52,1.12,w-.06,1.42); fr(w*.56,1.32,w-.1,1.39); for(let i=0;i<4;i++)fc(w*.58+i*.04,1.18,.008,null,8); // relé com visor e teclas
+  fc(.1,1.18,.022); fc(.17,1.18,.022); fr(.2,1.12,.3,1.24)} // botões de abrir / fechar e indicador de mola
+ else if(k==="gbc"||k==="cm"){fl(m,1.08,m,h-.12); fc(m,1.2,.03); fc(m,1.25,.03); fr(.06,.35,w-.11,.75); vpis(); if(k==="gbc"){fl(m+.08,1.08,m+.08,h-.12); fc(m+.08,1.3,.025); fc(m+.08,1.35,.025)}}
+ else if(k==="gam"){fl(m,1.08,m,h-.12); fr(.06,.35,w-.11,.75); vpis()}
+ else {fl(m,1.08,m,h-.12)}}
+function ptTpl(e,P,p3){const tp=p3.tpl||{}, F=ptFrame(P,tp.fe||0), K=ptKit(F,p3.z0), w=F.w, d=F.d, h=p3.h;
+ if(tp.t==="cela"){K.box(0,w,0,d,0,h); ptCellFront(K,tp.k,w,h); K.lab(w/2,(tp.k||"").toUpperCase(),0,.11); if(tp.n)K.lab(w/2,String(tp.n),1,.1); return K}
+ if(tp.t==="rede"){const post=.04; K.box(0,post,0,d,0,h); K.box(w-post,w,0,d,0,h); K.box(post,w-post,0,d,h-.03,h); K.box(post,w-post,0,d,.08,.11); // rede de proteção: só a moldura tapa
+  for(let x=post+.08;x<w-post;x+=.08)K.fl(x,.11,x,h-.03,-.002); for(let z=.19;z<h-.03;z+=.08)K.fl(post,z,w-post,z,-.002); return K}
+ if(tp.t==="cxbt"){K.box(0,w,0,d,0,h); K.fr(.02,.02,w-.02,h-.02); K.fr(w-.06,h*.35,w-.04,h*.65); K.fr(.06,.08,w*.6,h-.08); return K} // caixa de baixa tensão (relés, contagem)
+ if(tp.t==="qg"){K.box(0,w,0,d,0,h); const nc=Math.max(1,Math.round(w/.6)), cw=w/nc; for(let i=0;i<nc;i++){const x=i*cw; K.fr(x+.01,.1,x+cw-.01,h-.05); K.fr(x+cw-.06,h*.45,x+cw-.04,h*.55); K.fc(x+cw-.05,h*.6,.01,null,8); if(i===0)K.fr(x+.08,h*.55,x+cw-.12,h*.75)} K.box(0,w,-.02,d,0,.1); K.lab(w/2,tp.n||"QGBT",0,.12); return K}
+ if(tp.t==="tr"){const L=w, Wd=d, H=h, n=Math.max(1,tp.nbt||1), nm=Math.max(1,tp.nmt||1), cab=(x,y,za,zb)=>K.cyl(x,y,.014,za,zb,6);
+  if(tp.iso==="seco"){
+   K.box(0,L,.04,.16,0,.14); K.box(0,L,Wd-.16,Wd-.04,0,.14); [.08,L-.08].forEach(x=>[.1,Wd-.1].forEach(y=>K.cyl(x,y,.05,0,.1,8))); // carro com rodas
+   K.box(.06,L-.06,Wd/2-.11,Wd/2+.11,.14,.36); K.box(.06,L-.06,Wd/2-.11,Wd/2+.11,H-.3,H-.08); // culatras do núcleo
+   const rc=Math.min((L-.12)/6.2,Wd/2-.04), xc=[.06+rc*1.03,L/2,L-.06-rc*1.03];
+   xc.forEach(x=>{K.cyl(x,Wd/2,rc,.38,H-.32,20); K.cyl(x,Wd/2,rc*.62,H-.32,H-.3,12)}); // bobinas de resina
+   K.box(.03,L-.03,Wd/2-.17,Wd/2-.12,H-.34,H-.04); K.box(.03,L-.03,Wd/2+.12,Wd/2+.17,H-.34,H-.04); // prensas
+   const yf=Wd/2-rc-.05; K.box(xc[0]-.012,xc[2]+.012,yf,yf+.02,H*.66,H*.68); xc.forEach(x=>K.box(x-.012,x+.012,yf,yf+.02,H*.42,H*.7)); // ligações do triângulo MT
+   xc.forEach(x=>{K.cyl(x,Wd/2-rc*.55,.03,H-.08,H+.02,8); for(let j=0;j<nm;j++)K.cyl(x+(j-(nm-1)/2)*.05,Wd/2-rc*.55,.02,H+.02,H+.55,6)}); // bornes e cabos MT
+   for(let i=0;i<4;i++){const x=L*(.2+.6*i/3), y=Wd/2+rc*.55; K.box(x-.025,x+.025,y,y+.012,H-.32,H+.15); for(let j=0;j<n;j++)cab(x+(j-(n-1)/2)*.032,y+.03,H+.15,H+.6)} // barras e cabos BT
+   K.lab(L/2,"Transformador seco "+(tp.s||"")+" kVA",0,.12)}
+  else {const Ht=H*.8;
+   K.box(0,L,.05,Wd-.05,0,.12); [.1,L-.1].forEach(x=>[.12,Wd-.12].forEach(y=>K.cyl(x,y,.05,0,.1,8)));
+   K.box(.08,L-.08,.22,Wd-.22,.12,Ht); // cuba
+   for(let x=.14;x<=L-.16;x+=.075){K.box(x,x+.012,.02,.22,.2,Ht-.06); K.box(x,x+.012,Wd-.22,Wd-.02,.2,Ht-.06)} // alhetas
+   K.box(.04,L-.04,.18,Wd-.18,Ht,Ht+.03); // tampa
+   for(let i=0;i<4;i++){const x=L*(.22+.56*i/3), y=.36; K.cyl(x,y,.03,Ht+.03,Ht+.2,10); K.box(x-.035,x+.035,y-.012,y+.012,Ht+.2,Ht+.26); for(let j=0;j<n;j++)cab(x+(j-(n-1)/2)*.03,y-.035,Ht+.26,Ht+.7)} // travessias e cabos BT (N, L1, L2, L3)
+   for(let i=0;i<3;i++){const x=L*(.3+.2*i), y=Wd-.36; K.cyl(x,y,.04,Ht+.03,Ht+.42,10); [.12,.2,.28].forEach(z=>K.cyl(x,y,.065,Ht+z,Ht+z+.025,10)); for(let j=0;j<nm;j++)K.cyl(x+(j-(nm-1)/2)*.05,y,.022,Ht+.42,Ht+.8,6)} // travessias e cabos MT
+   K.box(L-.25,L-.12,.22,.3,Ht*.6,Ht*.75); // termómetro / relé de proteção integral
+   K.lab(L/2,"Transformador "+(tp.s||"")+" kVA em óleo",0,.12)}
+  K.lab(L/2,n+" cabo"+(n>1?"s":"")+" BT por fase"+(nm>1?" · "+nm+" MT":""),1,.1); return K}
+ return null}
+// vista de cima do pormenor (para a planta): contornos das peças pequenas
+function ptTopLines(e,P,p3){const r=ptTpl(e,P,p3); if(!r)return []; const out=[]; r.B.slice(1).forEach(b=>{ if(b.z1-b.z0<.02)return; const n=b.P.length; for(let i=0;i<n;i++){const a=b.P[i], c=b.P[(i+1)%n]; out.push([a,c])}}); return out}
 /* ---------- janela ---------- */
 function ptOpen(){ if(!PROJ){toast("Abra ou crie um projeto primeiro.");return} const D=ptData(), G=D.G; let el=$("ptDlg");
  if(!el){el=document.createElement("div"); el.id="ptDlg"; el.style.cssText="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center"; document.body.appendChild(el)}
  const qs=(()=>{try{return uDoc().qs.map(q=>q.nome)}catch(e){return []}})();
  const opt=(v,L)=>L.map(([a,b])=>`<option value="${uEsc(a)}" ${String(v)===String(a)?"selected":""}>${uEsc(b)}</option>`).join("");
  const fld=(k,l,ty,ops,ph)=>`<label style="display:block;margin:6px 0 2px;font-size:12px;opacity:.85">${l}</label>`+(ty==="sel"?`<select data-g="${k}" style="width:100%">${opt(G[k],ops)}</select>`:`<input type="text" data-g="${k}" inputmode="decimal" value="${uEsc(G[k]==null?"":String(G[k]).replace(".",","))}" ${ph?`placeholder="${uEsc(ph)}"`:""} style="width:100%"${ops?` list="${ops}"`:""}>`);
- const STR=["tipo","serv","Umt","alim","iso","q","esq","porta","gin","gout","vista"], OPT=["Sp","ucc","pPos","pW","Lr","Wr"];
+ const STR=["tipo","serv","Umt","alim","iso","q","esq","porta","gin","gout","vista"], OPT=["Sp","ucc","pPos","pW","Lr","Wr","nBT","nMT"];
  const draw2=()=>{const aer=PT_TIPOS[G.tipo].aereo;
  el.innerHTML=`<div style="background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:10px;width:min(1200px,96vw);height:min(880px,94vh);display:flex;flex-direction:column;overflow:hidden">
  <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)"><b style="font-size:15px">Posto de transformação</b><span class="small" style="flex:1">Tipo de PT, celas, transformador, proteções, ventilação e terras · esquema unifilar, implantação com perspetiva e memória descritiva</span><button id="ptX">Fechar</button></div>
@@ -5137,7 +5219,7 @@ function ptOpen(){ if(!PROJ){toast("Abra ou crie um projeto primeiro.");return} 
    <b style="display:block;margin-top:12px">Baixa tensão</b>
    ${fld("q","Quadro geral alimentado",null,"ptQs","ex.: QGBT")}<datalist id="ptQs">${qs.map(n=>`<option value="${uEsc(n)}">`).join("")}</datalist>
    ${aer?"":`<label class="chk" style="display:block;margin-top:6px"><input type="checkbox" data-g="qgIn" ${G.qgIn?"checked":""}> O ${uEsc(G.q)} fica dentro do PT</label>`}
-   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("Lbt","Distância transformador → quadro (m)")}${fld("du","ΔU máx. nesse cabo (%)")}${fld("esq","Esquema de terra BT","sel",[["TN","TN-S"],["TT","TT"]])}</div>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("Lbt","Distância transformador → quadro (m)")}${fld("du","ΔU máx. nesse cabo (%)")}${fld("nBT","Cabos BT por fase (cada transformador)",null,null,"automático")}${fld("nMT","Cabos MT por fase",null,null,"1")}${fld("esq","Esquema de terra BT","sel",[["TN","TN-S"],["TT","TT"]])}</div>
    <b style="display:block;margin-top:12px">Terras</b>
    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("RP","Proteção (Ω)")}${fld("RS","Serviço / neutro (Ω)")}${fld("dT","Distância entre elétrodos (m)")}</div>
    ${aer?"":`<b style="display:block;margin-top:12px">Implantação</b>
@@ -5198,12 +5280,13 @@ function ptPlantaEnts(G,R){const E=[], LY="Posto de transformação", id=()=>PRO
  const ln=(x1,y1,x2,y2,o)=>E.push({id:id(),t:"line",x1,y1,x2,y2,layer:LY,...(o||{}),...gm("fixo")});
  const pl=(pts,cl,o,m)=>E.push({id:id(),t:"pl",pts:pts.map(p=>[+p[0].toFixed(4),+p[1].toFixed(4)]),closed:!!cl,layer:LY,...(o||{}),...(m&&m.gm?m:gm("fixo"))});
  const tx=(x,y,s,h,o,m)=>E.push({id:id(),t:"text",x,y,h:h||.15,s,rot:0,layer:LY,...(o||{}),...(m&&m.gm?m:gm("fixo"))});
- const box=(g,k,x0,y0,x1,y1,z0,h,o)=>pl([[x0,y0],[x1,y0],[x1,y1],[x0,y1]],true,o||{},{gm:{k,g,p3:{z0:+z0.toFixed(3),h:+h.toFixed(3)}}});
+ const box=(g,k,x0,y0,x1,y1,z0,h,o,tp)=>pl([[x0,y0],[x1,y0],[x1,y1],[x0,y1]],true,o||{},{gm:{k,g,p3:{z0:+z0.toFixed(3),h:+h.toFixed(3),...(tp?{tpl:tp}:{})}}});
+ const top=(g)=>{const e=E[E.length-1]; ptTopLines(e,e.pts,e.gm.p3).forEach(([a,b])=>E.push({id:id(),t:"line",x1:+a[0].toFixed(4),y1:+a[1].toFixed(4),x2:+b[0].toFixed(4),y2:+b[1].toFixed(4),layer:LY,lw:.25,gm:{k:"txt",g}}))};
  const dimH=(x1,x2,y,off,txt)=>{const yy=y+off, sg=Math.sign(off)||1; ln(x1,y,x1,yy+sg*.1); ln(x2,y,x2,yy+sg*.1); ln(x1,yy,x2,yy); [x1,x2].forEach(x=>ln(x-.07,yy-.07,x+.07,yy+.07)); tx((x1+x2)/2,yy+.08,txt||gerF(x2-x1,2),.13,{c:1})};
  const dimV=(y1,y2,x,off,txt)=>{const xx=x+off, sg=Math.sign(off)||1; ln(x,y1,xx+sg*.1,y1); ln(x,y2,xx+sg*.1,y2); ln(xx,y1,xx,y2); [y1,y2].forEach(y=>ln(xx-.07,y-.07,xx+.07,y+.07)); tx(xx-.08,(y1+y2)/2,txt||gerF(y2-y1,2),.13,{c:1,rot:90})};
  const earth=(x,y,s)=>{E.push({id:id(),t:"circle",x,y,r:.15,layer:LY,...gm("fixo")}); ln(x-.25,y,x+.25,y); ln(x,y-.25,x,y+.25); tx(x+.3,y-.05,s,.11)};
  if(TP.aereo){ // poste: transformador suspenso, armário BT na base, terras
-  box("POSTE","poste",-.2,-.2,.2,.2,0,12); box("T1","transformador",-tr.L/2,.25,tr.L/2,.25+tr.W,5.0,tr.H); box("T1","consola",-.6,.15,.6,.3,4.85,.15);
+  box("POSTE","poste",-.2,-.2,.2,.2,0,12); box("T1","transformador",-tr.L/2,.25,tr.L/2,.25+tr.W,5.0,tr.H,null,{t:"tr",iso:"oleo",nbt:R.cab.n,nmt:1,s:R.St}); top("T1"); box("T1","consola",-.6,.15,.6,.3,4.85,.15);
   box("QG","armário BT",-.45,-.9,.45,-.5,0,1.6); tx(0,-1.15,"Armário BT: disjuntor "+R.Ibt+" A",.12,{c:1});
   tx(.4,.25+tr.W/2,"T1 · "+R.St+" kVA (a 5 m do solo)",.13,{},{gm:{k:"txt",g:"T1"}}); tx(.3,0,"Poste",.12);
   tx(-3.5,1.6,"Seccionador aéreo, fusíveis de expulsão "+R.Fus+" A e descarregadores de sobretensões MT no topo do poste",.12);
@@ -5220,19 +5303,19 @@ function ptPlantaEnts(G,R){const E=[], LY="Posto de transformação", id=()=>PRO
   lv.forEach(([p,r,s])=>{const dir=[along[0]*s,along[1]*s]; ln(p[0],p[1],p[0]+n[0]*r,p[1]+n[1]*r); let A0=ang(dir), A1=ang(n); if(((A1-A0)%360+360)%360>180)[A0,A1]=[A1,A0]; E.push({id:id(),t:"arc",x:p[0],y:p[1],r,a0:A0,a1:A1,layer:LY,...gm("fixo")})});
   const pc=onWall(door.w,door.c,t+door.W/(door.f===1?1:2)+.3); tx(pc[0],pc[1],"Porta metálica, abre para fora, com sinalização de perigo",.12,{c:1,rot:door.w==="W"||door.w==="E"?90:0})}
  // celas encostadas à parede do fundo, a partir da esquerda
- let x=.3; const yb=Wr-.94-.05; R.celas.forEach((c,i)=>{const w=(PT_CELAS[c.k]||{}).w||0; if(!w)return; box("CEL","cela "+c.k,x,yb,x+w,yb+.94,0,1.6); tx(x+w/2,yb+.62,c.k.toUpperCase(),.12,{c:1},{gm:{k:"txt",g:"CEL"}}); tx(x+w/2,yb+.38,String(i+1),.1,{c:1},{gm:{k:"txt",g:"CEL"}}); x+=w});
+ let x=.3; const yb=Wr-.94-.05; R.celas.forEach((c,i)=>{const w=(PT_CELAS[c.k]||{}).w||0; if(!w)return; box("CEL","cela "+c.k,x,yb,x+w,yb+.94,0,1.6,null,{t:"cela",k:c.k,n:i+1}); if(c.k==="dm"||c.k==="gbc")box("CEL","cela cxbt",x,yb,x+w,yb+.5,1.6,.45,{lt:"hidden"},{t:"cxbt"}); tx(x+w/2,yb+.62,c.k.toUpperCase(),.12,{c:1},{gm:{k:"txt",g:"CEL"}}); tx(x+w/2,yb+.38,String(i+1),.1,{c:1},{gm:{k:"txt",g:"CEL"}}); x+=w});
  tx(.3,yb-.25,"Celas MT "+(R.U<=17.5?"24":"36")+" kV",.12); tx(RM.A/2,yb-.75,"Corredor ≥ 1,2 m",.1,{c:1});
  // transformadores, cada um na sua cela com rede de proteção à frente
  for(let i=0;i<nT;i++){const x0=RM.A+i*RM.ct, x1=x0+RM.ct, y1=Wr, y0=Wr-RM.cd, cx=(x0+x1)/2, cy=y0+RM.cd/2+.15, g2="T"+(i+1);
   if(i>0)box("MUR"+i,"muro",x0-.05,y0,x0+.05,y1,0,2.2);
-  box(g2,"transformador",cx-tr.L/2,cy-tr.W/2,cx+tr.L/2,cy+tr.W/2,R.oil?.1:0,tr.H*.78); box(g2,"tampa",cx-tr.L*.35,cy-tr.W*.3,cx+tr.L*.35,cy+tr.W*.3,(R.oil?.1:0)+tr.H*.78,tr.H*.22);
-  box("RD"+i,"rede de proteção",x0+.1,y0-.03,x1-.1,y0+.03,0,2.0,{lt:"dash"});
+  box(g2,"transformador",cx-tr.L/2,cy-tr.W/2,cx+tr.L/2,cy+tr.W/2,R.oil?.1:0,tr.H,null,{t:"tr",iso:R.iso,nbt:R.cab.n,nmt:Math.max(1,Math.round(gerN(G.nMT)||1)),s:R.St}); top(g2);
+  box("RD"+i,"rede de proteção",x0+.1,y0-.03,x1-.1,y0+.03,0,2.0,{lt:"dash"},{t:"rede"});
   if(R.oil)pl([[cx-tr.L/2-.15,cy-tr.W/2-.15],[cx+tr.L/2+.15,cy-tr.W/2-.15],[cx+tr.L/2+.15,cy+tr.W/2+.15],[cx-tr.L/2-.15,cy+tr.W/2+.15]],true,{lt:"hidden"});
-  tx(cx,cy+.05,g2+" · "+R.St+" kVA",.15,{c:1},{gm:{k:"txt",g:g2}}); tx(cx,cy-tr.W/2-.3,R.oil?"Fossa ≥ "+R.fossa+" L":"Seco",.1,{c:1},{gm:{k:"txt",g:g2}})}
+  tx(cx,cy-tr.W/2-.32,g2+" · "+R.St+" kVA · "+(R.oil?"fossa ≥ "+R.fossa+" L":"seco"),.13,{c:1},{gm:{k:"txt",g:g2}})}
  // QGBT junto à parede da frente
- if(G.qgIn){const qx=.3, qy=.05; box("QG","qgbt",qx,qy,qx+RM.qgw,qy+RM.qd,0,2.0); tx(qx+RM.qgw/2,qy+RM.qd/2,G.q,.15,{c:1},{gm:{k:"txt",g:"QG"}});
-  ln(RM.A+RM.ct/2,Wr-RM.cd+.2,RM.A+RM.ct/2,qy+RM.qd+.3,{lt:"dash",lw:.4}); ln(RM.A+RM.ct/2,qy+RM.qd+.3,qx+RM.qgw,qy+RM.qd+.3,{lt:"dash",lw:.4}); tx(RM.A+RM.ct/2+.12,(qy+RM.qd+.3+Wr-RM.cd+.2)/2,R.cab.desig,.1,{c:1,rot:90})}
- else {const c1=onWall(pw==="W"?"E":"W",Wr/2,t+1.2); ln(RM.A+RM.ct/2,Wr-RM.cd+.2,RM.A+RM.ct/2,Wr/2,{lt:"dash",lw:.4}); ln(RM.A+RM.ct/2,Wr/2,c1[0],c1[1],{lt:"dash",lw:.4}); tx(c1[0],c1[1]-.2,"Para o "+G.q+": "+R.cab.desig,.12,{c:1})}
+ if(G.qgIn){const qx=.3, qy=.05; box("QG","qgbt",qx,qy,qx+RM.qgw,qy+RM.qd,0,2.0,null,{t:"qg",fe:2,n:G.q}); tx(qx+RM.qgw/2,qy+RM.qd/2,G.q,.15,{c:1},{gm:{k:"txt",g:"QG"}});
+  ln(RM.A+RM.ct*.2,Wr-RM.cd+.2,RM.A+RM.ct*.2,qy+RM.qd+.3,{lt:"dash",lw:.4}); ln(RM.A+RM.ct*.2,qy+RM.qd+.3,qx+RM.qgw,qy+RM.qd+.3,{lt:"dash",lw:.4}); tx(RM.A+RM.ct*.2-.12,(qy+RM.qd+.3+Wr-RM.cd+.2)/2,R.cab.desig,.1,{c:1,rot:90})}
+ else {const c1=onWall(pw==="W"?"E":"W",Wr/2,t+1.2); ln(RM.A+RM.ct*.2,Wr-RM.cd+.2,RM.A+RM.ct*.2,Wr/2,{lt:"dash",lw:.4}); ln(RM.A+RM.ct*.2,Wr/2,c1[0],c1[1],{lt:"dash",lw:.4}); tx(c1[0],c1[1]-.2,"Para o "+G.q+": "+R.cab.desig,.12,{c:1})}
  // chegada MT
  {const e0=[.3+((PT_CELAS[(R.celas[0]||{}).k]||{}).w||.375)/2,Wr+t+1.2]; ln(e0[0],e0[1],e0[0],yb+.47,{lt:"dashdot",lw:.4}); tx(e0[0]+.1,e0[1]+.05,"Chegada MT "+gerF(R.U,0)+" kV"+(G.alim==="anel"?" (anel: entrada e saída)":""),.12)}
  // grelhas
@@ -5243,7 +5326,7 @@ function ptPlantaEnts(G,R){const E=[], LY="Posto de transformação", id=()=>PRO
  dimH(0,Lr,Wr+t,.6); dimV(0,Wr,-t,-.9);
  tx(0,Wr+t+1.9,"PLANTA DE IMPLANTAÇÃO DO POSTO DE TRANSFORMAÇÃO",.22,{b:1});
  tx(0,Wr+t+1.6,TP.n+" · "+(nT>1?nT+" × ":"")+R.St+" kVA · "+gerF(Lr,1)+" × "+gerF(Wr,1)+" m",.14);
- return {E,lay:{Lr,Wr,t,H,sala:true,door,vista:G.vista||"SE",ly:LY}}}
+ return {E,lay:{Lr,Wr,t,H,sala:true,door,vista:G.vista||"SE",ly:LY,alc:true}}}
 function ptMakePlanta(G,R,quiet){const cur=S.doc; let idx=PROJ.plantas.findIndex(p=>p.ptMod);
  if(idx>=0){const p=PROJ.plantas[idx]; if(p.gerLay&&p.gerLay.psig&&gerPlanSig(p)!==p.gerLay.psig&&!confirm("Na planta «"+p.pname+"» os objetos do PT foram mexidos à mão. «Atualizar» volta a pô-los nas posições calculadas (os objetos que desenhou à parte ficam). Continuar?"))return false;
   activatePlanta(idx,true); pushUndo(); const {E,lay}=ptPlantaEnts(G,R); p.ents=p.ents.filter(e=>!e.gm).concat(E); p.gerLay=lay; gerIsoRefresh(p,true); p.gerLay.psig=gerPlanSig(p); rebuildIndex(); refreshUI&&refreshUI(); draw(); saveLocal();
