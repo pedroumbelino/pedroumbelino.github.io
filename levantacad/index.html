@@ -5883,6 +5883,45 @@ function vfOpen(){ if(!PROJ){toast("Abra ou crie um projeto primeiro.");return} 
  let b=$("vfBack"); if(!b){b=document.createElement("button"); b.id="vfBack"; b.textContent="← Voltar à verificação"; b.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:110px;z-index:90;display:none"; b.className="on"; document.body.appendChild(b); b.onclick=()=>{b.style.display="none"; vfOpen()}} b.style.display="none"}
 
 /*VF-END*/
+/*DS-BEGIN*/
+/* ================= Distribuir símbolos: em grelha num espaço / contorno fechado, ou ao longo de um caminho ================= */
+// Seleção: um símbolo (o modelo) + um espaço, polilinha fechada, círculo, linha, polilinha aberta ou cabo.
+function dsPath(e){ if(!e)return null;
+ if(e.t==="pl"&&e.pts&&e.pts.length>=2)return {P:e.pts.map(p=>[p[0],p[1]]),closed:!!(e.closed||e.esp)};
+ if(e.t==="cable"&&e.pts&&e.pts.length>=2)return {P:e.pts.map(p=>[p[0],p[1]]),closed:false};
+ if(e.t==="line")return {P:[[e.x1,e.y1],[e.x2,e.y2]],closed:false};
+ if(e.t==="circle"){const P=[]; for(let k=0;k<48;k++){const a=k/48*Math.PI*2; P.push([e.x+e.r*Math.cos(a),e.y+e.r*Math.sin(a)])} return {P,closed:true}}
+ return null}
+function dsOpen(){const sel=[...S.sel], sy=sel.filter(e=>e.t==="sym"), pa=sel.filter(e=>e.t!=="sym"&&dsPath(e));
+ if(sy.length!==1||pa.length!==1){toast("Selecione um símbolo (o modelo) e um espaço, contorno fechado, linha, polilinha ou cabo. O símbolo é copiado para dentro do contorno, em grelha, ou ao longo da linha.",8000); return}
+ const T=sy[0], src=pa[0], G=dsPath(src), u=U(), nm=(SYM[T.sym]&&SYM[T.sym].n)||T.sym;
+ if(G.closed){let P=G.P, li=0, lm=0; for(let i=0;i<P.length;i++){const a=P[i], b=P[(i+1)%P.length], l=Math.hypot(b[0]-a[0],b[1]-a[1]); if(l>lm){lm=l; li=i}}
+  const a=P[li], b=P[(li+1)%P.length], ang=Math.atan2(b[1]-a[1],b[0]-a[0]), c=Math.cos(ang), s=Math.sin(ang), loc=p=>[p[0]*c+p[1]*s,-p[0]*s+p[1]*c], wld=q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c];
+  const Q=P.map(loc), x0=Math.min(...Q.map(q=>q[0])), x1=Math.max(...Q.map(q=>q[0])), y0=Math.min(...Q.map(q=>q[1])), y1=Math.max(...Q.map(q=>q[1])), Lx=(x1-x0)/u, Ly=(y1-y0)/u;
+  const sug=d=>Math.max(1,Math.round(d/2.5));
+  ask("Distribuir «"+uEsc(nm)+"» em grelha",[{k:"nx",l:"Colunas (ao longo de "+gerF(Lx,2)+" m)",v:sug(Lx)},{k:"ny",l:"Linhas (ao longo de "+gerF(Ly,2)+" m)",v:sug(Ly)},
+   {k:"md",l:"Afastamento às paredes",type:"select",v:"meio",opts:[["meio","Metade do espaçamento (distribuição uniforme)"],["fixo","Valor fixo (abaixo)"]]},{k:"mg",l:"Afastamento fixo (m)",v:"0,5"},
+   {k:"rot",l:"Rodar os símbolos com o espaço",type:"check",v:true},{k:"del",l:"Apagar o símbolo modelo",type:"check",v:true}],o=>{
+   const nx=Math.max(1,Math.min(60,Math.round(gerN(o.nx)))), ny=Math.max(1,Math.min(60,Math.round(gerN(o.ny)))), mg=gerN(o.mg)*u, out=[];
+   for(let i=0;i<nx;i++)for(let j=0;j<ny;j++){let X,Y; if(o.md==="fixo"){X=nx>1?x0+mg+(x1-x0-2*mg)*i/(nx-1):(x0+x1)/2; Y=ny>1?y0+mg+(y1-y0-2*mg)*j/(ny-1):(y0+y1)/2} else {X=x0+(i+.5)*(x1-x0)/nx; Y=y0+(j+.5)*(y1-y0)/ny}
+    const w=wld([X,Y]); if(inPolyW(w[0],w[1],P))out.push({p:w,r:o.rot?ang*180/Math.PI:null})}
+   dsPlace(T,out,o.del,"grelha "+nx+" × "+ny+" · espaçamento "+gerF((x1-x0)/u/nx,2)+" × "+gerF((y1-y0)/u/ny,2)+" m")}); return}
+ // ao longo de um caminho aberto
+ const P=G.P, seg=[]; let tot=0; for(let i=0;i<P.length-1;i++){const l=Math.hypot(P[i+1][0]-P[i][0],P[i+1][1]-P[i][1]); seg.push({a:P[i],b:P[i+1],l,s0:tot}); tot+=l} const Lm=tot/u;
+ ask("Distribuir «"+uEsc(nm)+"» ao longo do caminho ("+gerF(Lm,2)+" m)",[{k:"md",l:"Como",type:"select",v:"esp",opts:[["esp","Espaçamento fixo"],["n","Número de símbolos"]]},
+  {k:"d",l:"Espaçamento (m) ou número",v:Lm>12?"3":"1,5"},{k:"s0",l:"Distância do primeiro ao início (m)",v:"0,5"},{k:"fim",l:"Incluir um no fim do caminho",type:"check",v:false},
+  {k:"off",l:"Afastamento lateral (m; + à esquerda do sentido do traçado)",v:"0"},{k:"rot",l:"Rodar os símbolos com o caminho",type:"check",v:true},{k:"del",l:"Apagar o símbolo modelo",type:"check",v:true}],o=>{
+  const s0=Math.max(0,gerN(o.s0))*u, off=gerN(o.off)*u, pos=[];
+  if(o.md==="n"){const n=Math.max(1,Math.min(200,Math.round(gerN(o.d)))), e0=s0, e1=o.fim?tot:tot-s0; for(let k=0;k<n;k++)pos.push(n===1?(e0+e1)/2:e0+(e1-e0)*k/(n-1))}
+  else {const d=Math.max(.1,gerN(o.d))*u; for(let s=s0;s<=tot+1e-9&&pos.length<500;s+=d)pos.push(s); if(o.fim&&tot-pos[pos.length-1]>d*.25)pos.push(tot)}
+  const at=s=>{const g=seg.find(g=>s<=g.s0+g.l+1e-9)||seg[seg.length-1], t=g.l?(s-g.s0)/g.l:0, dx=(g.b[0]-g.a[0])/(g.l||1), dy=(g.b[1]-g.a[1])/(g.l||1); return {p:[g.a[0]+(g.b[0]-g.a[0])*t-dy*off,g.a[1]+(g.b[1]-g.a[1])*t+dx*off],r:o.rot?Math.atan2(dy,dx)*180/Math.PI:null}};
+  dsPlace(T,pos.map(at),o.del,pos.length+" ao longo de "+gerF(Lm,2)+" m")})}
+function dsPlace(T,L,del,what){ if(!L.length){toast("Não coube nenhum símbolo.");return} pushUndo(); const base=JSON.parse(JSON.stringify(T)); delete base.id; const nw=[];
+ L.forEach(o=>{const e={...JSON.parse(JSON.stringify(base)),x:+o.p[0].toFixed(4),y:+o.p[1].toFixed(4)}; if(o.r!=null)e.rot=+(((o.r%360)+360)%360).toFixed(2); delete e.lbl; S.doc.ents.push(e); e.id=S.doc.nextId++; nw.push(e)});
+ if(del){S.doc.ents=S.doc.ents.filter(e=>e!==T); (S.doc.circs||[]).forEach(ci=>{ if(ci.objs&&ci.objs.includes(T.id)){ci.objs=ci.objs.filter(i=>i!==T.id).concat(nw.map(e=>e.id))}})}
+ S.sel=new Set(nw); LC_VER++; rebuildIndex(); refreshUI(); draw(); saveLocal(); toast(nw.length+" símbolo(s) colocados: "+what+"."+(del?" Se o modelo estava num circuito, as cópias ficam nesse circuito.":""),6000)}
+
+/*DS-END*/
 // lista de comandos: id, nome, grupo, nomes curtos (o primeiro aparece no menu), tecla, ação
 const CMDS=[
  {id:"novo",n:"Novo…",g:"Ficheiro",a:["NOVO","NEW"],k:"Ctrl+N",f:()=>newDialog()},
@@ -5925,6 +5964,7 @@ const CMDS=[
  {id:"escalarlugar",n:"Escalar no lugar (cada objeto no seu centro)…",g:"Modificar",a:["ESCL","SCL","SCALEEACH"],f:()=>needSelThen("Escalar no lugar",scaleEachDialog)},
  {id:"escref",n:"Escalar pela medida (comprimento real)…",g:"Modificar",a:["ESCREF","SCALEREF","ESCALARMEDIDA"],f:()=>scaleRefStart()},
  {id:"alinhar",n:"Alinhar…",g:"Modificar",a:["AL","ALINHAR","ALIGN"],f:()=>needSelThen("Alinhar",alignDialog)},
+ {id:"distrib",n:"Distribuir símbolos (em grelha num espaço ou ao longo de um caminho)…",g:"Modificar",a:["DISTRIBUIR","DISTR"],f:()=>needSelThen("Distribuir símbolos",dsOpen)},
  {id:"serie",n:"Copiar em série…",g:"Modificar",a:["AR","SERIE","ARRAY"],f:()=>needSelThen("Copiar em série",moveDialog)},
  {id:"bloq",n:"Bloquear a seleção",g:"Modificar",a:["BLOQ","LOCK","BLOQUEAR"],f:()=>needSelThen("Bloquear",()=>lockSet([...S.sel],true))},
  {id:"desbloq",n:"Desbloquear todos (desta planta)",g:"Modificar",a:["DESBLOQ","UNLOCK"],f:()=>lockSet(S.doc.ents.filter(e=>e.locked),false)},
