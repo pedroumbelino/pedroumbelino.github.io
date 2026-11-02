@@ -911,6 +911,7 @@ function render(){
   const dsh=ltDash(ltOf(e)); G.setLineDash(dsh.length?dsh.map(v=>v*3.2):[]);
   FXfull=sel; G.beginPath(); drawGeom(e,false); G.stroke(); G.setLineDash([]); FXfull=false;
   if(e.t==="cable"){drawCableLabel(e,G.strokeStyle); drawTaps(e,G.strokeStyle); if(sel)drawCableDir(e,G.strokeStyle)}
+  if((e.t==="line"||e.t==="pl")&&e.nc)drawTicks(e,G.strokeStyle);
   if(e.t==="sym"){const L=labelOf(e); if(L)drawText(L,G.strokeStyle)}
   G.globalAlpha=1;
  }
@@ -920,7 +921,7 @@ function render(){
  wcMarks();
  // pegas das pontas
  if(S.tool==="select"){G.fillStyle="#3b82f6"; S.sel.forEach(e=>vertsOf(e).forEach(v=>{const [a,b]=W2S(v[0],v[1]); G.fillRect(a-4,b-4,8,8)}));
-  if(S.sel.size<=60){G.fillStyle="#e8742c"; S.sel.forEach(e=>{const L=labelOf(e); if(!L)return; const [a,b]=W2S(L.x,L.y); G.beginPath(); G.moveTo(a,b-5); G.lineTo(a+5,b); G.lineTo(a,b+5); G.lineTo(a-5,b); G.closePath(); G.fill()})}
+  if(S.sel.size<=60){G.fillStyle="#e8742c"; S.sel.forEach(e=>{const g=tkGeom(e); if(!g)return; const [a,b]=W2S(g.p[0],g.p[1]); G.beginPath(); G.arc(a,b,5,0,Math.PI*2); G.fill()}); S.sel.forEach(e=>{const L=labelOf(e); if(!L)return; const [a,b]=W2S(L.x,L.y); G.beginPath(); G.moveTo(a,b-5); G.lineTo(a+5,b); G.lineTo(a,b+5); G.lineTo(a-5,b); G.closePath(); G.fill()})}
   if(S.sel.size<=20){G.strokeStyle="#3b82f6"; G.lineWidth=1.3; S.sel.forEach(e=>{ if(!(e.t==="pl"||e.t==="cable")||e.esp)return; const P=e.pts, n=P.length, m=e.closed&&n>2?n:n-1;
    for(let i=0;i<m;i++){const A=P[i], B=P[(i+1)%n]; const [a,b]=W2S((A[0]+B[0])/2,(A[1]+B[1])/2); if(Math.hypot(B[0]-A[0],B[1]-A[1])*S.view.s<=26)continue; G.fillStyle=isLight()?"#fff":"#15181d"; G.fillRect(a-4,b-4,8,8); G.strokeRect(a-4,b-4,8,8); G.beginPath(); G.moveTo(a-2.5,b); G.lineTo(a+2.5,b); G.moveTo(a,b-2.5); G.lineTo(a,b+2.5); G.stroke()}})}}
  // temporários
@@ -1298,6 +1299,8 @@ function onDown(x,y,btn,ev){
    if(S.tmp.pts.length>2&&Math.hypot(p[0]-f0[0],p[1]-f0[1])*S.view.s<6){plineFinish(true);return} if(Math.hypot(p[0]-lp[0],p[1]-lp[1])*S.view.s<4){plineFinish(false);return} S.tmp.pts.push(p)} draw(); return}
  if(t==="cable"){const p=snapPt(x,y,S.tmp&&S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]); if(!S.tmp)S.tmp={pts:[p]}; else {const lp=S.tmp.pts[S.tmp.pts.length-1]; if(Math.hypot(p[0]-lp[0],p[1]-lp[1])*S.view.s<4){finishCable();return} S.tmp.pts.push(p)} draw(); return}
  if(t==="select"){
+  const tg=!(ev.shiftKey||ev.ctrlKey)&&pickTickGrip(x,y);
+  if(tg){S.drag={tk:{e:tg},moved:false,x0:x,y0:y}; hint("A mover os traços ao longo do cabo/linha."); return}
   const lg=!(ev.shiftKey||ev.ctrlKey)&&pickLabelGrip(x,y);
   if(lg){S.drag={lab:{e:lg.e,o0:[...(lg.e.lbOff||[0,0])],x0:x,y0:y},moved:false,x0:x,y0:y}; hint("A mover a etiqueta. Para a repor, use «Repor posição» nas Propriedades."); return}
   const mg=!(ev.shiftKey||ev.ctrlKey)&&!pickGrip(x,y)&&pickMidGrip(x,y);
@@ -1350,6 +1353,7 @@ function onMove(x,y,ev){
  if(S.tool==="select"&&S.drag&&S.drag.grip){const d=S.drag; S.gripSkip=d.orig; let p=snapPt(x,y,d.fix); S.gripSkip=null; $("sSnap").textContent=S.hover?("Snap: "+S.hover[2]):"";
   S.cons=null; if(ev&&ev.ctrlKey){const c=gripConstrain(d,p,x,y); if(c){p=c.p; S.cons=c; $("sSnap").textContent=c.label}}
   if(!d.moved){pushUndo(); d.moved=true} setVert(d.grip.e,d.grip.i,p); draw(); return}
+ if(S.tool==="select"&&S.drag&&S.drag.tk){const d=S.drag; if(!d.moved){pushUndo(); d.moved=true} const v=tkProject(d.tk.e,x,y); if(v!=null)d.tk.e.tkAt=v; draw(); return}
  if(S.tool==="select"&&S.drag&&S.drag.lab){const d=S.drag, L=d.lab; if(!d.moved){pushUndo(); d.moved=true} L.e.lbOff=[L.o0[0]+x-L.x0,L.o0[1]+y-L.y0]; draw(); return}
  if(S.tool==="select"&&S.drag&&S.drag.move){const p=snapPt(x,y); const dx=p[0]-S.drag.lx,dy=p[1]-S.drag.ly; if(dx||dy){ if(!S.drag.moved){pushUndo();S.drag.moved=true} S.sel.forEach(e=>moveEnt(e,dx,dy)); S.drag.lx=p[0];S.drag.ly=p[1]} draw(); return}
  if(["line","pline","circle","measure","calib","scref","sym","text","cable","rotpick","pickpt","paste","viewalign","mv","plotwin"].includes(S.tool)){ if(S.tool!=="sym")snapPt(x,y,S.tmp&&(S.tmp.p||S.tmp.base||(S.tmp.pts&&S.tmp.pts[S.tmp.pts.length-1]))); else S.hover=null; if((S.tool==="line"||S.tool==="cable")&&S.tmp&&S.ortho&&!S.hover){const p=snapPt(x,y,S.tmp.p||S.tmp.pts[S.tmp.pts.length-1]); S.mouse.x=p[0];S.mouse.y=p[1]} } else S.hover=null;
@@ -1565,6 +1569,9 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  // interruptores: o tipo real escolhe-se aqui (genérico → unipolar, bipolar, comutador…), para um ou vários de uma vez
  {const sw=sel.length&&sel.every(e=>e.t==="sym"&&SW_TYPES.includes(e.sym))?sel:null; if(sw){const ks=new Set(sw.map(e=>e.sym));
   h+=`<div class="row"><label>Tipo de interruptor</label><select id="pSwT">${ks.size>1?'<option value="__" selected>(vários)</option>':''}${SW_TYPES.map(k=>`<option value="${k}" ${ks.size===1&&ks.has(k)?"selected":""}>${uEsc(SYM[k].n)}</option>`).join("")}</select></div>`}}
+ {const tl=sel.length&&sel.every(e=>e.t==="line"||(e.t==="pl"&&!e.esp)||e.t==="cable")?sel:null; if(tl){const vs=new Set(tl.map(tkNc));
+  h+=`<div class="row"><label>Traços (n.º de condutores)</label><select id="pTk">${vs.size>1?'<option value="__" selected>(vários)</option>':''}<option value="0" ${vs.size===1&&vs.has(0)?"selected":""}>Sem traços</option>${Array.from({length:24},(_,i)=>i+1).map(n=>`<option value="${n}" ${vs.size===1&&vs.has(n)?"selected":""}>${n}</option>`).join("")}</select></div>`;
+  if(tl.some(e=>e.tkAt!=null))h+=`<div class="pbtns"><button id="pTkR" title="Os traços voltam ao sítio automático">Repor posição dos traços</button></div>`}}
  const oSel=sel.length&&sel.every(e=>e.t==="sym"&&e.sym===sel[0].sym)&&symOptList(sel[0].sym)?sel:null;
  if(oSel){const k0=oSel[0].sym, vals=oSel.map(symOptVal); if(!one)h+=`<div class="small">${oSel.length} × ${SYM[k0].n}</div>`; h+=`<div class="small" style="margin-top:6px"><b>Opções</b></div>`;
   symOptList(k0).forEach(f=>{const vs=vals.map(v=>v[f.k]), mix=new Set(vs.map(String)).size>1, v=vs[0];
@@ -1607,6 +1614,8 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  if($("pUni"))$("pUni").onclick=()=>uFromQuadro(one);
  if($("pRev"))$("pRev").onclick=()=>cabReverse(one); if($("pCirc"))$("pCirc").onclick=()=>circStart(one); if($("pRetr"))$("pRetr").onclick=()=>cabRetrace(one); if($("pCab"))$("pCab").onclick=()=>cabDialog(one.c,o=>{pushUndo(); one.c=o; rebuildIndex(); refreshUI(); draw()});
  ch("pLay",el=>{ensureLayer(el.value); sel.forEach(e=>e.layer=el.value)}); ch("pEx",el=>sel.forEach(e=>{if(el.checked)e.exist=true; else delete e.exist}));
+ if($("pTk"))$("pTk").onchange=ev=>{const v=ev.target.value; if(v==="__")return; const n=+v; pushUndo(); [...S.sel].forEach(x=>{ if(x.t==="cable"){x.c=x.c||{}; if(n>=2)x.c.nc=String(n); else delete x.c.nc} else if(x.t==="line"||x.t==="pl"){ if(n>=1)x.nc=n; else delete x.nc}}); LC_VER++; rebuildIndex(); refreshUI(); draw(); if(n===1&&[...S.sel].some(x=>x.t==="cable"))toast("Nos cabos o mínimo são 2 condutores.",2500)};
+ if($("pTkR"))$("pTkR").onclick=()=>{pushUndo(); [...S.sel].forEach(x=>delete x.tkAt); refreshProps(); saveLocal(); draw()};
  if($("pSwT"))$("pSwT").onchange=ev=>{const v=ev.target.value; if(v==="__"||!SYM[v])return; pushUndo(); [...S.sel].forEach(x=>{ if(x.t==="sym"&&SW_TYPES.includes(x.sym)){x.sym=v; delete x.opt}}); rebuildIndex(); refreshUI(); draw(); toast("Tipo alterado para «"+SYM[v].n+"».",2000)};
  ch("pLab",el=>one.label=el.value); ch("pRot",el=>one.rot=parseFloat(el.value)||0); ch("pSc",el=>one.scale=parseFloat(el.value)||1);
  ch("pTx",el=>one.s=el.value.replace(/\\n/g,"\n")); ch("pTh",el=>one.h=(parseFloat(el.value)||.15)*U()); ch("pR",el=>one.r=(parseFloat(el.value)||.1)*U());
@@ -1740,7 +1749,7 @@ function exportDXF(opts){
   else if((e.t==="pl"||e.t==="cable")){w(0,"POLYLINE");w(8,lay);col(e);w(66,1);w(10,0);w(20,0);w(30,0);w(70,e.closed?1:0); e.pts.forEach(p=>{w(0,"VERTEX");w(8,lay);w(10,p[0]);w(20,p[1]);w(30,0)}); w(0,"SEQEND");w(8,lay)}
   if(e.t==="cable"&&e.taps){const r=tapR(); e.taps.forEach(i=>{const v=e.pts[i]; if(!v||i>=e.pts.length-1)return; w(0,"POLYLINE");w(8,lay);col(e);w(66,1);w(10,0);w(20,0);w(30,0);w(70,1);w(40,r);w(41,r);
    [[v[0]-r/2,v[1]],[v[0]+r/2,v[1]]].forEach(q=>{w(0,"VERTEX");w(8,lay);w(10,q[0]);w(20,q[1]);w(30,0);w(42,1)}); w(0,"SEQEND");w(8,lay)})}
-  if(e.t==="cable")cabTicks(e).forEach(([a,b])=>{w(0,"LINE");w(8,lay);col(e);w(10,a[0]);w(20,a[1]);w(30,0);w(11,b[0]);w(21,b[1]);w(31,0)});
+  if(e.t==="cable"||e.t==="line"||e.t==="pl"){cabTicks(e).forEach(([a,b])=>{w(0,"LINE");w(8,lay);col(e);w(10,a[0]);w(20,a[1]);w(30,0);w(11,b[0]);w(21,b[1]);w(31,0)}); const tt=cabTickText(e); if(tt){w(0,"TEXT");w(8,lay);col(e);w(10,tt.x);w(20,tt.y);w(30,0);w(40,tt.h);w(1,tt.s);w(50,tt.rot);w(72,1);w(11,tt.x);w(21,tt.y);w(31,0);w(73,2)}}
   if(e.t==="cable"){const p=labelOf(e,true); if(p){w(0,"TEXT");w(8,lay);col(e);w(10,p.x);w(20,p.y);w(30,0);w(40,p.h);w(1,dxfStr(p.txt));w(50,p.rot)}}
   if(e.t==="circle"){w(0,"CIRCLE");w(8,lay);col(e);w(10,e.x);w(20,e.y);w(30,0);w(40,e.r)}
   else if(e.t==="arc"){w(0,"ARC");w(8,lay);col(e);w(10,e.x);w(20,e.y);w(30,0);w(40,e.r);w(50,((e.a0%360)+360)%360);w(51,((e.a1%360)+360)%360)}
@@ -2014,7 +2023,7 @@ function cabDialog(init,cb,opt){const c={...CAB_DEF,...init}; CAB_MODE=opt&&opt.
   {k:"type",l:"Tipo de cabo",type:"select",v:c.type,opts:opts(Object.fromEntries(Object.entries(CTYPES).map(([k,t])=>[k,t.n])))},
   {k:"ph",l:"Alimentação",type:"select",v:c.ph,opts:[["1F","Monofásico 230 V"],["3F","Trifásico 400 V"]]},
   {k:"comp",l:"Condutores",type:"select",v:c.comp,opts:[["pe","Com terra (3G mono / 5G tri)"],["nope","Sem terra (2x mono / 4x tri c/ neutro)"]]},
-  {k:"nc",l:"N.º de condutores (em comandos: fase, viajantes, retorno; vazio = automático)",type:"select",v:String(c.nc||""),opts:[["","Automático"],...["2","3","4","5","6","7"].map(n=>[n,n+" condutores"])]},
+  {k:"nc",l:"N.º de condutores (em comandos: fase, viajantes, retorno; vazio = automático)",type:"select",v:String(c.nc||""),opts:[["","Automático"],...Array.from({length:23},(_,i)=>String(i+2)).map(n=>[n,n+" condutores"])]},
   {k:"desc",l:"Função do troço (ex.: alimentação, viajantes, retorno)",v:c.desc||""},
   {k:"sec",l:"Secção (mm²)",type:"select",v:String(c.sec),opts:[["auto","Automática (mínima que cumpre)"],...SECS.map(s=>[String(s),fmtS(s)+" mm²"])]},
   {k:"inst",l:"Modo de instalação",type:"select",v:c.inst,opts:opts(INST)},
@@ -2104,12 +2113,22 @@ function labelOf(e,forPlot){const o=e.lbOff||[0,0];
  if(e.t==="cable"){const r=cabCalc(e); if(e.lbHide||S.doc.lbCabOff||(e.c&&e.c.lab===false&&(r.ok||forPlot)))return null; const p=cabLabelPos(e); return {x:p.x+o[0],y:p.y+o[1],h:p.h,s:(r.ok?"":"⚠ ")+cabLabel(e,r),rot:e.lbRot!=null?+e.lbRot:p.ang,c:0,ok:r.ok,txt:cabLabel(e,r)}}
  return null}
 // traços oblíquos com o n.º de condutores (quando foi indicado no cabo), a um quarto do maior troço visível
-function cabTicks(e){ if(!e.c||!(+e.c.nc>=2))return []; let P=e.pts, best=null, bl=-1; const segs=[];
- (FX&&!FXfull&&FX.pieces.has(e)?FX.pieces.get(e):[P]).forEach(Q=>{for(let i=1;i<Q.length;i++){const l=Math.hypot(Q[i][0]-Q[i-1][0],Q[i][1]-Q[i-1][1]); if(l>bl){bl=l; best=[Q[i-1],Q[i]]}}});
- if(!best)return []; const h=S.doc.textH*U()*.8, n=Math.min(7,+e.c.nc), [a,b]=best, u=[(b[0]-a[0])/bl,(b[1]-a[1])/bl], nv=[-u[1],u[0]], t0=Math.min(bl*.25,bl/2-h*n*.25), sp=h*.4, tl=h*.6, out=[];
- if(bl<h*2)return [];
- for(let k=0;k<n;k++){const c=t0+(k-(n-1)/2)*sp, cx=a[0]+u[0]*c, cy=a[1]+u[1]*c, dx=u[0]*tl*.5+nv[0]*tl, dy=u[1]*tl*.5+nv[1]*tl; out.push([[cx-dx,cy-dy],[cx+dx,cy+dy]])} return out}
-function drawCableLabel(e,col){const T=cabTicks(e); if(T.length){G.save(); G.setLineDash([]); G.strokeStyle=col; G.lineWidth=Math.max(1,G.lineWidth*.6); G.beginPath(); T.forEach(([p,q])=>{const [a,b]=W2S(p[0],p[1]),[c,d]=W2S(q[0],q[1]); G.moveTo(a,b); G.lineTo(c,d)}); G.stroke(); G.restore()}
+// traços oblíquos com o n.º de condutores (cabos com o n.º indicado; retas e polilinhas com «Traços»); a posição arrasta-se pela pega laranja
+function tkNc(e){return e.t==="cable"?+(e.c&&e.c.nc||0):+(e.nc||0)}
+function tkPts(e){return e.t==="line"?[[e.x1,e.y1],[e.x2,e.y2]]:(e.pts||[])}
+function tkGeom(e){const n=tkNc(e); if(!(e.t==="cable"?n>=2:n>=1))return null; const h=S.doc.textH*U()*.8; let a,b,L,c;
+ if(e.tkAt!=null){const P=tkPts(e); let acc=0; for(let i=1;i<P.length;i++){const l=Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]); if(acc+l>=e.tkAt||i===P.length-1){a=P[i-1]; b=P[i]; L=l; c=Math.max(0,Math.min(l,e.tkAt-acc)); break} acc+=l}}
+ else {let bl=-1; (e.t==="cable"&&FX&&!FXfull&&FX.pieces.has(e)?FX.pieces.get(e):[tkPts(e)]).forEach(Q=>{for(let i=1;i<Q.length;i++){const l=Math.hypot(Q[i][0]-Q[i-1][0],Q[i][1]-Q[i-1][1]); if(l>bl){bl=l; a=Q[i-1]; b=Q[i]}}}); L=bl; if(!a||bl<h*2)return null; c=Math.min(bl*.25,bl/2-h*Math.min(n,7)*.25)}
+ if(!a||!(L>0))return null; const u=[(b[0]-a[0])/L,(b[1]-a[1])/L]; return {n,h,u,nv:[-u[1],u[0]],p:[a[0]+u[0]*c,a[1]+u[1]*c]}}
+function cabTicks(e){const g=tkGeom(e); if(!g)return []; const {n,h,u,nv,p}=g, m=n>7?3:n, sp=h*.4, tl=h*.6, out=[];
+ for(let k=0;k<m;k++){const c=(k-(m-1)/2)*sp, cx=p[0]+u[0]*c, cy=p[1]+u[1]*c, dx=u[0]*tl*.5+nv[0]*tl, dy=u[1]*tl*.5+nv[1]*tl; out.push([[cx-dx,cy-dy],[cx+dx,cy+dy]])} return out}
+// mais de 7 condutores: 3 traços e o número escrito ao lado
+function cabTickText(e){const g=tkGeom(e); if(!g||g.n<=7)return null; const {h,u,nv,p}=g, vr=VR()*180/Math.PI; let ang=Math.atan2(u[1],u[0])*180/Math.PI-vr; ang=((ang%360)+540)%360-180; if(ang>90)ang-=180; if(ang<=-90)ang+=180; ang+=vr;
+ return {x:p[0]+nv[0]*h*1.5+u[0]*h*.9,y:p[1]+nv[1]*h*1.5+u[1]*h*.9,h:h*.9,s:String(g.n),rot:ang,c:1}}
+function drawTicks(e,col){const T=cabTicks(e); if(!T.length)return; G.save(); G.setLineDash([]); G.strokeStyle=col; G.lineWidth=Math.max(1,G.lineWidth*.6); G.beginPath(); T.forEach(([p,q])=>{const [a,b]=W2S(p[0],p[1]),[c,d]=W2S(q[0],q[1]); G.moveTo(a,b); G.lineTo(c,d)}); G.stroke(); G.restore(); const t=cabTickText(e); if(t)drawText(t,col)}
+function pickTickGrip(x,y){const tol=8/S.view.s; let best=null,bd=tol; S.sel.forEach(e=>{const g=tkGeom(e); if(!g)return; const d=Math.hypot(g.p[0]-x,g.p[1]-y); if(d<bd){bd=d; best=e}}); return best}
+function tkProject(e,x,y){const P=tkPts(e); let acc=0, best=null, bd=Infinity; for(let i=1;i<P.length;i++){const l=Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]); const [d,,,t]=dSeg(x,y,P[i-1][0],P[i-1][1],P[i][0],P[i][1]); if(d<bd){bd=d; best=acc+t*l} acc+=l} return best}
+function drawCableLabel(e,col){drawTicks(e,col);
  const L=labelOf(e,S.plotting); if(!L)return; drawText(L,L.ok?col:"#ef4444")}
 function pickLabelGrip(x,y){const tol=8/S.view.s; let best=null, bd=tol; S.sel.forEach(e=>{const L=labelOf(e); if(!L)return; const d=Math.hypot(L.x-x,L.y-y); if(d<bd){bd=d; best={e,L}}}); return best}
 function cabLabelPos(e){let bi=1,bl=-1, PP=e.pts;
@@ -4773,6 +4792,7 @@ function plDraw(ctx,p,pageLayers,pageTitle){const P=plPaper(p), F=plFrame(p), V=
    if(e.t==="leg"){ctx.setLineDash([]); legDraw(e,col,true); ctx.globalAlpha=1; continue}
    ctx.beginPath(); drawGeom(e,false); ctx.stroke(); ctx.setLineDash([]);
    if(e.t==="cable"){drawCableLabel(e,col); drawTaps(e,col)}
+   if((e.t==="line"||e.t==="pl")&&e.nc&&typeof drawTicks==="function")drawTicks(e,col);
    if(e.t==="sym"){const L=labelOf(e,true); if(L)drawText(L,col)} ctx.globalAlpha=1}
   if(FX)fxDraw(FX,fxCol,e=>lwOf(e)*V*lwK);
   if(typeof riserDrawNotes==="function"&&S.doc.ents.some(e=>isRiser(e)&&pageLayers.includes(e.layer)))riserDrawNotes(p.col==="layers"?"#6b21a8":"#000");
