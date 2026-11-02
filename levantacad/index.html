@@ -3082,13 +3082,16 @@ function uParFactor(q){const P=q.root&&q.root.par||[]; if(!P.length)return 1; co
  const grp=[]; for(let i=0;i<NS;i++){const k=P.findIndex((pn,kk)=>S[kk+1]===i&&pn.ib&&pn.ib.on); grp[i]=i>0&&k>=0&&P[k].ib.est==="NF"?grp[i-1]:i}
  const G={}; ys.forEach((y,j)=>{const g=grp[S[j]]; G[g]=(G[g]||0)+y}); return Math.max(1,Math.max(...Object.values(G))/y1)}
 function uLx(d){let r=0; try{uDevPrims(d).forEach(p=>{const xs=p.k==="l"?[p.x1,p.x2]:p.k==="pl"?p.pts.map(q=>q[0]):p.k==="c"?[p.x+p.r]:p.k==="t"?[]:[p.x]; xs.forEach(x=>r=Math.max(r,x))})}catch(e){} return Math.max(3.4,r+1.4)}
+// circuito «2 em 1»: proteção numa coluna e saída do transformador na coluna ao lado (devolve o índice do transformador, ou -1)
+function uTrIdx(n){ if(n.kids||!n.circ||!n.circ.c2on||!n.devs.length)return -1; let t=-1; n.devs.forEach((d,i)=>{ if(d.t==="tr")t=i}); return t<0?n.devs.length-1:t}
 function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.q[q.nome];
  const LM=new Map(), P=[], hits=[], slots=[]; const tri=q.ph==="3F";
  const need=devs=>{let l=5,r=6; devs.forEach(d=>{uDevPrims(d).forEach(p=>{const xs=p.k==="l"?[p.x1,p.x2]:p.k==="pl"?p.pts.map(q=>q[0]):p.k==="c"?[p.x-p.r,p.x+p.r]:[p.x]; xs.forEach(x=>{l=Math.max(l,-x+2); r=Math.max(r,x+2)})});
    {const lx=uLx(d); uDevLabels(d).forEach(t=>r=Math.max(r,lx+String(t).length*UST.fd*.58+2))}}); return {l,r}};
- const W=n=>{let w=UCW, nd=null; if(n.kids&&n.kids.length){w=0; n.kids.forEach(k=>w+=W(k)); w=Math.max(UCW,w)} else {nd=need(n.devs); w=Math.max(UCW,nd.l+nd.r)} LM.set(n,{w,nd}); return w};
+ const W=n=>{let w=UCW, nd=null; if(n.kids&&n.kids.length){w=0; n.kids.forEach(k=>w+=W(k)); w=Math.max(UCW,w)} else {const ti=uTrIdx(n); if(ti>=0){const a=need(n.devs.slice(0,ti+1)), b=need(n.devs.slice(ti+1)), w1=Math.max(UCW,a.l+a.r), w2=Math.max(UCW,b.l+b.r); LM.set(n,{w:w1+w2,nd:a,nd2:b,w1,ti}); return w1+w2}
+  nd=need(n.devs); w=Math.max(UCW,nd.l+nd.r)} LM.set(n,{w,nd}); return w};
  W(q.root);
- const X=(n,x0)=>{const m=LM.get(n); m.x0=x0; if(n.kids&&n.kids.length){let x=x0; n.kids.forEach(k=>{X(k,x); x+=LM.get(k).w}); m.cx=(LM.get(n.kids[0]).cx+LM.get(n.kids[n.kids.length-1]).cx)/2} else m.cx=m.nd?x0+m.nd.l+(m.w-m.nd.l-m.nd.r)/2:x0+UCW/2};
+ const X=(n,x0)=>{const m=LM.get(n); m.x0=x0; if(n.kids&&n.kids.length){let x=x0; n.kids.forEach(k=>{X(k,x); x+=LM.get(k).w}); m.cx=(LM.get(n.kids[0]).cx+LM.get(n.kids[n.kids.length-1]).cx)/2} else {const w1=m.w1||m.w; m.cx=m.nd?x0+m.nd.l+(w1-m.nd.l-m.nd.r)/2:x0+UCW/2; if(m.w1)m.cx2=x0+m.w1+m.nd2.l+(m.w-m.w1-m.nd2.l-m.nd2.r)/2}};
  X(q.root,0);
  const TOP=14;
  const PAR=(q.root.par||[]);
@@ -3099,7 +3102,7 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
    let kx=x+(w-kw)/2; ks.forEach(c=>{X(c,kx); kx+=LM.get(c).w}); let ix=x+(w-iw)/2; inc.forEach((j,t)=>{ix+=nn[t].l; INCX[j]=ix; ix+=nn[t].r});
    SR.push({x1:x,x2:x+w,ks,i0:gi}); gi+=ks.length; x+=w; if(s2<NS-1)x+=CG}
   const rmS=LM.get(q.root); rmS.x0=0; rmS.w=x; rmS.cx=INCX[0]}
- const Y=(n,y0)=>{const m=LM.get(n); m.y0=y0; let y=y0+UGAP; m.dy=[]; n.devs.forEach(d=>{m.dy.push(y); y+=uH(d)}); m.ye=y; let yb=y; if(n===q.root)PAR.forEach(pn=>{let yy=y0+UGAP; pn.devs.forEach(d=>yy+=uH(d)); yb=Math.max(yb,yy)}); if(n.kids){m.by=yb+UGAP; n.kids.forEach(k=>Y(k,m.by))}};
+ const Y=(n,y0)=>{const m=LM.get(n); m.y0=y0; let y=y0+UGAP; m.dy=[]; n.devs.forEach((d,i)=>{m.dy.push(y); y+=uH(d); if(i===m.ti)y+=4}); m.ye=y; let yb=y; if(n===q.root)PAR.forEach(pn=>{let yy=y0+UGAP; pn.devs.forEach(d=>yy+=uH(d)); yb=Math.max(yb,yy)}); if(n.kids){m.by=yb+UGAP; n.kids.forEach(k=>Y(k,m.by))}};
  Y(q.root,TOP);
  const rm0=LM.get(q.root), PARX=[]; { const nr=need(q.root.devs); let x=rm0.cx+nr.r; PAR.forEach((pn,k)=>{const nd=need(pn.devs); x+=nd.l; PARX.push(SECT?INCX[k+1]:x); x+=nd.r}) }
  const leaves=[], cols=[]; let yt=0;
@@ -3130,12 +3133,14 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
  uWalk(q.root,(n,par)=>{const m=LM.get(n), cx=m.cx;
   const exW=!n.kids&&n.circ.ex;
   L(cx,m.y0,cx,m.y0+UGAP,{ex:exW});
-  n.devs.forEach((d,i)=>{const y=m.dy[i], pv=i?n.devs[i-1]:null;
+  const two=m.ti!=null;
+  n.devs.forEach((d,i)=>{const y=m.dy[i], cx=two&&i>m.ti?m.cx2:m.cx, pv=i&&!(two&&i===m.ti+1)?n.devs[i-1]:null;
    uDevPrims(d,pv&&pv.t,pv?uH(pv):0).forEach(p=>{ if(p.k==="l"){p.x1+=cx;p.x2+=cx;p.y1+=y;p.y2+=y} else if(p.k==="pl"){p.pts=p.pts.map(q=>[q[0]+cx,q[1]+y])} else {p.x+=cx;p.y+=y} add(p)});
    uDevLabels(d).forEach((s,j)=>T(cx+uLx(d),y+4.4+j*UST.fd*1.42,s,{h:UST.fd,ex:!!d.ex,b:j===0&&!!d.tag}));
    hits.push({k:"dev",nid:n.id,i,x:cx-11.5,y,w:23,h:uH(d)});
   });
-  for(let i=0;i<=n.devs.length;i++)slots.push({k:"chain",nid:n.id,i,x:cx,y:i<n.devs.length?m.dy[i]:m.ye});
+  if(two){const yb=m.dy[m.ti]+uH(n.devs[m.ti]), yj=yb+2; L(cx,yb,cx,yj,{ex:exW}); L(cx,yj,m.cx2,yj,{ex:exW}); L(m.cx2,yj,m.cx2,yb+4,{ex:exW})}
+  for(let i=0;i<=n.devs.length;i++)slots.push({k:"chain",nid:n.id,i,x:two&&i>m.ti?m.cx2:cx,y:i<n.devs.length?m.dy[i]:m.ye});
   // circuito com diferencial próprio: pode receber outros circuitos por baixo do diferencial (passa a grupo)
   if(!n.kids&&par&&n.devs.length>=2){let si=-1; n.devs.forEach((d,i)=>{ if(d.t==="dif")si=i+1}); if(si<0)si=n.devs.length-1; if(si>=1&&si<=n.devs.length-1)slots.push({k:"join",nid:n.id,i:si,x:cx,y:m.dy[si]})}
   if(n.kids){ // barramento
@@ -3152,7 +3157,7 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
    hits.push({k:"node",nid:n.id,x:x1-1,y:m.by-2.6,w:x2-x1+2,h:5.2,bus:true});
    for(let i=0;i<=n.kids.length;i++){let x; if(!n.kids.length)x=cx; else if(i<n.kids.length)x=LM.get(n.kids[i]).x0; else {const l=LM.get(n.kids[n.kids.length-1]); x=l.x0+l.w}
     slots.push({k:"bus",nid:n.id,idx:i,x,y:m.by+1.2,y2:m.by+11})}}
-  } else L(cx,m.ye,cx,yt,{ex:exW});
+  } else L(two?m.cx2:cx,m.ye,two?m.cx2:cx,yt,{ex:exW});
  });
  // entradas em paralelo (por exemplo, dois transformadores para o mesmo barramento)
  PAR.forEach((pn,k)=>{const cx=PARX[k], rmm=LM.get(q.root); let y=TOP+UGAP; L(cx,TOP-9,cx,TOP+UGAP); add({k:"pl",pts:[[cx-1,TOP-10.8],[cx+1,TOP-10.8],[cx,TOP-9]],cl:true,fill:true,lay:"EQ"});
@@ -3170,10 +3175,12 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
  const HW=Math.max(30,ft*15), X0=rm.x0, XR=rm.x0+rm.w; let y=yt; const ry=[y]; rows.forEach(r=>{y+=r[2]; ry.push(y)}); const yb=y; const mid=k=>(ry[RI[k]]+ry[RI[k]+1])/2;
  ry.forEach(yy=>L(X0-HW,yy,XR,yy,{lay:"TB"}));
  L(X0-HW,yt,X0-HW,yb,{lay:"TB"});
- const vx=new Set([X0,XR]); cols.forEach(c=>{const m=LM.get(c); vx.add(+m.x0.toFixed(3)); vx.add(+(m.x0+m.w).toFixed(3))}); vx.forEach(x=>L(x,yt,x,yb,{lay:"TB"}));
+ const vx=new Set([X0,XR]); cols.forEach(c=>{const m=LM.get(c); vx.add(+m.x0.toFixed(3)); vx.add(+(m.x0+m.w).toFixed(3)); if(m.w1)vx.add(+(m.x0+m.w1).toFixed(3))}); vx.forEach(x=>L(x,yt,x,yb,{lay:"TB"}));
  rows.forEach((r,i)=>T(X0-HW+1.5,(ry[i]+ry[i+1])/2,r[1],{h:ft,v:"m",lay:"TB"}));
- cols.forEach(c=>{ if(!c.circ)return; const m=LM.get(c), cx=m.cx, ci=c.circ, ex=!!ci.ex, k=leaves.indexOf(c);
-  T(cx,mid("c"),ci.ref||("C"+(k+1)),{a:"m",v:"m",h:ft*1.1,ex,b:true,lay:"TB"});
+ cols.forEach(c=>{ if(!c.circ)return; const m0=LM.get(c), k=leaves.indexOf(c);
+  const SUB=[[c.circ,m0.cx,m0.w1||m0.w,false]]; if(m0.ti!=null)SUB.push([{...(c.circ.c2||{}),ex:c.circ.ex},m0.cx2,m0.w-m0.w1,true]);
+  SUB.forEach(([ci,cx,mw,sec])=>{const m={w:mw}, ex=!!ci.ex;
+  T(cx,mid("c"),ci.ref||(sec?"":"C"+(k+1)),{a:"m",v:"m",h:ft*1.1,ex,b:true,lay:"TB"});
   // texto comprido (designação, cabo): na vertical ou na horizontal, em baixo, ao centro ou em cima
   const cell=(key,txt)=>{const i=RI[key]; if(i==null)return; const top=ry[i], bot=ry[i+1], H=bot-top, h=ft, da=UST.da||"b";
    if(UST.dor==="h"){const lh=h*1.35, maxc=Math.max(4,Math.floor((m.w-2.5)/(h*.74))), nl=Math.max(2,Math.floor((H-2)/lh)), ls=uWrap(txt,maxc,nl);
@@ -3181,12 +3188,13 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
    else {const maxc=Math.max(4,Math.floor((H-3)/(h*.66))), nl=Math.max(2,Math.min(4,Math.floor((m.w-2)/(h*1.5)))), ls=uWrap(txt,maxc,nl), yy=da==="t"?top+1.5:da==="m"?(top+bot)/2:bot-1.5, a=da==="t"?"e":da==="m"?"m":"s";
     ls.forEach((t,j)=>T(cx+(j-(ls.length-1)/2)*h*1.5,yy,t,{rot:-90,v:"m",a,h,ex,lay:"TB"}))}};
   cell("d",ci.des); cell("k",String(ci.cabo||"").replace(/\+(?=\S)/g,"+ "));
-  const nr=NET.leaf[c.id], tx=(key,v,o)=>{ if(RI[key]!=null)T(cx,mid(key),v,{a:"m",v:"m",h:ft,ex,lay:"TB",...(o||{})})};
+  const nr=sec?null:NET.leaf[c.id], tx=(key,v,o)=>{ if(RI[key]!=null)T(cx,mid(key),v,{a:"m",v:"m",h:ft,ex,lay:"TB",...(o||{})})};
   if(nr&&nr.L)tx("L",uF(nr.L,1));
   if(nr&&nr.feed)tx("p",uF(uLeafP(c))); else if(ci.p!==""&&ci.p!=null)tx("p",uF(uN(ci.p)));
   if(nr&&!nr.feed&&nr.L){const bad=nr.dT>nr.lim&&uN(ci.p)>0; tx("u",uF(nr.dT),{err:bad,b:bad})}
-  if(tri)tx("f",fases.get(c.id)||"");
-  hits.push({k:"node",nid:c.id,x:m.x0,y:m.ye,w:m.w,h:yb-m.ye});
+  if(sec&&uN(ci.L)>0)tx("L",uF(uN(ci.L),1));
+  if(tri)tx("f",fases.get(c.id)||"")});
+  hits.push({k:"node",nid:c.id,x:m0.x0,y:m0.ye,w:m0.w,h:yb-m0.ye});
  });
  // enquadramento na folha: formato A3…A0 (ou maior), moldura como nas plantas, coluna da VR à direita
  const xL=X0-HW, xR=Math.max(XR,...PARX.map(v=>v+26))+16, ox=32-xL, oy=34;
@@ -3443,9 +3451,15 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
     const seen=new Set([q.nome,...have]); (PROJ?PROJ.plantas:[S.doc]).forEach(p=>p.ents.forEach(e=>{ if(isQuadro(e)){const nm=quadroName(e); if(nm&&!seen.has(nm)){seen.add(nm); opts.push([nm,nm+" (ainda sem esquema)"])}}}));
     if(n.circ.to&&!seen.has(n.circ.to)&&n.circ.to!==q.nome)opts.push([n.circ.to,n.circ.to]);
     if(q.root.kids&&opts.length)h+=uFields([["to","Alimenta o quadro","sel",[["","(não alimenta outro quadro)"],...opts]]],n.circ).replace('data-k="to"','data-k="to" data-to="1"')}
+   h+='<h3>2 em 1</h3>'+uFields([["c2on","Saída do transformador noutra coluna","chk"]],n.circ);
+   if(n.circ.c2on){const c2=n.circ.c2=n.circ.c2||{}; h+=uFields([["ref","Circuito (saída)","text",null,"ex.: C33"],["des","Designação","area",null,"Enter muda de linha no esquema"],["cabo","Cabo","text","uCabos"],["p","Potência (kW)","num"],["L","Comprimento (m)","num"]],c2).replace(/data-k="/g,'data-k2="').replace(/id="uf_/g,'id="uf2_').replace(/for="uf_/g,'for="uf2_')
+    +'<div class="small" style="padding:2px 10px 6px">O traço sai do transformador para a coluna ao lado, com o seu número, designação e cabo. Os aparelhos que puser depois do transformador ficam nessa coluna.</div>'}
+   else h+='<div class="small" style="padding:2px 10px 6px">Para um circuito que alimenta um transformador (ex.: proteção C8 e saída C33), numa só coluna do esquema que se desdobra em duas na tabela.</div>';
    h+=uFields([["ex","Existente (azul)","chk"]],n.circ)+'<h3>Cálculo</h3><div id="unileaf">'+uLeafHTML(n)+'</div>';
    h+=uBtns([["ubL","← Esquerda"],["ubR","Direita →"],["ubDup","Duplicar"],["ubGrp","Criar barramento por baixo","Os aparelhos até ao último diferencial ou interruptor ficam a alimentar um barramento novo, para poder pendurar mais circuitos"],["ubDel","Apagar circuito"]]);
-   const ref0=n.circ.ref||("C"+(k+1)); box.innerHTML=h; uBind(box,n.circ,kk=>{ if(kk==="ref"){const nr=n.circ.ref||("C"+(k+1)); if(nr!==ref0)uRenameSrc(n,ref0,nr)}});
+   const ref0=n.circ.ref||("C"+(k+1)); box.innerHTML=h; uBind(box,n.circ,kk=>{ if(kk==="c2on"){ if(n.circ.c2on&&!(n.circ.c2&&n.circ.c2.ref)){let mx=0; uLayout(q).leaves.forEach(l=>[l.circ.ref,l.circ.c2&&l.circ.c2.ref].forEach(r=>{const p=uRefParse(r); if(p&&/^c$/i.test(p.p))mx=Math.max(mx,p.n)})); n.circ.c2={...(n.circ.c2||{}),ref:"C"+(mx+1)}} setTimeout(uProps,0)}
+    if(kk==="ref"){const nr=n.circ.ref||("C"+(k+1)); if(nr!==ref0)uRenameSrc(n,ref0,nr)}});
+   box.querySelectorAll("[data-k2]").forEach(el=>el.onchange=()=>{uPush(); const k2=el.dataset.k2, o=n.circ.c2=n.circ.c2||{}; o[k2]=el.dataset.ty==="num"?(el.value.trim()===""?"":uN(el.value)):el.value; uRender(); saveLocal()});
    uOn("ubRnA",()=>uRenumber(n,-1)); uOn("ubRnB",()=>uRenumber(n,1)); uOn("ubRnAB",()=>uRenumber(n,0));
    {const ts=box.querySelector("[data-to]"); if(ts)ts.addEventListener("change",()=>{const nm=ts.value; if(!nm||uDoc().qs.some(o=>o.nome===nm))return; const nq=uTemplate("vazio",nm); nq.ph=q.ph==="3F"&&n.circ.fase==="3F"?"3F":"1F"; nq.root.devs=[uDev("int",nq.ph)]; nq.orig=q.nome; uDoc().qs.push(nq); uFillQ&&uFillQ(); toast("Criado o esquema do «"+nm+"», alimentado por este circuito. Abra-o na lista de quadros para lhe pôr os circuitos (ou use «Esquema unifilar» no quadro da planta).",6000)})}
    const se=box.querySelector("[data-sec]"); if(se)se.onchange=()=>{uPush(); n.sec=+se.value; uDone()};}
@@ -4332,7 +4346,8 @@ function peModel(){const N=netCalc(), D=PROJ.uni||{qs:[]}, qs=D.qs||[], byN=new 
    const P=uN(leaf.circ.p), l3=tri&&uIs3F(leaf), Ib=P>0?(l3?P*1000/(Math.sqrt(3)*400*NET_COS):P*1000/(NET_U0*NET_COS)):0, uso=uUso(leaf), cs=cabSec(cabo2);
    if(uso==="ilum")out.maxDuI=Math.max(out.maxDuI,lr.dT||0); else out.maxDuO=Math.max(out.maxDuO,lr.dT||0);
    rows.push({ref:leaf.circ.ref||("C"+(k+1)),des:String(leaf.circ.des||"").replace(/\s*\r?\n\s*/g," "),P,L:lr.L||uN(leaf.circ.L),prot:pr?(pr.t==="fus"?"Fusível":"Disjuntor"):"",curva:pr&&pr.t==="dj"?pr.curva:"",In:pr?uN(pr.In):null,I2:peI2(pr),
-    sis:l3?"Trifásico":"Monofásico",s:cs?cs.s:null,cabo:cabo2,Ib,Iz:iz2?iz2.Iz:null,meth:iz2?iz2.meth:"",du:lr.du,dT:lr.dT,iccMin:lr.iccMin,pdc:pr&&pr.t==="dj"?uN(pr.icc):null,uso,lim:lr.lim})});
+    sis:l3?"Trifásico":"Monofásico",s:cs?cs.s:null,cabo:cabo2,Ib,Iz:iz2?iz2.Iz:null,meth:iz2?iz2.meth:"",du:lr.du,dT:lr.dT,iccMin:lr.iccMin,pdc:pr&&pr.t==="dj"?uN(pr.icc):null,uso,lim:lr.lim});
+   if(leaf.circ.c2on&&leaf.circ.c2){const c2=leaf.circ.c2, cs2=cabSec(c2.cabo||""); rows.push({ref:c2.ref||"",des:String(c2.des||"").replace(/\s*\r?\n\s*/g," "),P:uN(c2.p),L:uN(c2.L),prot:"",curva:"",In:null,I2:null,sis:"Monofásico",s:cs2?cs2.s:null,cabo:c2.cabo||"",Ib:0,Iz:null,meth:"",du:null,dT:null,iccMin:null,pdc:null,uso:"out",lim:null})}});
   out.circ[q.nome]=rows});
  out.wc=allEnts().filter(e=>e.t==="pl"&&e.esp&&e.esp.tipo==="wc"); return out}
 // ---------- preenchimento dos modelos .docx ----------
