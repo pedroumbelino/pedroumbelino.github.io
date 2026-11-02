@@ -3197,8 +3197,14 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
   hits.push({k:"node",nid:c.id,x:m0.x0,y:m0.ye,w:m0.w,h:yb-m0.ye});
  });
  // enquadramento na folha: formato A3…A0 (ou maior), moldura como nas plantas, coluna da VR à direita
- const xL=X0-HW, xR=Math.max(XR,...PARX.map(v=>v+26))+16, ox=32-xL, oy=34;
- const SZ=uSheetSize(xR-xL+32+8+88.19+5, oy+yb+14), Wd=SZ.w, Hd=SZ.h;
+ // papel e orientação escolhidos (ou automático) e, se pedido, o esquema centrado na área livre da folha
+ const xL=X0-HW, xR=Math.max(XR,...PARX.map(v=>v+26))+16, pg=q.pg||{}, cw=xR-xL, ch=yb, needW=cw+32+8+88.19+5, needH=34+ch+14, vert=pg.ori==="v";
+ const FM={A4:[297,210],A3:[420,297],A2:[594,420],A1:[841,594],A0:[1189,841]}; let SZ=null;
+ if(FM[pg.fmt]){const f=FM[pg.fmt]; SZ=vert?{w:f[1],h:f[0]}:{w:f[0],h:f[1]}}
+ else if(vert){for(const k2 of ["A4","A3","A2","A1","A0"]){const f=FM[k2]; if(f[1]>=needW&&f[0]>=needH){SZ={w:f[1],h:f[0]}; break}} if(!SZ)SZ={w:Math.max(841,Math.ceil(needW)),h:Math.max(1189,Math.ceil(needH))}}
+ else SZ=uSheetSize(needW,needH);
+ const Wd=SZ.w, Hd=SZ.h, fit=needW<=Wd+.01&&needH<=Hd+.01; let ox=32-xL, oy=34;
+ if(pg.ctr){const aw=Wd-5-88.19-8-32, ah=Hd-5-6-34; ox+=Math.max(0,(aw-cw)/2); oy+=Math.max(0,(ah-ch)/2)}
  const sh=o=>{ if(o.k==="l"){o.x1+=ox;o.x2+=ox;o.y1+=oy;o.y2+=oy} else if(o.k==="pl"){o.pts=o.pts.map(q=>[q[0]+ox,q[1]+oy])} else {o.x+=ox;o.y+=oy}};
  P.forEach(sh); hits.forEach(h=>{h.x+=ox;h.y+=oy}); slots.forEach(s=>{s.x+=ox;s.y+=oy; if(s.y2!=null)s.y2+=oy});
  const M=(x1,y1,x2,y2,w)=>P.push({k:"l",x1,y1,x2,y2,lay:"MD",w});
@@ -3207,9 +3213,9 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
  TM(32,15,"Esquema unifilar · "+(q.nome||"Quadro"),{h:4.5,b:true});
  const sub=[]; if(q.local)sub.push("Local: "+q.local); sub.push((tri?"Trifásico 400/230 V":"Monofásico 230 V")+" · potência instalada "+uF(tot)+" kW"+(leaves.length?" · "+leaves.length+" circuito"+(leaves.length>1?"s":""):""));
  if(NQ)sub.push("Queda de tensão até ao quadro "+uF(NQ.du)+" % · Icc máx. no barramento "+uF(NQ.iccMax/1000,2)+" kA · Ib "+uF(NQ.Ib,1)+" A (ks "+uF(uKs(q))+") · "+NQ.esq+(uN(q.preq)>0?" · potência a requisitar "+uF(uN(q.preq))+" kVA":NQ.root===q.nome&&NQ.pc!==undefined?" · potência a contratar "+(NQ.pc?uF(NQ.pc)+" kVA":"BTE"):""));
- sub.forEach((s2,j)=>TM(32,21+j*3.6,s2,{h:2.4}));
+ {const mc=Math.max(30,Math.floor((Wd-5-88.19-6-32)/(2.4*.7))); sub.flatMap(s2=>uWrap(s2.replace(/ · /g," ·\u00a0"),mc,4)).forEach((s2,j)=>TM(32,21+j*3.6,s2.replace(/\u00a0/g," "),{h:2.4}))}
  uSheetColumn(q,P,Wd,Hd);
- return {P,hits,slots,W:Wd,H:Hd,leaves}}
+ return {P,hits,slots,W:Wd,H:Hd,leaves,fit,need:[needW,needH]}}
 
 // ---------- folha do esquema: carimbo da VR, simbologia e notas (como nas plantas) ----------
 const UFMT=[[420,297],[594,420],[841,594],[1189,841]];
@@ -3228,16 +3234,16 @@ function uSheetColumn(q,P,W,H){const pp=uCbHolder(q,W,H), tH=vrTitleH(pp), M=(x1
   Lx.I.forEach(b=>{const src=uImgSrc(b.k); if(src)P.push({k:"img",x:b.x0,y:b.y0,w:b.x1-b.x0,h:b.y1-b.y0,src,lay:"MD"}); else if(b.k==="vr")TM((b.x0+b.x1)/2,(b.y0+b.y1)/2,"VENTURA RODRIGUES",{h:2.6,a:"m",v:"m",b:true})})}
  const NB=vrNotesBox({w:W,h:H},q.notas,tH), x0=W-88.19, x1=W-5;
  if(NB){box(NB.x0,NB.y0,NB.x1,NB.y1); M(NB.x0,NB.y0+8,NB.x1,NB.y0+8,.35); TM((NB.x0+NB.x1)/2,NB.y0+4.4,"NOTAS",{h:2.4,a:"m",v:"m"}); NB.lines.forEach((t,i)=>TM(NB.x0+2.5,NB.y0+11.2+i*NB.lh,t,{h:1.55}))}
- const items=uLegItems(q).filter(i=>!i.hidden); if(!items.length)return;
- const yTop=9, yMax=NB?NB.y0-3:H-tH-6, rh=Math.max(5,Math.min(9,(yMax-yTop-10)/items.length)), n=Math.min(items.length,Math.floor((yMax-yTop-10)/rh)); if(n<1)return;
+ const items=uLegItems(q).filter(i=>!i.hidden); if(!items.length)return; const ls=Math.max(.4,Math.min(3,+(q.pg&&q.pg.ls)||1));
+ const yTop=9, yMax=NB?NB.y0-3:H-tH-6, rh=Math.max(5*ls,Math.min(9*ls,(yMax-yTop-10)/items.length)), n=Math.min(items.length,Math.floor((yMax-yTop-10)/rh)); if(n<1)return;
  const y0=yTop, y1=yTop+10+n*rh; box(x0,y0,x1,y1); M(x0,y0+8,x1,y0+8,.35); TM((x0+x1)/2,y0+4.4,"SIMBOLOGIA",{h:2.4,a:"m",v:"m"});
  items.slice(0,n).forEach((it,i)=>{const cy=y0+10+i*rh+rh/2, pr=uDevPrims({...it.d,ex:false,tag:""}); let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity; const B=(x,y)=>{a=Math.min(a,x);c=Math.max(c,x);b=Math.min(b,y);d=Math.max(d,y)};
   pr.forEach(o=>{ if(o.k==="l"){B(o.x1,o.y1);B(o.x2,o.y2)} else if(o.k==="pl")o.pts.forEach(q2=>B(q2[0],q2[1])); else if(o.k==="c"){B(o.x-o.r,o.y-o.r);B(o.x+o.r,o.y+o.r)} else if(o.k==="t")B(o.x,o.y)});
-  const k=Math.min(14/Math.max(1e-6,c-a),(rh-1.2)/Math.max(1e-6,d-b),.7), mx=(a+c)/2, my=(b+d)/2, X=x=>x0+10.5+(x-mx)*k, Y=y=>cy+(y-my)*k;
+  const k=Math.min(14*ls/Math.max(1e-6,c-a),(rh-1.2*ls)/Math.max(1e-6,d-b),.7*ls), mx=(a+c)/2, my=(b+d)/2, X=x=>x0+10.5*ls+(x-mx)*k, Y=y=>cy+(y-my)*k;
   pr.forEach(o=>{const q2={...o,lay:"MD",ex:false,dash:o.dash};
    if(o.k==="l"){q2.x1=X(o.x1);q2.y1=Y(o.y1);q2.x2=X(o.x2);q2.y2=Y(o.y2); q2.w=undefined} else if(o.k==="pl")q2.pts=o.pts.map(v=>[X(v[0]),Y(v[1])]); else if(o.k==="c"){q2.x=X(o.x);q2.y=Y(o.y);q2.r=o.r*k} else if(o.k==="t"){q2.x=X(o.x);q2.y=Y(o.y);q2.h=(o.h||2)*k}
    P.push(q2)});
-  TM(x0+21,cy+.7,it.s.length>60?it.s.slice(0,59)+"…":it.s,{h:1.75})})}
+  const mc=Math.floor(60/ls); TM(x0+21*ls,cy+.7*ls,it.s.length>mc?it.s.slice(0,mc-1)+"…":it.s,{h:1.75*ls})})}
 /* ---------- SVG / DXF / impressão ---------- */
 function uSVG(P,ink,noHint){const out=[];
  P.forEach(p=>{ if(noHint&&p.hint)return; const col=p.err?"#dc2626":p.ex?"#2563eb":(p.hint||p.gray?"#9aa3af":ink);
@@ -3484,7 +3490,12 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
    +sel("dor","Designação e cabo",[["v","Na vertical"],["h","Na horizontal"]])+sel("da","Alinhamento",[["b","Em baixo"],["m","Ao centro"],["t","Em cima"]])+sel("hd","Altura da linha «Designação» (mm)",[20,25,30,40,50,60,80])+sel("hc","Altura da linha «Cabo» (mm)",[10,14,18,22,28,35])
    +'<div class="small" style="padding:4px 10px 0">Linhas da tabela</div>'+[["L","Comprimento"],["p","Potência"],["u","ΔU total"],["f","Fase"]].map(([k,l])=>`<div class="row"><label>${l}</label><input type="checkbox" data-sh="${k}" ${st.hide[k]?"":"checked"}></div>`).join("")
    +uBtns([["ubStAll","Aplicar a todos os quadros"],["ubStRst","Repor"]])+'</div>'}
- h+='<h3>Folha</h3><div class="small" style="padding:4px 10px">O carimbo usa os dados das Peças escritas (promotor, técnico, obra, data), como nas plantas.</div>'+uFields([["dn","Desenho n.º","text",null,"ex.: ELE.02.01"]],q)+uBtns([["ubCb","Editar carimbo…","Mostrar ou retirar secções (promotor, coordenador…) e reescrever os valores só nesta folha"]]);
+ h+='<h3>Folha</h3><div class="small" style="padding:4px 10px">O carimbo usa os dados das Peças escritas (promotor, técnico, obra, data), como nas plantas.</div>'+uFields([["dn","Desenho n.º","text",null,"ex.: ELE.02.01"]],q)
+  +(()=>{const pg=q.pg||{}, so=(k,l,ops,v)=>`<div class="row"><label>${l}</label><select data-pg="${k}">${ops.map(([a,b])=>`<option value="${a}" ${String(v)===String(a)?"selected":""}>${b}</option>`).join("")}</select></div>`;
+   let t=so("fmt","Papel",[["auto","Automático (o mais pequeno que serve)"],["A4","A4"],["A3","A3"],["A2","A2"],["A1","A1"],["A0","A0"]],pg.fmt||"auto")+so("ori","Orientação",[["h","Horizontal"],["v","Vertical"]],pg.ori||"h")
+    +`<div class="row"><label>Centrar o esquema na folha</label><input type="checkbox" data-pg="ctr" ${pg.ctr?"checked":""}></div>`+so("ls","Tamanho da simbologia",[["0.6","60 %"],["0.8","80 %"],["1","100 %"],["1.25","125 %"],["1.5","150 %"],["2","200 %"]],String(pg.ls||1));
+   const Lq=UNI.L; if(Lq&&Lq.fit===false)t+=`<div class="small" style="color:#e8742c;padding:2px 10px">O esquema não cabe nesta folha: precisa de ${Math.ceil(Lq.need[0])} × ${Math.ceil(Lq.need[1])} mm. Escolha um papel maior, a outra orientação ou «Automático».</div>`;
+   return t+uBtns([["ubPgAll","Papel igual em todos os quadros"]])})()+uBtns([["ubCb","Editar carimbo…","Mostrar ou retirar secções (promotor, coordenador…) e reescrever os valores só nesta folha"]]);
  h+=`<div class="row" style="display:block"><label for="uf_notas">Notas (uma por parágrafo)</label><textarea id="uf_notas" data-k="notas" rows="4" style="width:100%;margin-top:4px;font:inherit;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:5px">${uEsc(q.notas||"")}</textarea></div>`;
  { const it=uLegItems(q); h+='<h3>Simbologia</h3><div class="small" style="padding:4px 10px">Entram todos os aparelhos usados no esquema. Desmarque para retirar; o texto pode ser reescrito.</div>'+(it.length?'<div class="leglist">'+it.map(i=>`<div class="legit"><input type="checkbox" data-ulk="${uEsc(i.key)}" ${i.hidden?"":"checked"}><input type="text" data-ult="${uEsc(i.key)}" value="${uEsc(i.s)}" placeholder="${uEsc(i.def)}"></div>`).join("")+'</div>':'<div class="small" style="padding:4px 10px">(sem aparelhos)</div>')}
  box.innerHTML=h; uBind(box,q,k=>{ if(k==="ph")q.root.devs.forEach(d=>{ if(d.t==="int"||d.t==="dif")d.pol=q.ph==="3F"?"4P":"2P"}); if(k==="notas"&&!q.notas)delete q.notas});
@@ -3497,6 +3508,8 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
   sb.querySelectorAll("[data-sh]").forEach(el=>el.onchange=()=>{uPush(); const S2=st(); S2.hide=S2.hide||{}; if(el.checked)delete S2.hide[el.dataset.sh]; else S2.hide[el.dataset.sh]=1; uRender(); saveLocal()});
   uOn("ubStAll",()=>{uPush(); uDoc().qs.forEach(o=>{o.st=JSON.parse(JSON.stringify(q.st||{}))}); uRender(); saveLocal(); toast("Aspeto aplicado a todos os esquemas.",2500)});
   uOn("ubStRst",()=>{uPush(); delete q.st; uRender(); uProps(); saveLocal()})}}
+ box.querySelectorAll("[data-pg]").forEach(el=>el.onchange=()=>{uPush(); q.pg=q.pg||{}; const k=el.dataset.pg; q.pg[k]=el.type==="checkbox"?el.checked:(k==="ls"?+el.value:el.value); uRender(); uProps(); uFit(); saveLocal()});
+ uOn("ubPgAll",()=>{uPush(); uDoc().qs.forEach(o=>{o.pg=JSON.parse(JSON.stringify(q.pg||{}))}); uRender(); saveLocal(); toast("Papel, orientação, centragem e simbologia aplicados a todos os esquemas.",3000)});
  uOn("ubCb",()=>{const L=uLayout(q); uPush(); cbDialog(uCbHolder(q,L.W,L.H),{title:"Esquema unifilar\n"+(q.nome||"")},null,()=>{uRender(); saveLocal()})});
  uOn("ubPar",()=>{uPush(); const c=JSON.parse(JSON.stringify(q.root.devs)); (q.root.par=q.root.par||[]).push({id:uId(),devs:c}); uDone(); toast("Entrada em paralelo criada. Clique em «Entrada N» no esquema para lhe dar barramento próprio com interbarras.",4500)}); uOn("ubParDel",()=>{uPush(); uParDel(q,q.root.par.length-1); uDone()}); uOn("ubNet",uNetDialog);
  if($("ucSrc"))uBind($("ucSrc"),q.src,k=>{ if(k==="tipo")setTimeout(uProps,0)}); if($("ucQ"))uBind($("ucQ"),q); uSum()}
