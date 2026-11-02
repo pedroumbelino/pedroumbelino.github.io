@@ -5824,6 +5824,65 @@ function veMD(api){const D=PROJ&&PROJ.mods&&PROJ.mods.ve; if(!D||D.G.md===false)
  P("A instalação será executada por técnico ou entidade instaladora habilitados (Lei n.º 14/2015), sujeita a inspeção inicial e a inspeções periódicas, e só será ligada à rede depois de emitido o certificado de exploração."); E()}
 
 /*VE-END*/
+/*VF-BEGIN*/
+/* ================= Verificar o projeto: plantas, circuitos e esquemas, numa só lista ================= */
+// Junta as verificações dos esquemas unifilares (uChecks) com verificações das plantas e da ligação entre plantas e esquemas.
+// Cada linha tem «Ver», que abre a planta ou o esquema e escolhe o objeto.
+const VF_LOAD=["Iluminação","Tomadas","Força motriz","Ar condicionado"];
+let VF_MAXP=8;
+function vfRun(){const out=[], A=(g,sev,msg,go)=>out.push({g,sev,msg,go}); if(!PROJ)return out;
+ const pls=PROJ.plantas||[], qs=(()=>{try{return uDoc().qs}catch(e){return []}})(), qn=new Set(qs.map(q=>q.nome));
+ // plantas
+ pls.forEach((pl,pi)=>{const P=pl.pname||("Planta "+(pi+1)), C=pl.circs||[], inC=new Map();
+  C.forEach(ci=>(ci.objs||[]).forEach(id=>{ if(!inC.has(id))inC.set(id,[]); inC.get(id).push(ci)}));
+  const syms=pl.ents.filter(e=>e.t==="sym"&&SYM[e.sym]);
+  const loose=syms.filter(e=>VF_LOAD.includes(SYM[e.sym].cat)&&!inC.has(e.id));
+  if(loose.length)A(P,"m",loose.length+" "+(loose.length>1?"pontos":"ponto")+" (iluminação, tomadas, força motriz ou AVAC) sem circuito: não entram no esquema unifilar nem nas quantidades por circuito.",{pi,ids:loose.map(e=>e.id)});
+  inC.forEach((L,id)=>{ if(L.length>1)A(P,"m","Um objeto pertence a "+L.length+" circuitos ("+L.map(circName).join(", ")+").",{pi,ids:[id]})});
+  C.forEach(ci=>{const nm=circName(ci)||"(sem nome)", q=circQ(ci,pl), ob=circObjs(ci,pl);
+   if(!q)A(P,"a","Circuito "+nm+": o quadro foi apagado ou não está escolhido.",{pi,ids:ob.map(e=>e.id),ci:ci.id});
+   if(!ob.length)A(P,"m","Circuito "+nm+": sem objetos.",{pi,ci:ci.id});
+   const pts=ob.filter(e=>e.t==="sym"&&SYM[e.sym]&&VF_LOAD.includes(SYM[e.sym].cat));
+   if(pts.length>VF_MAXP)A(P,"m","Circuito "+nm+": "+pts.length+" pontos (acima de "+VF_MAXP+"); confirme a regra aplicável ao tipo de circuito e de local.",{pi,ids:pts.map(e=>e.id),ci:ci.id});
+   const cats=new Set(pts.map(e=>SYM[e.sym].cat)); if(cats.has("Iluminação")&&cats.has("Tomadas"))A(P,"m","Circuito "+nm+": mistura iluminação e tomadas no mesmo circuito.",{pi,ids:pts.map(e=>e.id),ci:ci.id});
+   let L=null; try{L=circLen(ci,pl)}catch(e){} if(L&&L.est&&ob.length)A(P,"i","Circuito "+nm+": comprimento estimado (ainda sem cabos desenhados com este circuito).",{pi,ci:ci.id});
+   if(q&&qs.length){const n=quadroName(q); if(n&&!qn.has(n))A(P,"m","Circuito "+nm+": o quadro «"+n+"» ainda não tem esquema unifilar.",{pi,ids:[q.id]})}});
+  // quadros desenhados sem nome ou sem esquema
+  syms.filter(isQuadro).forEach(q=>{const n=quadroName(q); if(!n)A(P,"m","Quadro sem nome: dê-lhe o nome para o ligar ao esquema unifilar.",{pi,ids:[q.id]}); else if(qs.length&&!qn.has(n))A(P,"i","Quadro «"+n+"» sem esquema unifilar.",{pi,ids:[q.id]})});
+  // cabos sem circuito
+  const cab=pl.ents.filter(e=>e.t==="cable"&&!String(e.c&&e.c.circ||"").trim()); if(cab.length)A(P,"i",cab.length+" cabo(s) desenhado(s) sem nome de circuito.",{pi,ids:cab.map(e=>e.id)})});
+ // esquemas unifilares
+ const onPlan=new Set(); pls.forEach(pl=>(pl.circs||[]).forEach(ci=>{const q=circQ(ci,pl); onPlan.add((q?quadroName(q):"")+"|"+circName(ci))}));
+ const anyPlanCirc=pls.some(pl=>(pl.circs||[]).length);
+ qs.forEach(q=>{let W=[]; try{W=uChecks(q)}catch(e){} W.forEach(w=>A("Esquema "+q.nome,/sem |abaixo|acima|não fica/.test(w.msg)&&!/indique/.test(w.msg)?"a":"m",w.msg,{q:q.nome,sel:w.sel}));
+  uLeafPath(q).forEach(({leaf,path})=>{const c=leaf.circ||{}, R=c.ref||"circuito", des=String(c.des||"");
+   if(/tomada/i.test(des)&&!/trif|industrial|cee|3p\+n/i.test(des)){const difs=[]; path.forEach(n=>n.devs.forEach(d=>{ if(d.t==="dif"||(d.t==="dj"&&d.dif))difs.push(uN(d.idn))}));
+    if(!difs.length||Math.min(...difs)>30)A("Esquema "+q.nome,"a",R+": circuito de tomadas sem diferencial de alta sensibilidade (30 mA).",{q:q.nome,sel:{k:"node",nid:leaf.id}})}
+   if(anyPlanCirc&&c.ref&&!c.to&&!c.gm&&!onPlan.has(q.nome+"|"+c.ref))A("Esquema "+q.nome,"i",R+": não há circuito com este nome nas plantas.",{q:q.nome,sel:{k:"node",nid:leaf.id}})})});
+ if(!pls.some(p=>p.ents.length))A("Projeto","i","Ainda não há nada desenhado.",null);
+ return out}
+function vfGo(go){ if(!go)return; $("vfDlg")&&($("vfDlg").style.display="none");
+ if(go.q){try{openUni(go.q); const d=uDoc(), i=d.qs.findIndex(x=>x.nome===go.q); if(i>=0)d.act=i; if(go.sel)uSel(go.sel)}catch(e){console.error(e)} return}
+ if(go.pi!=null){activatePlanta(go.pi,true); const ids=new Set(go.ids||[]); let E=S.doc.ents.filter(e=>ids.has(e.id));
+  if(go.ci!=null){const ci=(S.doc.circs||[]).find(c=>c.id===go.ci); if(ci){S.circHL=ci.id; if(!E.length)E=circObjs(ci)}}
+  S.sel=new Set(E); if(E.length){let a=1e9,b=1e9,c=-1e9,d=-1e9; E.forEach(e=>{[[e.x,e.y],[e.x1,e.y1],[e.x2,e.y2]].concat(e.pts||[]).forEach(p=>{ if(p[0]==null||!isFinite(p[0]))return; a=Math.min(a,p[0]);b=Math.min(b,p[1]);c=Math.max(c,p[0]);d=Math.max(d,p[1])})});
+   const m=Math.max(3,(c-a)*.2,(d-b)*.2); a-=m;b-=m;c+=m;d+=m; const r=cv.getBoundingClientRect(); S.view.s=Math.min(r.width/(c-a),r.height/(d-b)); S.view.ox=r.width/2-(a+c)/2*S.view.s; S.view.oy=r.height/2+(b+d)/2*S.view.s}
+  try{refreshUI()}catch(e){} draw(); const b=$("vfBack"); if(b)b.style.display="block"}}
+function vfOpen(){ if(!PROJ){toast("Abra ou crie um projeto primeiro.");return} let el=$("vfDlg");
+ if(!el){el=document.createElement("div"); el.id="vfDlg"; el.style.cssText="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center"; document.body.appendChild(el)}
+ el.style.display="flex"; const L=vfRun(), SV={a:["#ef4444","Erro"],m:["#e8742c","Atenção"],i:["#60a5fa","Nota"]}, grp=[...new Set(L.map(x=>x.g))];
+ const n=k=>L.filter(x=>x.sev===k).length;
+ el.innerHTML=`<div style="background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:10px;width:min(980px,96vw);height:min(820px,92vh);display:flex;flex-direction:column;overflow:hidden">
+ <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)"><b style="font-size:15px">Verificar o projeto</b><span class="small" style="flex:1">${n("a")} erro(s) · ${n("m")} aviso(s) · ${n("i")} nota(s) · plantas, circuitos e esquemas unifilares</span>
+  <label class="small">Pontos máx. por circuito <input id="vfMax" value="${VF_MAXP}" style="width:40px"></label><button id="vfCopy">Copiar</button><button id="vfX">Fechar</button></div>
+ <div style="flex:1;overflow:auto;padding:8px 14px">${L.length?grp.map(g=>`<div style="margin:10px 0 4px;font-weight:600">${uEsc(g)}</div>`+L.map((x,i)=>x.g!==g?"":`<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;border-top:1px solid var(--line)"><span style="min-width:64px;color:${SV[x.sev][0]};font-size:12px">${SV[x.sev][1]}</span><span style="flex:1;font-size:13px">${uEsc(x.msg)}</span>${x.go?`<button data-vg="${i}">Ver</button>`:""}</div>`).join("")).join(""):`<div style="padding:30px;text-align:center">Não encontrei problemas.</div>`}</div></div>`;
+ el.querySelectorAll("[data-vg]").forEach(b=>b.onclick=()=>vfGo(L[+b.dataset.vg].go));
+ $("vfX").onclick=()=>{el.style.display="none"};
+ $("vfMax").onchange=e=>{VF_MAXP=Math.max(1,Math.round(gerN(e.target.value))||8); vfOpen()};
+ $("vfCopy").onclick=()=>{const t=grp.map(g=>g+"\n"+L.filter(x=>x.g===g).map(x=>"  ["+SV[x.sev][1]+"] "+x.msg).join("\n")).join("\n\n"); try{navigator.clipboard.writeText(t); toast("Lista copiada.")}catch(e){}};
+ let b=$("vfBack"); if(!b){b=document.createElement("button"); b.id="vfBack"; b.textContent="← Voltar à verificação"; b.style.cssText="position:fixed;left:50%;transform:translateX(-50%);bottom:110px;z-index:90;display:none"; b.className="on"; document.body.appendChild(b); b.onclick=()=>{b.style.display="none"; vfOpen()}} b.style.display="none"}
+
+/*VF-END*/
 // lista de comandos: id, nome, grupo, nomes curtos (o primeiro aparece no menu), tecla, ação
 const CMDS=[
  {id:"novo",n:"Novo…",g:"Ficheiro",a:["NOVO","NEW"],k:"Ctrl+N",f:()=>newDialog()},
@@ -5880,6 +5939,7 @@ const CMDS=[
  {id:"explode",n:"Explodir (polilinhas, cabos, símbolos, simbologia)",g:"Modificar",a:["X","EXPLODE","EXPLODIR"],f:()=>needSelThen("Explodir",explodeSel),sep:true},
  {id:"circ",n:"Circuito (quadro e objetos; os cabos desenham-se à parte)",g:"Elétrico",a:["CI","CIRCUITO"],f:()=>{S.circAuto=false; setTool("circ"); circHint()}},
  {id:"circauto",n:"Circuito com traçado automático do cabo",g:"Elétrico",a:["CIA","CIRCAUTO"],f:()=>{S.circAuto=true; setTool("circ"); circHint()}},
+ {id:"verif",n:"Verificar o projeto (plantas, circuitos e esquemas)…",g:"Elétrico",a:["VERIFICAR","VER","CHECK"],f:()=>vfOpen()},
  {id:"circlist",n:"Circuitos desta planta…",g:"Elétrico",a:["CIRCUITOS","LCI"],f:()=>circListDialog()},
  {id:"cabo",n:"Cabo à mão",g:"Elétrico",a:["CA","CABO","K"],f:()=>setTool("cable")},
  {id:"lin2cab",n:"Linhas → cabos (transformar as linhas selecionadas em cabos, um por troço)",g:"Elétrico",a:["LC","LINHASCABO","L2C","PCABO"],f:()=>linesToCable()},
