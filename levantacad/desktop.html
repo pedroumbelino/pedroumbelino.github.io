@@ -3007,8 +3007,9 @@ function uDevLabels(d){const P=[];
   case "bot": P.push("Botoneira","de corte ("+(d.bob||"MX")+")"); break;
  }
  return P.filter(Boolean)}
-function uWrap(s,max,lines){const w=String(s||"").trim().split(/\s+/).filter(Boolean), out=[]; let cur="";
- w.forEach(x=>{ if(!cur)cur=x; else if((cur+" "+x).length<=max)cur+=" "+x; else {out.push(cur); cur=x}}); if(cur)out.push(cur);
+// quebra o texto em linhas: respeita as mudanças de linha escritas (Enter) e parte o resto pelas palavras
+function uWrap(s,max,lines){const out=[]; String(s||"").split(/\r?\n/).forEach(par=>{const w=par.trim().split(/\s+/).filter(Boolean); let cur="";
+ w.forEach(x=>{ if(!cur)cur=x; else if((cur+" "+x).length<=max)cur+=" "+x; else {out.push(cur); cur=x}}); if(cur)out.push(cur)});
  if(out.length>lines){const r=out.slice(0,lines); r[lines-1]=(r[lines-1]+" "+out.slice(lines).join(" ")).slice(0,max-1)+"…"; return r} return out}
 
 /* ---------- fases, verificações ---------- */
@@ -3161,7 +3162,7 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
  // entrada
  const rm=LM.get(q.root);
  L(rm.cx,TOP-9,rm.cx,TOP); add({k:"pl",pts:[[rm.cx-1,TOP-10.8],[rm.cx+1,TOP-10.8],[rm.cx,TOP-9]],cl:true,fill:true,lay:"EQ"});
- const al=[]; if(q.alim)al.push("Alimentação: "+q.alim); if(q.orig)al.push("Origem: "+q.orig); if(PAR.length)al.unshift("Entrada 1"); al.forEach((s,j)=>T(rm.cx+2.5,TOP-9.4+j*2.8,s,{h:2,b:PAR.length&&!j}));
+ const al=[]; if(q.alim)al.push("Alimentação: "+q.alim); if(q.orig)al.push("Origem: "+q.orig); if(q.preq!==""&&q.preq!=null&&uN(q.preq)>0)al.push("Potência a requisitar: "+uF(uN(q.preq))+" kVA"); if(PAR.length)al.unshift("Entrada 1"); al.forEach((s,j)=>T(rm.cx+2.5,TOP-9.4+j*2.8,s,{h:2,b:PAR.length&&!j}));
  // quadro de circuitos (tabela)
  const ft=+UST.ft||2, rh0=Math.max(8,ft*3.6);
  const rows=[["c","Circuito",rh0],["d","Designação",+UST.hd||40],["k","Cabo",+UST.hc||22],["L","Comprimento (m)",rh0],["p","Potência (kW)",rh0],["u","ΔU total (%)",rh0],...(tri?[["f","Fase",rh0]]:[])].filter(r=>r[0]==="c"||!UST.hide[r[0]]);
@@ -3175,9 +3176,9 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
   T(cx,mid("c"),ci.ref||("C"+(k+1)),{a:"m",v:"m",h:ft*1.1,ex,b:true,lay:"TB"});
   // texto comprido (designação, cabo): na vertical ou na horizontal, em baixo, ao centro ou em cima
   const cell=(key,txt)=>{const i=RI[key]; if(i==null)return; const top=ry[i], bot=ry[i+1], H=bot-top, h=ft, da=UST.da||"b";
-   if(UST.dor==="h"){const lh=h*1.35, maxc=Math.max(4,Math.floor((m.w-2.5)/(h*.74))), nl=Math.max(1,Math.floor((H-2)/lh)), ls=uWrap(txt,maxc,nl);
+   if(UST.dor==="h"){const lh=h*1.35, maxc=Math.max(4,Math.floor((m.w-2.5)/(h*.74))), nl=Math.max(2,Math.floor((H-2)/lh)), ls=uWrap(txt,maxc,nl);
     const y0=da==="t"?top+1.2+h*.8:da==="m"?(top+bot)/2-(ls.length-1)*lh/2+h*.35:bot-1.4-(ls.length-1)*lh; ls.forEach((t,j)=>T(cx,y0+j*lh,t,{a:"m",h,ex,lay:"TB"}))}
-   else {const maxc=Math.max(4,Math.floor((H-3)/(h*.66))), nl=Math.max(1,Math.min(4,Math.floor((m.w-2)/(h*1.5)))), ls=uWrap(txt,maxc,nl), yy=da==="t"?top+1.5:da==="m"?(top+bot)/2:bot-1.5, a=da==="t"?"e":da==="m"?"m":"s";
+   else {const maxc=Math.max(4,Math.floor((H-3)/(h*.66))), nl=Math.max(2,Math.min(4,Math.floor((m.w-2)/(h*1.5)))), ls=uWrap(txt,maxc,nl), yy=da==="t"?top+1.5:da==="m"?(top+bot)/2:bot-1.5, a=da==="t"?"e":da==="m"?"m":"s";
     ls.forEach((t,j)=>T(cx+(j-(ls.length-1)/2)*h*1.5,yy,t,{rot:-90,v:"m",a,h,ex,lay:"TB"}))}};
   cell("d",ci.des); cell("k",String(ci.cabo||"").replace(/\+(?=\S)/g,"+ "));
   const nr=NET.leaf[c.id], tx=(key,v,o)=>{ if(RI[key]!=null)T(cx,mid(key),v,{a:"m",v:"m",h:ft,ex,lay:"TB",...(o||{})})};
@@ -3197,7 +3198,7 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
  M(25,5,Wd-5,5,.5); M(Wd-5,5,Wd-5,Hd-5,.5); M(Wd-5,Hd-5,25,Hd-5,.5); M(25,Hd-5,25,5,.5);
  TM(32,15,"Esquema unifilar · "+(q.nome||"Quadro"),{h:4.5,b:true});
  const sub=[]; if(q.local)sub.push("Local: "+q.local); sub.push((tri?"Trifásico 400/230 V":"Monofásico 230 V")+" · potência instalada "+uF(tot)+" kW"+(leaves.length?" · "+leaves.length+" circuito"+(leaves.length>1?"s":""):""));
- if(NQ)sub.push("Queda de tensão até ao quadro "+uF(NQ.du)+" % · Icc máx. no barramento "+uF(NQ.iccMax/1000,2)+" kA · Ib "+uF(NQ.Ib,1)+" A (ks "+uF(uKs(q))+") · "+NQ.esq+(NQ.root===q.nome&&NQ.pc!==undefined?" · potência a contratar "+(NQ.pc?uF(NQ.pc)+" kVA":"BTE"):""));
+ if(NQ)sub.push("Queda de tensão até ao quadro "+uF(NQ.du)+" % · Icc máx. no barramento "+uF(NQ.iccMax/1000,2)+" kA · Ib "+uF(NQ.Ib,1)+" A (ks "+uF(uKs(q))+") · "+NQ.esq+(uN(q.preq)>0?" · potência a requisitar "+uF(uN(q.preq))+" kVA":NQ.root===q.nome&&NQ.pc!==undefined?" · potência a contratar "+(NQ.pc?uF(NQ.pc)+" kVA":"BTE"):""));
  sub.forEach((s2,j)=>TM(32,21+j*3.6,s2,{h:2.4}));
  uSheetColumn(q,P,Wd,Hd);
  return {P,hits,slots,W:Wd,H:Hd,leaves}}
@@ -3387,9 +3388,27 @@ const UFD={
  rel:[["In","In (A)","num","uIns"],["tipo","Tipo","sel",["analógico","digital","astronómico"]],["can","Canais","sel",["1","2"]]],
  tr:[["u","Tensões","text"],["s","Potência","text"]],
  fus:[["In","In (A)","num","uIns"],["cl","Classe","sel",["gG","aM","gR"]],["tam","Tamanho","sel",["8x32","10x38","14x51","22x58","NH000","NH00","NH1","NH2","NH3"]],["pol","Polos","sel",UPOLS],["base","Montagem","sel",[["cc","Corta-circuitos"],["is","Interruptor-seccionador fusível"]]]]};
+// renumeração dos circuitos: dir -1 = anteriores, 1 = seguintes, 0 = ambos (pela ordem no esquema, só os do mesmo prefixo)
+function uRefParse(r){const m=String(r||"").trim().match(/^(.*?)(\d+)([A-Za-z]?)$/); return m?{p:m[1],n:+m[2],s:m[3]}:null}
+function uRenameSrc(leaf,oldR,newR){const cab=cabById(leaf.circ.src); if(!cab||!cab.c||oldR===newR)return 0; const re=new RegExp("^(\\s*)"+oldR.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"(?![0-9A-Za-z])","i"); let n=0;
+ const fix=c=>{ if(c&&re.test(String(c.circ||""))){c.circ=String(c.circ).replace(re,"$1"+newR); n++}};
+ if(!UNI._plU){pushUndo(); UNI._plU=true; setTimeout(()=>{UNI._plU=false},0)}
+ fix(cab.c); if(cab._ci)(PROJ?PROJ.plantas:[S.doc]).forEach(p=>p.ents.forEach(e=>{ if(e.t==="cable"&&e.c&&e.c.cid===cab._ci.id)fix(e.c)}));
+ if(n){LC_VER++; try{rebuildIndex(); draw()}catch(e){}} return n}
+function uRenumber(leaf,dir){const q=uQ(), L=uLayout(q), LV=L.leaves, k=LV.indexOf(leaf); if(k<0)return;
+ const refOf=(l,i)=>l.circ.ref||("C"+(i+1)), me=uRefParse(refOf(leaf,k)); if(!me){toast("O circuito tem de ter um número (ex.: C4) para renumerar a partir dele.",4000); return}
+ const same=i=>{const r=uRefParse(refOf(LV[i],i)); return r&&r.p.toLowerCase()===me.p.toLowerCase()};
+ const after=[], before=[]; LV.forEach((l,i)=>{ if(i>k&&same(i))after.push(i); if(i<k&&same(i))before.unshift(i)});
+ const doA=dir>=0, doB=dir<=0; if(doB&&before.length>me.n-1){toast("Não há números suficientes antes de "+me.p+me.n+" para os "+before.length+" circuitos anteriores. Suba primeiro o número deste circuito.",6000); return}
+ const ch=[]; if(doA)after.forEach((i,j)=>ch.push([i,me.p+(me.n+j+1)])); if(doB)before.forEach((i,j)=>ch.push([i,me.p+(me.n-j-1)]));
+ const real=ch.filter(([i,r])=>refOf(LV[i],i)!==r); if(!real.length){toast("Já estava tudo numerado em sequência.",2500); return}
+ uPush(); let nc=0; real.forEach(([i,r])=>{const o=refOf(LV[i],i); LV[i].circ.ref=r; nc+=uRenameSrc(LV[i],o,r)}); uDone();
+ const seen=new Map(); LV.forEach((l,i)=>{const r=refOf(l,i).toUpperCase(); seen.set(r,(seen.get(r)||0)+1)}); const dup=[...seen].filter(x=>x[1]>1).map(x=>x[0]);
+ toast(real.length+" circuito(s) renumerado(s)"+(nc?"; o nome de "+nc+" cabo(s)/circuito(s) da planta foi atualizado também":"")+". Os circuitos com outro prefixo ficam como estavam."+(dup.length?" Atenção: ficaram números repetidos ("+dup.join(", ")+").":""),dup.length?8000:5000)}
 function uFields(defs,obj){return defs.map(([k,l,ty,op,ph])=>{const v=obj[k], id="uf_"+k;
  if(ty==="sel")return `<div class="row"><label for="${id}">${l}</label><select id="${id}" data-k="${k}">${op.map(o=>{const [a,b]=Array.isArray(o)?o:[o,o]; return `<option value="${uEsc(a)}" ${String(v)===String(a)?"selected":""}>${uEsc(b)}</option>`}).join("")}</select></div>`;
  if(ty==="chk")return `<div class="row"><label for="${id}">${l}</label><input type="checkbox" id="${id}" data-k="${k}" ${v?"checked":""}></div>`;
+ if(ty==="area")return `<div class="row"><label for="${id}">${l}</label><textarea id="${id}" data-k="${k}" rows="2" style="flex:1;min-width:0;font:inherit;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:4px;resize:vertical" ${ph?`placeholder="${uEsc(ph)}"`:""}>${uEsc(v==null?"":v)}</textarea></div>`;
  return `<div class="row"><label for="${id}">${l}</label><input type="text" id="${id}" data-k="${k}" data-ty="${ty}" ${ty==="num"?'inputmode="decimal"':""} value="${uEsc(v==null?"":(ty==="num"?String(v).replace(".",","):v))}" ${op?`list="${op}"`:""} ${ph?`placeholder="${uEsc(ph)}"`:""}></div>`}).join("")}
 function uBind(box,obj,after){box.querySelectorAll("[data-k]").forEach(el=>{el.onchange=()=>{uPush(); const k=el.dataset.k;
   if(el.type==="checkbox")obj[k]=el.checked; else if(el.dataset.ty==="num"){const n=uN(el.value); obj[k]=el.value.trim()===""?"":n} else obj[k]=el.value;
@@ -3414,7 +3433,8 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
   box.innerHTML=h; uBind(box,d); uOn("ubUp",()=>uShift(-1)); uOn("ubDn",()=>uShift(1)); uOn("ubDup",uDupSel); uOn("ubDel",uDelSel); return}
  if(r&&r.k==="node"&&r.p){const n=r.n;
   if(!n.kids){const L=UNI.L, k=L.leaves.indexOf(n); const fa=uPhases(q).res.get(n.id); $("uniPT").textContent="Circuito "+(n.circ.ref||("C"+(k+1)));
-   h+=uFields([["ref","Circuito","text",null,"C"+(k+1)+" (automático)"],["des","Designação","text"],["cabo","Cabo","text","uCabos"],["p","Potência (kW)","num"]],n.circ);
+   h+=uFields([["ref","Circuito","text",null,"C"+(k+1)+" (automático)"],["des","Designação","area",null,"Enter muda de linha no esquema"],["cabo","Cabo","text","uCabos"],["p","Potência (kW)","num"]],n.circ);
+   h+=uBtns([["ubRnA","↞ Anteriores","Renumera os circuitos à esquerda deste, a descer a partir do número deste (só os com o mesmo prefixo, ex.: C)"],["ubRnB","Seguintes ↠","Renumera os circuitos à direita deste, a subir a partir do número deste (só os com o mesmo prefixo)"],["ubRnAB","Ambos","Renumera os anteriores e os seguintes"]]).replace('<div class="btns">','<div class="small" style="padding:2px 10px 0">Renumerar a partir deste circuito</div><div class="btns">');
    if(r.p===q.root&&uSecs(q).NS>1){const {S,NS}=uSecs(q); h+=uFields([["sec","Barramento","sel",Array.from({length:NS},(_,i)=>[String(i),"Barramento "+String.fromCharCode(65+i)+" (Entrada "+(S.indexOf(i)+1)+")"])]],{get sec(){return String(+n.circ.__s||+n.sec||0)}}).replace('data-k="sec"','data-k="sec" data-sec="1"')}
    if(q.ph==="3F")h+=uFields([["fase","Fase","sel",[["auto","Automática ("+(fa||"-")+")"],"L1","L2","L3",["3F","Trifásico"]]]],n.circ);
    if(!cabById(n.circ.src))h+=uFields([["L","Comprimento (m)","num"]],n.circ); else h+=`<div class="small">Comprimento, cabo e proteção vêm do cabo desenhado na planta.</div>`;
@@ -3425,7 +3445,8 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
     if(q.root.kids&&opts.length)h+=uFields([["to","Alimenta o quadro","sel",[["","(não alimenta outro quadro)"],...opts]]],n.circ).replace('data-k="to"','data-k="to" data-to="1"')}
    h+=uFields([["ex","Existente (azul)","chk"]],n.circ)+'<h3>Cálculo</h3><div id="unileaf">'+uLeafHTML(n)+'</div>';
    h+=uBtns([["ubL","← Esquerda"],["ubR","Direita →"],["ubDup","Duplicar"],["ubGrp","Criar barramento por baixo","Os aparelhos até ao último diferencial ou interruptor ficam a alimentar um barramento novo, para poder pendurar mais circuitos"],["ubDel","Apagar circuito"]]);
-   box.innerHTML=h; uBind(box,n.circ);
+   const ref0=n.circ.ref||("C"+(k+1)); box.innerHTML=h; uBind(box,n.circ,kk=>{ if(kk==="ref"){const nr=n.circ.ref||("C"+(k+1)); if(nr!==ref0)uRenameSrc(n,ref0,nr)}});
+   uOn("ubRnA",()=>uRenumber(n,-1)); uOn("ubRnB",()=>uRenumber(n,1)); uOn("ubRnAB",()=>uRenumber(n,0));
    {const ts=box.querySelector("[data-to]"); if(ts)ts.addEventListener("change",()=>{const nm=ts.value; if(!nm||uDoc().qs.some(o=>o.nome===nm))return; const nq=uTemplate("vazio",nm); nq.ph=q.ph==="3F"&&n.circ.fase==="3F"?"3F":"1F"; nq.root.devs=[uDev("int",nq.ph)]; nq.orig=q.nome; uDoc().qs.push(nq); uFillQ&&uFillQ(); toast("Criado o esquema do «"+nm+"», alimentado por este circuito. Abra-o na lista de quadros para lhe pôr os circuitos (ou use «Esquema unifilar» no quadro da planta).",6000)})}
    const se=box.querySelector("[data-sec]"); if(se)se.onchange=()=>{uPush(); n.sec=+se.value; uDone()};}
   else {$("uniPT").textContent="Grupo / barramento"; h+=`<div class="small">${n.kids.length} saída(s) neste barramento. Os aparelhos do grupo editam-se clicando neles.</div>`;
@@ -3435,6 +3456,7 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
  // quadro
  $("uniPT").textContent="Quadro";
  h+=uFields([["nome","Nome","text"],["local","Local","text"],["ph","Alimentação","sel",[["1F","Monofásica 230 V"],["3F","Trifásica 400/230 V"]]],["alim","Cabo de alimentação","text","uCabos"],["orig","Vem de","text",null,"ex.: QGBT, portinhola"]],q);
+ { const N0=netCalc(), r0=N0.q[q.nome], pc=r0&&r0.root===q.nome&&r0.pc?uF(r0.pc)+" kVA calculados":""; h+=uFields([["preq","Potência a requisitar (kVA)","num",null,pc||"ex.: 10,35"]],q)}
  h+=uBtns([["ubAdd","+ Circuito no barramento geral"],["ubImp","Importar dos cabos","Cria um circuito por cada cabo desenhado no levantamento, com a proteção e o cabo já calculados"],["ubPar","+ Entrada em paralelo","Outra entrada a alimentar o mesmo barramento geral (por exemplo, um segundo transformador ou um gerador). Começa como cópia da entrada principal."],(q.root.par&&q.root.par.length)?["ubParDel","Apagar a última entrada em paralelo"]:null]);
  h+='<h3>Resumo</h3><div id="unisum"></div>';
  { const N=netCalc(), r=N.q[q.nome]; const root=!r||r.root===q.nome; if(!q.src)q.src={tipo:"rede",icc:"10",esq:"TT",RA:""};
@@ -4309,7 +4331,7 @@ function peModel(){const N=netCalc(), D=PROJ.uni||{qs:[]}, qs=D.qs||[], byN=new 
    const cab=cabById(leaf.circ.src); let cabo2=leaf.circ.cabo||"", iz2=null, inst2="B"; if(cab){const cr=cabCalc(cab); cabo2=cr.desig; iz2={Iz:cr.Izc,meth:cr.meth}; inst2=cr.c.inst} else iz2=peIzOf(cabo2,"B");
    const P=uN(leaf.circ.p), l3=tri&&uIs3F(leaf), Ib=P>0?(l3?P*1000/(Math.sqrt(3)*400*NET_COS):P*1000/(NET_U0*NET_COS)):0, uso=uUso(leaf), cs=cabSec(cabo2);
    if(uso==="ilum")out.maxDuI=Math.max(out.maxDuI,lr.dT||0); else out.maxDuO=Math.max(out.maxDuO,lr.dT||0);
-   rows.push({ref:leaf.circ.ref||("C"+(k+1)),des:leaf.circ.des||"",P,L:lr.L||uN(leaf.circ.L),prot:pr?(pr.t==="fus"?"Fusível":"Disjuntor"):"",curva:pr&&pr.t==="dj"?pr.curva:"",In:pr?uN(pr.In):null,I2:peI2(pr),
+   rows.push({ref:leaf.circ.ref||("C"+(k+1)),des:String(leaf.circ.des||"").replace(/\s*\r?\n\s*/g," "),P,L:lr.L||uN(leaf.circ.L),prot:pr?(pr.t==="fus"?"Fusível":"Disjuntor"):"",curva:pr&&pr.t==="dj"?pr.curva:"",In:pr?uN(pr.In):null,I2:peI2(pr),
     sis:l3?"Trifásico":"Monofásico",s:cs?cs.s:null,cabo:cabo2,Ib,Iz:iz2?iz2.Iz:null,meth:iz2?iz2.meth:"",du:lr.du,dT:lr.dT,iccMin:lr.iccMin,pdc:pr&&pr.t==="dj"?uN(pr.icc):null,uso,lim:lr.lim})});
   out.circ[q.nome]=rows});
  out.wc=allEnts().filter(e=>e.t==="pl"&&e.esp&&e.esp.tipo==="wc"); return out}
