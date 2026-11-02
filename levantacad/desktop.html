@@ -3216,8 +3216,8 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
  const TM=(x,y,s,o)=>P.push({k:"t",x,y,s:String(s),h:2.2,a:"s",lay:"MD",...(o||{})});
  M(25,5,Wd-5,5,.5); M(Wd-5,5,Wd-5,Hd-5,.5); M(Wd-5,Hd-5,25,Hd-5,.5); M(25,Hd-5,25,5,.5);
  TM(32,15,"Esquema unifilar · "+(q.nome||"Quadro"),{h:4.5,b:true});
- const sub=[]; if(q.local)sub.push("Local: "+q.local); sub.push((tri?"Trifásico 400/230 V":"Monofásico 230 V")+" · potência instalada "+uF(tot)+" kW"+(leaves.length?" · "+leaves.length+" circuito"+(leaves.length>1?"s":""):""));
- if(NQ)sub.push("Queda de tensão até ao quadro "+uF(NQ.du)+" % · Icc máx. no barramento "+uF(NQ.iccMax/1000,2)+" kA · Ib "+uF(NQ.Ib,1)+" A (ks "+uF(uKs(q))+") · "+NQ.esq+(uN(q.preq)>0?" · potência a requisitar "+uF(uN(q.preq))+" kVA":NQ.root===q.nome&&NQ.pc!==undefined&&!q.gen?" · potência a contratar "+(NQ.pc?uF(NQ.pc)+" kVA":"BTE"):""));
+ const sub=[]; if(q.local)sub.push("Local: "+q.local); if(q.ptm)sub.push("Média tensão ("+(q.orig||"")+") · transformação para 400/230 V"); else sub.push((tri?"Trifásico 400/230 V":"Monofásico 230 V")+" · potência instalada "+uF(tot)+" kW"+(leaves.length?" · "+leaves.length+" circuito"+(leaves.length>1?"s":""):""));
+ if(NQ&&!q.ptm)sub.push("Queda de tensão até ao quadro "+uF(NQ.du)+" % · Icc máx. no barramento "+uF(NQ.iccMax/1000,2)+" kA · Ib "+uF(NQ.Ib,1)+" A (ks "+uF(uKs(q))+") · "+NQ.esq+(uN(q.preq)>0?" · potência a requisitar "+uF(uN(q.preq))+" kVA":NQ.root===q.nome&&NQ.pc!==undefined&&!q.gen?" · potência a contratar "+(NQ.pc?uF(NQ.pc)+" kVA":"BTE"):""));
  {const mc=Math.max(30,Math.floor((Wd-5-88.19-6-32)/(2.4*.7))); sub.flatMap(s2=>uWrap(s2.replace(/ · /g," ·\u00a0"),mc,4)).forEach((s2,j)=>TM(32,21+j*3.6,s2.replace(/\u00a0/g," "),{h:2.4}))}
  uSheetColumn(q,P,Wd,Hd);
  return {P,hits,slots,W:Wd,H:Hd,leaves,fit,need:[needW,needH]}}
@@ -4518,6 +4518,7 @@ function peMDBody(M){const d=peData(), S=PE_TPL._samples, al=d.al, im=d.im, pro=
   P(`Nos locais contendo banheiras ou duches (${M.wc.map(e=>e.esp.nome).join(", ")}) serão cumpridas as regras da secção 701 das RTIEBT, nomeadamente quanto à classificação dos volumes 0, 1, 2 e 3, indicados nas peças desenhadas, à aparelhagem admitida em cada volume, aos índices de protecção mínimos (IPX7, IPX5, IPX4 e IPX1) e à protecção dos circuitos por dispositivos diferenciais de corrente diferencial estipulada não superior a 30 mA.`);
   P("Será executada uma ligação equipotencial suplementar que interligue todos os elementos condutores existentes nos volumes 0, 1, 2 e 3 com os condutores de protecção dos equipamentos colocados nesses volumes (secção 701.413.1.6)."); E()}
  if(d.md.dst||al.dst){H("DESCARREGADORES DE SOBRETENSÕES"); P("A fim de proteger os bens contra eventuais sobretensões de origem atmosférica ou de manobra, serão instalados descarregadores de sobretensões nos quadros principais, coordenados com os dispositivos a jusante, de acordo com a secção 443 das RTIEBT."); E()}
+ if(typeof ptMD==="function")ptMD({H,H2,P,E,B,T});
  if(typeof gerMD==="function")gerMD({H,H2,P,E,B,T});
  if(d.md.div){H("DIVERSOS"); P("Todos os materiais que constituem as instalações eléctricas deverão obedecer às disposições do regulamento e ainda às normas e especificações nacionais ou, na sua falta, às da CENELEC e/ou IEC."); E();
   P("Em tudo o omisso nas partes integrantes deste projecto, prevalecerão os regulamentos, normas e demais disposições regulamentares em vigor e, ainda, as prescrições da Entidade Gestora das Instalações e Fiscalização."); E()}
@@ -4962,7 +4963,7 @@ function gerIsoSig(doc){return JSON.stringify([gerPrisms(doc).map(b=>[b.P.map(p=
 function gerIsoRefresh(doc,force){doc=doc||S.doc; const L=doc&&doc.gerLay; if(!L)return false; const sig=gerIsoSig(doc); if(!force&&sig===L.sig&&doc.ents.some(e=>e.gm&&e.gm.k==="iso"))return false;
  const B=gerPrisms(doc), seg=gerIsoLines(B,L.vista); let mx=Infinity,my=Infinity,Mx=-Infinity,My=-Infinity; seg.forEach(s=>[s.a,s.b].forEach(p=>{mx=Math.min(mx,p[0]);my=Math.min(my,p[1]);Mx=Math.max(Mx,p[0]);My=Math.max(My,p[1])}));
  const ox=L.Lr+L.t+3.5-mx, oy=-L.t-my;
- doc.ents=doc.ents.filter(e=>!(e.gm&&e.gm.k==="iso")); const LY="Grupo gerador";
+ doc.ents=doc.ents.filter(e=>!(e.gm&&e.gm.k==="iso")); const LY=L.ly||"Grupo gerador";
  seg.forEach(s=>doc.ents.push({id:PROJ.nextId++,t:"line",x1:+(s.a[0]+ox).toFixed(4),y1:+(s.a[1]+oy).toFixed(4),x2:+(s.b[0]+ox).toFixed(4),y2:+(s.b[1]+oy).toFixed(4),layer:LY,gm:{k:"iso"},locked:true}));
  if(isFinite(My))doc.ents.push({id:PROJ.nextId++,t:"text",x:L.Lr+L.t+3.5,y:My+oy+.6,h:.22,s:"PERSPETIVA (sem escala) · vista "+GER_VISTA[L.vista].toLowerCase(),rot:0,b:1,layer:LY,gm:{k:"iso"},locked:true});
  L.sig=sig; doc.nextId=PROJ.nextId; return true}
@@ -5012,6 +5013,274 @@ function gerMD(api){const D=PROJ&&PROJ.mods&&PROJ.mods.ger; if(!D||D.G.md===fals
  P("A sala será de acesso reservado, com sinalização de perigo, iluminação normal e de emergência, botoneira de paragem de emergência junto à porta e extintor adequado."); E()}
 
 /*GER-END*/
+/*PT-BEGIN*/
+/* ================= Módulos: posto de transformação ================= */
+// Pergunta o tipo de PT, a rede MT, a potência e as celas; dimensiona transformador, proteções MT e BT, ventilação, óleo e terras;
+// cria o esquema unifilar, a planta de implantação com perspetiva (a mesma maquinaria do grupo gerador) e o capítulo da memória.
+const PT_TIPOS={
+ cab:{n:"Cabine baixa em alvenaria (edifício próprio)",H:3.0,t:.2,sala:1},
+ alta:{n:"Cabine alta (torre, chegada aérea)",H:6.0,t:.2,sala:1},
+ mono:{n:"Monobloco pré-fabricado (quiosque, manobra interior)",H:2.6,t:.1,sala:1},
+ comp:{n:"Compacto pré-fabricado (manobra exterior)",H:1.8,t:.08,sala:1,comp:1},
+ int:{n:"Integrado em edifício (piso térreo ou cave)",H:3.0,t:.2,sala:1},
+ sub:{n:"Subterrâneo",H:2.8,t:.25,sala:1},
+ poste:{n:"Aéreo em poste",H:0,t:0,sala:0,aereo:1}};
+const PT_CELAS={
+ im:{n:"IM · interruptor-seccionador (entrada / saída de linha)",w:.375,u:"mtim"},
+ qm:{n:"QM · interruptor-fusível combinado (proteção do transformador)",w:.375,u:"mtqm"},
+ dm:{n:"DM1 · disjuntor com relé (proteção geral)",w:.75,u:"mtdm"},
+ gbc:{n:"GBC · contagem em MT (TI + TT)",w:.75,u:"mtcm"},
+ cm:{n:"CM · medida de tensão (TT)",w:.375,u:"mtcm"},
+ gam:{n:"GAM · remonte de barramento / chegada por cabo",w:.5,u:null},
+ sm:{n:"SM · seccionador",w:.375,u:"mtim"},
+ sa:{n:"Seccionador aéreo tripolar (poste)",w:0,u:"mtim",aer:1},
+ fx:{n:"Corta-circuitos fusíveis de expulsão (poste)",w:0,u:"mtqm",aer:1},
+ dmt:{n:"Descarregadores de sobretensões MT",w:0,u:null,aer:1}};
+const PT_KVA=[25,50,100,160,250,400,630,800,1000,1250,1600,2000,2500];
+const PT_FUS=[6.3,10,16,20,25,31.5,40,50,63,80,100,125];
+// transformador: kVA, P0 (W), Pk (W), comprimento, largura, altura (m), massa (t), óleo (L) · óleo (Ecodesign) e seco (resina)
+const PT_TRO=[[25,63,600,.8,.55,1.0,.25,60],[50,81,750,.9,.6,1.05,.35,80],[100,145,1750,1.1,.7,1.3,.6,150],[160,210,2350,1.2,.75,1.35,.8,190],[250,300,3250,1.3,.8,1.45,1.0,250],[400,430,4600,1.4,.85,1.55,1.4,330],[630,600,6500,1.6,.95,1.65,2.0,450],[800,650,8400,1.7,1.0,1.75,2.4,520],[1000,770,10500,1.8,1.05,1.85,2.9,600],[1250,950,11000,1.9,1.1,1.95,3.4,700],[1600,1200,14000,2.0,1.2,2.1,4.2,850],[2000,1450,18000,2.1,1.3,2.2,5.0,1000],[2500,1750,22000,2.3,1.4,2.35,6.0,1200]];
+const PT_TRS=[[25,150,900,.9,.6,1.0,.3,0],[50,200,1300,1.0,.65,1.05,.4,0],[100,280,2000,1.1,.7,1.15,.6,0],[160,400,2700,1.2,.7,1.2,.8,0],[250,520,3500,1.25,.75,1.25,1.0,0],[400,750,4900,1.35,.8,1.4,1.35,0],[630,1100,7300,1.5,.85,1.55,1.9,0],[800,1300,9000,1.55,.9,1.7,2.3,0],[1000,1550,10000,1.65,1.0,1.85,2.7,0],[1250,1800,12000,1.75,1.0,1.95,3.2,0],[1600,2200,14000,1.85,1.1,2.1,3.9,0],[2000,2600,18000,1.95,1.15,2.25,4.7,0],[2500,3100,21000,2.1,1.25,2.4,5.6,0]];
+function ptDef(){return {tipo:"cab",serv:"part",Umt:"15",icc:"12,5",alim:"antena",Sp:"",cos:.9,ks:1,res:20,nT:1,iso:"oleo",ucc:"",q:"QGBT",qgIn:true,Lbt:6,du:1,esq:"TN",RP:"20",RS:"20",dT:"20",
+ celas:null,porta:"S",pPos:"",pW:"",pF:2,gin:"S",gout:"E",Hv:"1,5",Lr:"",Wr:"",vista:"SE",md:true}}
+function ptData(){ if(!PROJ.mods)PROJ.mods={}; if(!PROJ.mods.pt)PROJ.mods.pt={G:ptDef()}; return PROJ.mods.pt}
+function ptTrData(S,iso){const T=iso==="seco"?PT_TRS:PT_TRO; let a=T[0],b=T[T.length-1]; for(let i=1;i<T.length;i++)if(T[i][0]>=S){a=T[i-1]; b=T[i]; break}
+ const t=S<=a[0]?0:S>=b[0]?1:(Math.log(S)-Math.log(a[0]))/(Math.log(b[0])-Math.log(a[0])), f=k=>a[k]+(b[k]-a[k])*t; return {P0:f(1),Pk:f(2),L:f(3),W:f(4),H:f(5),m:f(6),oil:f(7)}}
+// celas sugeridas pelo serviço, pelo tipo de PT, pela alimentação e pelos transformadores
+function ptSugCelas(G,R){const n=R?R.nT:Math.max(1,Math.round(gerN(G.nT)||1)), S=R?R.St:0, L=[], c=(k,d)=>L.push({k,d});
+ if(PT_TIPOS[G.tipo].aereo){c("sa","Seccionamento da derivação"); c("fx","Proteção do transformador"); c("dmt","Proteção contra sobretensões"); return L}
+ c("im","Entrada de linha"); if(G.alim==="anel")c("im","Saída de linha (anel)"); if(G.alim==="aerea")c("gam","Chegada da linha aérea por cabo");
+ if(G.serv==="pub"){for(let i=1;i<=n;i++)c("qm","Proteção do transformador T"+i); return L}
+ if(n===1&&S<=630){c("gbc","Contagem"); c("qm","Proteção geral e do transformador T1"); return L}
+ c("dm","Proteção geral"); c("gbc","Contagem"); if(n>1)for(let i=1;i<=n;i++)c("qm","Proteção do transformador T"+i); return L}
+function ptCalc(G){const R={warn:[],notes:[]}, TP=PT_TIPOS[G.tipo]||PT_TIPOS.cab, U=gerN(G.Umt)||15;
+ let Sp=gerN(G.Sp), src="indicada"; if(!(Sp>0)){try{const N=netCalc(), r=N.q[G.q]; if(r&&r.Ps){Sp=r.Ps/(gerN(G.cos)||.9); src="do esquema do "+G.q}}catch(e){}}
+ R.Sp=Sp; R.Ssrc=src; const ks=Math.min(1,Math.max(.1,gerN(G.ks)||1)), res=Math.max(0,gerN(G.res)); R.Sn=Sp*ks*(1+res/100);
+ const nT=Math.max(1,Math.min(4,Math.round(gerN(G.nT)||1))); R.nT=nT;
+ R.St=PT_KVA.find(v=>v>=R.Sn/nT-1e-6)||2500; if(R.Sn/nT>2500)R.warn.push("Mais de 2500 kVA por transformador: aumente o número de transformadores.");
+ if(TP.aereo&&R.St>250){R.warn.push("Num PT aéreo em poste o transformador não deve passar de 250 kVA. Escolha outro tipo de PT ou divida a carga."); }
+ if(TP.aereo&&nT>1)R.warn.push("Num poste só cabe um transformador.");
+ if(G.tipo==="comp"&&R.St>1000)R.warn.push("Os compactos pré-fabricados vão normalmente até 1000 kVA.");
+ R.load=R.Sn/(R.St*nT); R.Stot=R.St*nT;
+ R.ucc=gerN(G.ucc)>0?gerN(G.ucc):(R.St<=630?4:6);
+ const tr=ptTrData(R.St,TP.aereo?"oleo":G.iso); R.tr=tr; R.iso=TP.aereo?"oleo":G.iso;
+ // MT
+ R.U=U; R.Inmt=R.St*1000/(Math.sqrt(3)*U*1000); R.Inmtt=R.Stot*1000/(Math.sqrt(3)*U*1000);
+ R.Fus=PT_FUS.find(v=>v>=R.Inmt*2)||125; // ≈ 2 × In: aguenta a corrente de ligação (≈ 12 × In durante 0,1 s) e corta o curto-circuito no secundário
+ R.Icc=gerN(G.icc)||12.5; R.Scc=Math.sqrt(3)*U*R.Icc;
+ R.rel={I1:Math.ceil(R.Inmtt*1.2),I2:Math.ceil(R.Inmtt*8),I0:Math.max(1,Math.ceil(R.Inmtt*.2))};
+ // celas
+ const C=(G.celas&&G.celas.length?G.celas:ptSugCelas(G,R)); R.celas=C; R.cw=C.reduce((a,c)=>a+((PT_CELAS[c.k]||{}).w||0),0);
+ R.hasDM=C.some(c=>c.k==="dm"); R.nQM=C.filter(c=>c.k==="qm").length;
+ if(!TP.aereo&&!R.hasDM&&!R.nQM)R.warn.push("Não há cela de proteção (DM1 ou QM).");
+ if(G.serv==="part"&&!TP.aereo&&!C.some(c=>c.k==="gbc"||c.k==="cm"))R.warn.push("PT de serviço particular sem cela de contagem em MT.");
+ if(!TP.aereo&&nT>1&&R.nQM<nT&&!R.hasDM)R.warn.push("Há "+nT+" transformadores e só "+R.nQM+" cela(s) QM.");
+ // BT
+ R.Inbt=R.St*1000/(Math.sqrt(3)*400); R.Ibt=GER_IN.find(v=>v>=R.Inbt)||6300;
+ R.Iccbt=R.Inbt/(R.ucc/100); R.pdc=[10,15,25,36,50,65,70,85,100,150].find(v=>v*1000>=R.Iccbt*nT)||150;
+ // cabo do transformador ao QGBT: cabos unipolares em paralelo (Iz de cabos unipolares PEX em caminho de cabos, trevo)
+ const IZ1={95:328,120:382,150:441,185:506,240:599,300:693}, SEC=[95,120,150,185,240,300], L=Math.max(1,gerN(G.Lbt)||6), du=(n,s)=>Math.sqrt(3)*R.Inbt*L*(.0225/s*.8+.00008*.6)/n/400*100; let best=null;
+ for(let n=1;n<=12&&!best;n++)for(const s of SEC){const Iz=n*IZ1[s]*(n===1?1:n<=3?.9:.82); if(Iz>=R.Ibt&&du(n,s)<=(gerN(G.du)||1)){best={n,s,Iz,du:du(n,s)}; break}}
+ if(!best){best={n:12,s:300,Iz:12*693*.82,du:du(12,300)}; R.warn.push("O cabo do transformador ao QGBT não chega com 12 × 300 mm² por fase: use barramento pré-fabricado (canalização blindada).")}
+ const sn=best.s/2>=150?150:best.s/2>=120?120:best.s/2>=95?95:70; best.desig=(best.n>1?best.n+"x":"")+"(3x1x"+best.s+")+"+(best.n>1?best.n+"x":"")+"1x"+(G.esq==="TN"&&best.n===1?best.s:sn)+" XV"+(best.n*best.s>=1200?" ou barramento pré-fabricado":""); R.cab=best;
+ // ventilação natural (perdas totais à potência nominal; ΔT ≈ 15 K): S = 0,18 P / √H (entrada), S' = 1,1 S (saída)
+ R.Ploss=(tr.P0+tr.Pk*Math.min(1,R.load)**2)*nT/1000; R.PlossN=(tr.P0+tr.Pk)*nT/1000; const Hv=Math.max(.5,gerN(G.Hv)||1.5);
+ R.Sin=.18*R.PlossN/Math.sqrt(Hv); R.Sout=R.Sin*1.1; R.Qar=R.PlossN/(1.2*1.005*15);
+ R.oil=R.iso==="oleo"?tr.oil:0; R.fossa=R.oil?Math.ceil(R.oil*1.1/50)*50:0;
+ // sala
+ const TPd=PT_TIPOS[G.tipo]; R.H=TPd.H; R.room=ptRoom(G,R);
+ if(R.load>1)R.warn.push("Carga acima da potência instalada.");
+ if(R.Sp<=0)R.warn.push("Indique a potência a alimentar (ou crie primeiro o esquema do "+G.q+").");
+ R.notes.push("Celas: sugestão pela regra habitual (proteção por interruptor-fusível até 630 kVA com um transformador; disjuntor com relé acima disso ou com vários transformadores). Confirme com o projeto-tipo e as condições do operador da rede.");
+ return R}
+function ptRoom(G,R){const TP=PT_TIPOS[G.tipo]; if(TP.aereo)return {L:0,W:0,H:0};
+ const tr=R.tr, nT=R.nT, A=R.cw+.6, ct=tr.L+.9, cd=tr.W+1.2, qgw=Math.max(.8,.6*Math.ceil(R.St*nT/630)), qd=.6;
+ let L=A+nT*ct+.2, W=Math.max(.94+1.2+(G.qgIn?qd+.3:0), cd+.2+1.0); if(G.qgIn&&qgw+.4>A)L+=qgw+.4-A;
+ if(TP.comp){L=Math.max(R.cw+.4, nT*ct)+.2; W=Math.max(1.6,tr.W+.9)+.94+.3}
+ if(gerN(G.Lr)>0)L=gerN(G.Lr); if(gerN(G.Wr)>0)W=gerN(G.Wr);
+ return {L:Math.ceil(L*10)/10,W:Math.ceil(W*10)/10,H:TP.H,A,ct,cd,qgw,qd}}
+function ptRows(G,R){const TP=PT_TIPOS[G.tipo], rt=[], tr=R.tr;
+ rt.push(["Potência a alimentar",gerF(R.Sp)+" kVA ("+R.Ssrc+") × ks "+gerF(gerN(G.ks)||1,2)+" + "+gerF(gerN(G.res),0)+" % reserva","= "+gerF(R.Sn)+" kVA"]);
+ rt.push(["Transformador",(R.nT>1?R.nT+" × ":"")+R.St+" kVA · "+gerF(R.U,0)+"/0,4 kV · Dyn11 · ucc "+gerF(R.ucc,0)+" % · "+(R.iso==="seco"?"seco (resina)":"em óleo"),"Carga "+gerF(R.load*100,0)+" % · P0 ≈ "+gerF(tr.P0,0)+" W, Pk ≈ "+gerF(tr.Pk,0)+" W · "+gerF(tr.L,1)+" × "+gerF(tr.W,1)+" × "+gerF(tr.H,1)+" m, "+gerF(tr.m,1)+" t"]);
+ rt.push(["Rede MT",gerF(R.U,0)+" kV · Icc "+gerF(R.Icc,1)+" kA ("+gerF(R.Scc,0)+" MVA) · "+({antena:"em antena",anel:"em anel",aerea:"derivação de linha aérea"})[G.alim],"In MT = "+gerF(R.Inmt,1)+" A por transformador"]);
+ rt.push(["Celas",TP.aereo?"Aparelhagem de poste":R.celas.length+" celas · "+gerF(R.cw,2)+" m de frente",R.celas.map(c=>c.k.toUpperCase()).join(" + ")]);
+ if(R.nQM||TP.aereo)rt.push(["Fusíveis MT",R.Fus+" A"+(TP.aereo?" (expulsão)":" (combinados, com percutor)"),"≈ 2 × In MT: suporta a corrente de ligação e corta o curto-circuito do lado BT"]);
+ if(R.hasDM)rt.push(["Relé da proteção geral","I> ≈ "+R.rel.I1+" A · I>> ≈ "+R.rel.I2+" A · Io> ≈ "+R.rel.I0+" A","Funções 50/51 e 50N/51N; ajustes de partida a coordenar com o operador da rede"]);
+ rt.push(["Disjuntor geral BT",R.Ibt+" A · 4P · "+R.pdc+" kA","In BT = "+gerF(R.Inbt,0)+" A · Icc nos bornes ≈ "+gerF(R.Iccbt/1000,1)+" kA (In ÷ ucc)"]);
+ rt.push(["Ligação ao "+G.q,R.cab.desig,"Iz ≈ "+gerF(R.cab.Iz,0)+" A ≥ "+R.Ibt+" A · ΔU "+gerF(R.cab.du,2)+" % em "+gerF(gerN(G.Lbt),0)+" m"]);
+ rt.push(["Perdas",gerF(R.PlossN,1)+" kW à potência nominal ("+gerF(R.Ploss,1)+" kW à carga prevista)","Para o cálculo da ventilação conta a potência nominal"]);
+ if(!TP.aereo)rt.push(["Ventilação natural","Entrada ≥ "+gerF(R.Sin,2)+" m² (em baixo) · saída ≥ "+gerF(R.Sout,2)+" m² (em cima)","S = 0,18 P / √H com H = "+gerF(gerN(G.Hv)||1.5,1)+" m entre grelhas · ΔT ≈ 15 K · caudal ≈ "+gerF(R.Qar,2)+" m³/s · áreas livres"]);
+ if(R.oil)rt.push(["Óleo",gerF(R.oil,0)+" L por transformador",TP.aereo?"Sem fossa (poste)":"Fossa de retenção ≥ "+R.fossa+" L por transformador, com seixo corta-chamas"]);
+ if(!TP.aereo)rt.push([TP.comp?"Compacto (aprox.)":"Posto (interior)",gerF(R.room.L,1)+" × "+gerF(R.room.W,1)+" m · pé-direito ≥ "+gerF(R.room.H,1)+" m","Corredor ≥ 1,2 m em frente às celas · porta de extração do transformador ≥ "+gerF(Math.max(1.4,tr.W+.4),1)+" m"]);
+ rt.push(["Terras","Proteção ≤ "+gerF(gerN(G.RP),0)+" Ω · serviço (neutro) ≤ "+gerF(gerN(G.RS),0)+" Ω","Elétrodos separados, a ≥ "+gerF(gerN(G.dT),0)+" m (valores do projeto, confirmar no RSSPTS e com o ORD) · esquema "+(G.esq==="TN"?"TN-S":G.esq)]);
+ return rt}
+/* ---------- janela ---------- */
+function ptOpen(){ if(!PROJ){toast("Abra ou crie um projeto primeiro.");return} const D=ptData(), G=D.G; let el=$("ptDlg");
+ if(!el){el=document.createElement("div"); el.id="ptDlg"; el.style.cssText="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center"; document.body.appendChild(el)}
+ const qs=(()=>{try{return uDoc().qs.map(q=>q.nome)}catch(e){return []}})();
+ const opt=(v,L)=>L.map(([a,b])=>`<option value="${uEsc(a)}" ${String(v)===String(a)?"selected":""}>${uEsc(b)}</option>`).join("");
+ const fld=(k,l,ty,ops,ph)=>`<label style="display:block;margin:6px 0 2px;font-size:12px;opacity:.85">${l}</label>`+(ty==="sel"?`<select data-g="${k}" style="width:100%">${opt(G[k],ops)}</select>`:`<input type="text" data-g="${k}" inputmode="decimal" value="${uEsc(G[k]==null?"":String(G[k]).replace(".",","))}" ${ph?`placeholder="${uEsc(ph)}"`:""} style="width:100%"${ops?` list="${ops}"`:""}>`);
+ const STR=["tipo","serv","Umt","alim","iso","q","esq","porta","gin","gout","vista"], OPT=["Sp","ucc","pPos","pW","Lr","Wr"];
+ const draw2=()=>{const aer=PT_TIPOS[G.tipo].aereo;
+ el.innerHTML=`<div style="background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:10px;width:min(1200px,96vw);height:min(880px,94vh);display:flex;flex-direction:column;overflow:hidden">
+ <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)"><b style="font-size:15px">Posto de transformação</b><span class="small" style="flex:1">Tipo de PT, celas, transformador, proteções, ventilação e terras · esquema unifilar, implantação com perspetiva e memória descritiva</span><button id="ptX">Fechar</button></div>
+ <div style="flex:1;display:grid;grid-template-columns:minmax(300px,380px) 1fr;min-height:0">
+  <div style="overflow:auto;padding:8px 14px;border-right:1px solid var(--line)">
+   <b>Tipo e serviço</b>
+   ${fld("tipo","Tipo de PT","sel",Object.entries(PT_TIPOS).map(([k,t])=>[k,t.n]))}
+   ${fld("serv","Serviço","sel",[["part","Particular (cliente em MT)"],["pub","Distribuição pública (ORD)"]])}
+   <b style="display:block;margin-top:12px">Rede de média tensão</b>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("Umt","Tensão (kV)","sel",[["6","6 kV"],["10","10 kV"],["15","15 kV"],["30","30 kV"]])}${fld("icc","Icc da rede MT (kA)")}</div>
+   ${fld("alim","Alimentação","sel",aer?[["aerea","Derivação de linha aérea"]]:[["antena","Em antena (uma entrada)"],["anel","Em anel (entrada e saída)"],["aerea","Linha aérea com descida em cabo"]])}
+   <b style="display:block;margin-top:12px">Potência e transformadores</b>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("Sp","Potência a alimentar (kVA)",null,null,"do esquema do "+G.q)}${fld("cos","cos φ")}${fld("ks","Simultaneidade")}${fld("res","Reserva (%)")}${fld("nT","N.º de transformadores","sel",[["1","1"],["2","2"],["3","3"],["4","4"]])}${aer?"":fld("iso","Isolamento","sel",[["oleo","Em óleo"],["seco","Seco (resina)"]])}${fld("ucc","ucc (%)",null,null,"4 até 630 kVA, 6 acima")}</div>
+   <b style="display:block;margin-top:12px">Baixa tensão</b>
+   ${fld("q","Quadro geral alimentado",null,"ptQs","ex.: QGBT")}<datalist id="ptQs">${qs.map(n=>`<option value="${uEsc(n)}">`).join("")}</datalist>
+   ${aer?"":`<label class="chk" style="display:block;margin-top:6px"><input type="checkbox" data-g="qgIn" ${G.qgIn?"checked":""}> O ${uEsc(G.q)} fica dentro do PT</label>`}
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("Lbt","Distância transformador → quadro (m)")}${fld("du","ΔU máx. nesse cabo (%)")}${fld("esq","Esquema de terra BT","sel",[["TN","TN-S"],["TT","TT"]])}</div>
+   <b style="display:block;margin-top:12px">Terras</b>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("RP","Proteção (Ω)")}${fld("RS","Serviço / neutro (Ω)")}${fld("dT","Distância entre elétrodos (m)")}</div>
+   ${aer?"":`<b style="display:block;margin-top:12px">Implantação</b>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${fld("porta","Porta na parede","sel",Object.entries(GER_WALL))}${fld("pF","Folhas","sel",[["2","Duas"],["1","Uma"]])}${fld("pPos","Eixo da porta a partir do canto (m)",null,null,"em frente aos transformadores")}${fld("pW","Largura da porta (m)",null,null,"automática")}
+   ${fld("gin","Grelha de entrada (em baixo)","sel",Object.entries(GER_WALL))}${fld("gout","Grelha de saída (em cima)","sel",Object.entries(GER_WALL))}${fld("Hv","Altura entre grelhas (m)")}${fld("vista","Perspetiva vista da","sel",Object.entries(GER_VISTA))}${fld("Lr","Comprimento (m)",null,null,"automático")}${fld("Wr","Largura (m)",null,null,"automática")}</div>`}
+   <label class="chk" style="display:block;margin-top:10px"><input type="checkbox" data-g="md" ${G.md!==false?"checked":""}> Incluir o capítulo «Posto de transformação» na memória descritiva</label>
+  </div>
+  <div style="overflow:auto;padding:8px 14px">
+   <div style="display:flex;align-items:center;gap:8px"><b style="flex:1">${aer?"Aparelhagem do poste":"Celas de média tensão"} (pela ordem, da entrada para o transformador)</b><button id="ptSug" title="Volta a pôr as celas sugeridas para este tipo de PT, serviço e alimentação">Sugerir</button><button id="ptAdd">+ Cela</button></div>
+   <table id="ptTab" style="width:100%;border-collapse:collapse;margin-top:6px;font-size:12px"></table>
+   <div class="small" style="margin:4px 0 10px">${G.celas?"Lista editada por si. «Sugerir» repõe a sugestão.":"Lista sugerida automaticamente; muda com o tipo, o serviço, a alimentação e a potência. Ao editar uma linha passa a ser sua."}</div>
+   <b>Dimensionamento</b><div id="ptRes" style="margin-top:6px"></div>
+   <div class="small" style="margin-top:8px;line-height:1.5">Valores de pré-dimensionamento. Perdas, dimensões e volumes de óleo variam com o fabricante; as celas, as proteções e as terras têm de cumprir o projeto-tipo e as condições técnicas do operador da rede.</div>
+  </div></div>
+ <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line)">
+  <button id="ptUni">${ptHasUni()?"Atualizar":"Criar"} o esquema unifilar</button><button id="ptPl">${PROJ.plantas.some(p=>p.ptMod)?"Atualizar":"Criar"} a planta de implantação e a perspetiva</button><button id="ptAll" class="on">${ptHasUni()||PROJ.plantas.some(p=>p.ptMod)?"Atualizar tudo":"Criar tudo"}</button><span style="flex:1"></span><button id="ptCopy">Copiar o dimensionamento</button></div></div>`;
+ const tab=()=>{const R=D.R||ptCalc(G), C=G.celas||R.celas, T=$("ptTab"), tops=Object.entries(PT_CELAS).filter(([k,c])=>!!c.aer===!!aer).map(([k,c])=>[k,c.n]);
+   T.innerHTML=`<tr style="text-align:left;opacity:.8"><th style="width:26px">#</th><th style="width:330px">Tipo</th><th>Função</th><th style="width:60px">Largura</th><th style="width:60px"></th></tr>`+C.map((c,i)=>`<tr><td>${i+1}</td><td><select data-c="${i}" data-f="k" style="width:100%">${opt(c.k,tops)}</select></td><td><input data-c="${i}" data-f="d" value="${uEsc(c.d||"")}" style="width:100%"></td><td>${PT_CELAS[c.k]&&PT_CELAS[c.k].w?gerF(PT_CELAS[c.k].w*1000,0)+" mm":"-"}</td><td><button data-cu="${i}" title="Subir">↑</button><button data-cx="${i}" title="Apagar">✕</button></td></tr>`).join("");
+   const own=()=>{ if(!G.celas)G.celas=JSON.parse(JSON.stringify(R.celas)); return G.celas};
+   T.querySelectorAll("[data-c]").forEach(x=>x.onchange=()=>{const L=own(); L[+x.dataset.c][x.dataset.f]=x.value; res(); tab()});
+   T.querySelectorAll("[data-cx]").forEach(x=>x.onclick=()=>{const L=own(); L.splice(+x.dataset.cx,1); res(); tab()});
+   T.querySelectorAll("[data-cu]").forEach(x=>x.onclick=()=>{const L=own(), i=+x.dataset.cu; if(i>0)[L[i-1],L[i]]=[L[i],L[i-1]]; res(); tab()})};
+ const res=()=>{const R=ptCalc(G); D.R=R; const rows=ptRows(G,R);
+  $("ptRes").innerHTML=(R.warn.length?`<div style="color:#e8742c;margin-bottom:6px">${R.warn.map(uEsc).join("<br>")}</div>`:"")+`<table style="width:100%;border-collapse:collapse;font-size:12px">${rows.map(([a,b,c])=>`<tr style="border-top:1px solid var(--line)"><td style="padding:4px 6px 4px 0;opacity:.8;white-space:nowrap;vertical-align:top">${uEsc(a)}</td><td style="padding:4px 6px;vertical-align:top"><b>${uEsc(b)}</b>${c?`<div class="small" style="opacity:.75">${uEsc(c)}</div>`:""}</td></tr>`).join("")}</table><div class="small" style="margin-top:6px">${R.notes.map(uEsc).join("<br>")}</div>`;
+  try{saveLocal()}catch(e){}};
+ el.querySelectorAll("[data-g]").forEach(x=>x.onchange=()=>{const k=x.dataset.g; G[k]=x.type==="checkbox"?x.checked:STR.includes(k)?x.value:OPT.includes(k)&&x.value.trim()===""?"":gerN(x.value);
+   if(k==="tipo"){ if(PT_TIPOS[G.tipo].aereo){G.alim="aerea"; G.nT=1} else if(G.alim==="aerea"&&!PT_TIPOS[G.tipo].aereo)G.alim="antena"; G.celas=null; draw2(); return}
+   if(k==="q"){draw2(); return} res(); tab()});
+ $("ptX").onclick=()=>el.remove(); $("ptSug").onclick=()=>{G.celas=null; draw2()};
+ $("ptAdd").onclick=()=>{const R=D.R||ptCalc(G); if(!G.celas)G.celas=JSON.parse(JSON.stringify(R.celas)); G.celas.push({k:aer?"dmt":"im",d:""}); res(); tab()};
+ $("ptUni").onclick=()=>{ptMakeUni(G,D.R); el.remove()}; $("ptPl").onclick=()=>{ if(ptMakePlanta(G,D.R)!==false)el.remove()};
+ $("ptAll").onclick=()=>{const up=ptHasUni()||PROJ.plantas.some(p=>p.ptMod); ptMakeUni(G,D.R,true); if(ptMakePlanta(G,D.R,true)===false)return; el.remove(); toast((up?"Atualizados":"Criados")+" o esquema «"+D.uni+"» e a planta «Posto de transformação»."+(G.md!==false?" O capítulo entra na memória descritiva.":""),7000)};
+ $("ptCopy").onclick=()=>{const t=ptRows(G,D.R).map(r=>r[0]+": "+r[1]+(r[2]?" ("+r[2]+")":"")).join("\n")+"\nCelas: "+D.R.celas.map(c=>c.k.toUpperCase()+" "+c.d).join("; "); try{navigator.clipboard.writeText(t); toast("Dimensionamento copiado.")}catch(e){}};
+ res(); tab()};
+ draw2()}
+/* ---------- esquema unifilar ---------- */
+function ptHasUni(){const D=PROJ&&PROJ.mods&&PROJ.mods.pt; try{return !!(D&&D.uni&&uDoc().qs.some(q=>q.nome===D.uni))}catch(e){return false}}
+function ptMakeUni(G,R,quiet){const d=uDoc(), D=ptData(); UNI.undo.push(JSON.stringify(d)); UNI.redo=[];
+ const old=ptHasUni()?d.qs.find(q=>q.nome===D.uni):null; let nome=old?old.nome:"PT", k=2; if(!old)while(d.qs.some(q=>q.nome===nome))nome="PT"+(k++);
+ const q=uTemplate("vazio",nome); q.ph="3F"; q.local=PT_TIPOS[G.tipo].n; q.orig="Rede MT "+gerF(R.U,0)+" kV"; q.ks="1"; q.gen=true; q.ptm=true;
+ const un=String(R.U<=17.5?24:R.U<=24?24:36), cel=c=>{const T=PT_CELAS[c.k]; if(!T||!T.u)return null; const v=uDev(T.u,"3F"); v.tag=c.k.toUpperCase()+(c.d?" · "+c.d:""); if(v.un!=null)v.un=un; if(T.u==="mtqm"||c.k==="fx")v.fus=gerF(R.Fus,1).replace(",0",""); if(T.u==="mtdm"){v.rel="50/51 · 50N/51N"; v.pdc=String(Math.max(16,Math.ceil(R.Icc)))} if(T.u==="mtim")v.icc=String(Math.max(16,Math.ceil(R.Icc))); if(T.u==="mtcm")v.tt="3x TT "+(R.U*1000)+"/√3:110/√3 V"+(c.k==="gbc"?" + 3x TI":""); return v};
+ const C=R.celas, isQ=c=>c.k==="qm"&&(R.nT>1||R.hasDM||G.serv==="pub"), saida=C.filter(c=>c.k==="im"&&/sa[ií]da|anel/i.test(c.d||"")), entry=C.filter(c=>!isQ(c)&&!saida.includes(c));
+ const trf=i=>{const qm=C.filter(isQ)[i]; const devs=[]; if(qm)devs.push(cel(qm)); devs.push({...uDev("trp","3F"),s:String(R.St),u:gerF(R.U,0)+"/0,4",ucc:gerF(R.ucc,0),lig:"Dyn11",iso:R.iso==="seco"?"Seco":"Óleo",tag:"T"+(i+1)});
+  devs.push({...uDev("dj","3F"),In:R.Ibt,curva:"C",pol:"4P",icc:String(R.pdc),tag:"Disjuntor geral BT"});
+  return uLeaf(devs,{ref:"T"+(i+1),des:"Transformador T"+(i+1)+" · "+R.St+" kVA\n→ "+G.q,cabo:R.cab.desig,p:+(R.Sn/R.nT*(gerN(G.cos)||.9)).toFixed(1),L:gerN(G.Lbt),fase:"3F",to:i===0?G.q:"",gm:true})};
+ const ent=entry.map(cel).filter(Boolean); q.root.devs=ent.length?[ent[0]]:[];
+ const rest=ent.slice(1), trs=[]; for(let i=0;i<R.nT;i++)trs.push(trf(i));
+ const kids=saida.map(c=>uLeaf([cel(c)],{ref:"MT",des:"Saída de linha MT (anel)",cabo:"",p:"",fase:"3F",gm:true}));
+ if(rest.length){const g=uGroup(rest,trs); kids.push(g)} else kids.push(...trs);
+ q.root.kids=kids; q.src={tipo:"pt",S:String(R.St),ucc:String(R.ucc),esq:G.esq,RA:String(gerN(G.RS))};
+ q.notas=["Posto de transformação "+PT_TIPOS[G.tipo].n.toLowerCase()+", serviço "+(G.serv==="pub"?"de distribuição pública":"particular")+", alimentado em "+gerF(R.U,0)+" kV.","Transformador"+(R.nT>1?"es "+R.nT+" × ":" ")+R.St+" kVA, "+gerF(R.U,0)+"/0,4 kV, Dyn11, ucc "+gerF(R.ucc,0)+" %, "+(R.iso==="seco"?"seco":"em óleo")+".","Terras de proteção e de serviço separadas."].join("\n");
+ if(old){const keep=(old.root.kids||[]).filter(l=>!(l.circ&&l.circ.gm)&&!l.kids); old.root.devs=q.root.devs; old.root.kids=q.root.kids.concat(keep); ["ph","local","orig","ks","gen","ptm","src","notas"].forEach(k2=>old[k2]=q[k2])} else d.qs.push(q);
+ D.uni=nome; {const qq=d.qs.find(x=>x.nome===G.q); if(qq&&qq!==q&&qq!==old)qq.orig=nome}
+ saveLocal(); if(!quiet){toast("Esquema «"+nome+"» "+(old?"atualizado":"criado")+(d.qs.some(x=>x.nome===G.q)?", a alimentar o «"+G.q+"» (a cascata de Icc e quedas de tensão passa a partir do transformador)":"")+".",6000); openUni(nome)} return nome}
+/* ---------- planta ---------- */
+function ptPlantaEnts(G,R){const E=[], LY="Posto de transformação", id=()=>PROJ.nextId++, TP=PT_TIPOS[G.tipo], tr=R.tr, nT=R.nT, RM=R.room;
+ const gm=(k,o)=>({gm:{k,...(o||{})}});
+ const ln=(x1,y1,x2,y2,o)=>E.push({id:id(),t:"line",x1,y1,x2,y2,layer:LY,...(o||{}),...gm("fixo")});
+ const pl=(pts,cl,o,m)=>E.push({id:id(),t:"pl",pts:pts.map(p=>[+p[0].toFixed(4),+p[1].toFixed(4)]),closed:!!cl,layer:LY,...(o||{}),...(m&&m.gm?m:gm("fixo"))});
+ const tx=(x,y,s,h,o,m)=>E.push({id:id(),t:"text",x,y,h:h||.15,s,rot:0,layer:LY,...(o||{}),...(m&&m.gm?m:gm("fixo"))});
+ const box=(g,k,x0,y0,x1,y1,z0,h,o)=>pl([[x0,y0],[x1,y0],[x1,y1],[x0,y1]],true,o||{},{gm:{k,g,p3:{z0:+z0.toFixed(3),h:+h.toFixed(3)}}});
+ const dimH=(x1,x2,y,off,txt)=>{const yy=y+off, sg=Math.sign(off)||1; ln(x1,y,x1,yy+sg*.1); ln(x2,y,x2,yy+sg*.1); ln(x1,yy,x2,yy); [x1,x2].forEach(x=>ln(x-.07,yy-.07,x+.07,yy+.07)); tx((x1+x2)/2,yy+.08,txt||gerF(x2-x1,2),.13,{c:1})};
+ const dimV=(y1,y2,x,off,txt)=>{const xx=x+off, sg=Math.sign(off)||1; ln(x,y1,xx+sg*.1,y1); ln(x,y2,xx+sg*.1,y2); ln(xx,y1,xx,y2); [y1,y2].forEach(y=>ln(xx-.07,y-.07,xx+.07,y+.07)); tx(xx-.08,(y1+y2)/2,txt||gerF(y2-y1,2),.13,{c:1,rot:90})};
+ const earth=(x,y,s)=>{E.push({id:id(),t:"circle",x,y,r:.15,layer:LY,...gm("fixo")}); ln(x-.25,y,x+.25,y); ln(x,y-.25,x,y+.25); tx(x+.3,y-.05,s,.11)};
+ if(TP.aereo){ // poste: transformador suspenso, armário BT na base, terras
+  box("POSTE","poste",-.2,-.2,.2,.2,0,12); box("T1","transformador",-tr.L/2,.25,tr.L/2,.25+tr.W,5.0,tr.H); box("T1","consola",-.6,.15,.6,.3,4.85,.15);
+  box("QG","armário BT",-.45,-.9,.45,-.5,0,1.6); tx(0,-1.15,"Armário BT: disjuntor "+R.Ibt+" A",.12,{c:1});
+  tx(.4,.25+tr.W/2,"T1 · "+R.St+" kVA (a 5 m do solo)",.13,{},{gm:{k:"txt",g:"T1"}}); tx(.3,0,"Poste",.12);
+  tx(-3.5,1.6,"Seccionador aéreo, fusíveis de expulsão "+R.Fus+" A e descarregadores de sobretensões MT no topo do poste",.12);
+  earth(-1.5,-2.5,"Terra de proteção (≤ "+gerF(gerN(G.RP),0)+" Ω)"); earth(-1.5,-4.3,"Terra de serviço (≤ "+gerF(gerN(G.RS),0)+" Ω)"); dimV(-4.3,-2.5,-1.5,-.5,"≥ "+gerF(gerN(G.dT),0)+" m"); tx(-1.2,-4.7,"(distância entre elétrodos fora de escala)",.1);
+  tx(-3.5,3.4,"IMPLANTAÇÃO DO POSTO DE TRANSFORMAÇÃO AÉREO",.22,{b:1}); tx(-3.5,3.1,R.St+" kVA · "+gerF(R.U,0)+"/0,4 kV",.14);
+  return {E,lay:{Lr:1,Wr:1,t:0,H:0,sala:false,door:{w:"S",c:.5,W:.2,f:1},vista:G.vista||"SE",ly:LY}}}
+ const Lr=RM.L, Wr=RM.W, t=TP.t, H=RM.H;
+ // porta: por defeito em frente aos transformadores (para os poder tirar)
+ const pw=G.porta||"S", wl=pw==="S"||pw==="N"?Lr:Wr, dW=gerN(G.pW)>0?gerN(G.pW):Math.max(1.4,Math.min(2.4,tr.W+.5)), defC=(pw==="S"||pw==="N")?RM.A+(Lr-RM.A)/2:Wr/2, dC=gerN(G.pPos)>0?gerN(G.pPos):defC;
+ const door={w:pw,c:Math.min(wl-dW/2,Math.max(dW/2,dC)),W:dW,f:+(G.pF||2)};
+ const A=gerPerim(Lr,Wr,0,door), B=gerPerim(Lr,Wr,t,door); pl(A.P,false,{lw:.5}); pl(B.P,false,{lw:.5}); ln(A.g0[0],A.g0[1],B.g0[0],B.g0[1],{lw:.5}); ln(A.g1[0],A.g1[1],B.g1[0],B.g1[1],{lw:.5});
+ const onWall=(w,s,off)=>w==="S"?[s,-off]:w==="N"?[s,Wr+off]:w==="W"?[-off,s]:[Lr+off,s], nrm=w=>w==="S"?[0,-1]:w==="N"?[0,1]:w==="W"?[-1,0]:[1,0];
+ {const n=nrm(door.w), along=door.w==="S"||door.w==="N"?[1,0]:[0,1], p0=onWall(door.w,door.c-door.W/2,t), p1=onWall(door.w,door.c+door.W/2,t), lv=door.f===1?[[p0,door.W,1]]:[[p0,door.W/2,1],[p1,door.W/2,-1]], ang=v=>Math.atan2(v[1],v[0])*180/Math.PI;
+  lv.forEach(([p,r,s])=>{const dir=[along[0]*s,along[1]*s]; ln(p[0],p[1],p[0]+n[0]*r,p[1]+n[1]*r); let A0=ang(dir), A1=ang(n); if(((A1-A0)%360+360)%360>180)[A0,A1]=[A1,A0]; E.push({id:id(),t:"arc",x:p[0],y:p[1],r,a0:A0,a1:A1,layer:LY,...gm("fixo")})});
+  const pc=onWall(door.w,door.c,t+door.W/(door.f===1?1:2)+.3); tx(pc[0],pc[1],"Porta metálica, abre para fora, com sinalização de perigo",.12,{c:1,rot:door.w==="W"||door.w==="E"?90:0})}
+ // celas encostadas à parede do fundo, a partir da esquerda
+ let x=.3; const yb=Wr-.94-.05; R.celas.forEach((c,i)=>{const w=(PT_CELAS[c.k]||{}).w||0; if(!w)return; box("CEL","cela "+c.k,x,yb,x+w,yb+.94,0,1.6); tx(x+w/2,yb+.62,c.k.toUpperCase(),.12,{c:1},{gm:{k:"txt",g:"CEL"}}); tx(x+w/2,yb+.38,String(i+1),.1,{c:1},{gm:{k:"txt",g:"CEL"}}); x+=w});
+ tx(.3,yb-.25,"Celas MT "+(R.U<=17.5?"24":"36")+" kV",.12); tx(RM.A/2,yb-.75,"Corredor ≥ 1,2 m",.1,{c:1});
+ // transformadores, cada um na sua cela com rede de proteção à frente
+ for(let i=0;i<nT;i++){const x0=RM.A+i*RM.ct, x1=x0+RM.ct, y1=Wr, y0=Wr-RM.cd, cx=(x0+x1)/2, cy=y0+RM.cd/2+.15, g2="T"+(i+1);
+  if(i>0)box("MUR"+i,"muro",x0-.05,y0,x0+.05,y1,0,2.2);
+  box(g2,"transformador",cx-tr.L/2,cy-tr.W/2,cx+tr.L/2,cy+tr.W/2,R.oil?.1:0,tr.H*.78); box(g2,"tampa",cx-tr.L*.35,cy-tr.W*.3,cx+tr.L*.35,cy+tr.W*.3,(R.oil?.1:0)+tr.H*.78,tr.H*.22);
+  box("RD"+i,"rede de proteção",x0+.1,y0-.03,x1-.1,y0+.03,0,2.0,{lt:"dash"});
+  if(R.oil)pl([[cx-tr.L/2-.15,cy-tr.W/2-.15],[cx+tr.L/2+.15,cy-tr.W/2-.15],[cx+tr.L/2+.15,cy+tr.W/2+.15],[cx-tr.L/2-.15,cy+tr.W/2+.15]],true,{lt:"hidden"});
+  tx(cx,cy+.05,g2+" · "+R.St+" kVA",.15,{c:1},{gm:{k:"txt",g:g2}}); tx(cx,cy-tr.W/2-.3,R.oil?"Fossa ≥ "+R.fossa+" L":"Seco",.1,{c:1},{gm:{k:"txt",g:g2}})}
+ // QGBT junto à parede da frente
+ if(G.qgIn){const qx=.3, qy=.05; box("QG","qgbt",qx,qy,qx+RM.qgw,qy+RM.qd,0,2.0); tx(qx+RM.qgw/2,qy+RM.qd/2,G.q,.15,{c:1},{gm:{k:"txt",g:"QG"}});
+  ln(RM.A+RM.ct/2,Wr-RM.cd+.2,RM.A+RM.ct/2,qy+RM.qd+.3,{lt:"dash",lw:.4}); ln(RM.A+RM.ct/2,qy+RM.qd+.3,qx+RM.qgw,qy+RM.qd+.3,{lt:"dash",lw:.4}); tx(RM.A+RM.ct/2+.12,(qy+RM.qd+.3+Wr-RM.cd+.2)/2,R.cab.desig,.1,{c:1,rot:90})}
+ else {const c1=onWall(pw==="W"?"E":"W",Wr/2,t+1.2); ln(RM.A+RM.ct/2,Wr-RM.cd+.2,RM.A+RM.ct/2,Wr/2,{lt:"dash",lw:.4}); ln(RM.A+RM.ct/2,Wr/2,c1[0],c1[1],{lt:"dash",lw:.4}); tx(c1[0],c1[1]-.2,"Para o "+G.q+": "+R.cab.desig,.12,{c:1})}
+ // chegada MT
+ {const e0=[.3+((PT_CELAS[(R.celas[0]||{}).k]||{}).w||.375)/2,Wr+t+1.2]; ln(e0[0],e0[1],e0[0],yb+.47,{lt:"dashdot",lw:.4}); tx(e0[0]+.1,e0[1]+.05,"Chegada MT "+gerF(R.U,0)+" kV"+(G.alim==="anel"?" (anel: entrada e saída)":""),.12)}
+ // grelhas
+ const grel=(w,len,s)=>{const L=w==="S"||w==="N"?Lr:Wr, c=w==="S"||w==="N"?Math.min(L-len/2-.2,Math.max(len/2+.2,RM.A+(Lr-RM.A)/2)):L/2; let cc=c; if(w===door.w&&Math.abs(cc-door.c)<(len+door.W)/2+.2)cc=door.c+(door.c<L/2?1:-1)*((len+door.W)/2+.3);
+  const a=onWall(w,cc-len/2,0), b=onWall(w,cc+len/2,t); pl([[a[0],a[1]],[b[0],a[1]],[b[0],b[1]],[a[0],b[1]]],true,{lt:"dash"}); const p=onWall(w,cc,t+.3); tx(p[0],p[1],s,.11,{c:1,rot:w==="W"||w==="E"?90:0})};
+ grel(G.gin||"S",Math.min(2.4,Math.max(.6,R.Sin*2/.6)),"Entrada de ar (em baixo) ≥ "+gerF(R.Sin,2)+" m²"); grel(G.gout||"E",Math.min(2.4,Math.max(.6,R.Sout*2/.6)),"Saída de ar (em cima) ≥ "+gerF(R.Sout,2)+" m²");
+ earth(Lr+t+1.0,-t-.8,"Terra de proteção (≤ "+gerF(gerN(G.RP),0)+" Ω)"); earth(Lr+t+1.0,-t-2.6,"Terra de serviço (≤ "+gerF(gerN(G.RS),0)+" Ω)"); dimV(-t-2.6,-t-.8,Lr+t+1.0,-.5,"≥ "+gerF(gerN(G.dT),0)+" m"); tx(Lr+t+1.3,-t-3.0,"(distância entre elétrodos fora de escala)",.1);
+ dimH(0,Lr,Wr+t,.6); dimV(0,Wr,-t,-.9);
+ tx(0,Wr+t+1.9,"PLANTA DE IMPLANTAÇÃO DO POSTO DE TRANSFORMAÇÃO",.22,{b:1});
+ tx(0,Wr+t+1.6,TP.n+" · "+(nT>1?nT+" × ":"")+R.St+" kVA · "+gerF(Lr,1)+" × "+gerF(Wr,1)+" m",.14);
+ return {E,lay:{Lr,Wr,t,H,sala:true,door,vista:G.vista||"SE",ly:LY}}}
+function ptMakePlanta(G,R,quiet){const cur=S.doc; let idx=PROJ.plantas.findIndex(p=>p.ptMod);
+ if(idx>=0){const p=PROJ.plantas[idx]; if(p.gerLay&&p.gerLay.psig&&gerPlanSig(p)!==p.gerLay.psig&&!confirm("Na planta «"+p.pname+"» os objetos do PT foram mexidos à mão. «Atualizar» volta a pô-los nas posições calculadas (os objetos que desenhou à parte ficam). Continuar?"))return false;
+  activatePlanta(idx,true); pushUndo(); const {E,lay}=ptPlantaEnts(G,R); p.ents=p.ents.filter(e=>!e.gm).concat(E); p.gerLay=lay; gerIsoRefresh(p,true); p.gerLay.psig=gerPlanSig(p); rebuildIndex(); refreshUI&&refreshUI(); draw(); saveLocal();
+  if(!quiet)toast("Planta «"+p.pname+"» atualizada.",4000); return true}
+ const p=newDoc(); p.id="p"+(++PROJ.pseq); p.pname="Posto de transformação · implantação"; p.unit=1; p.textH=.15; p.symScale=cur.symScale||1; p.ptMod=true;
+ p.layers=cur.layers.map(l=>({...l,visible:true,locked:false})); if(!p.layers.some(l=>l.name==="Posto de transformação"))p.layers.push({name:"Posto de transformação",color:"#a3e635",aci:7,visible:true,locked:false}); p.active="Posto de transformação";
+ const {E,lay}=ptPlantaEnts(G,R); p.ents=E; p.gerLay=lay; gerIsoRefresh(p,true); p.gerLay.psig=gerPlanSig(p); p.nextId=PROJ.nextId;
+ try{p.plot={...plDefaults(),sc:"50",tit:"Posto de transformação · implantação e perspetiva"}}catch(e){}
+ PROJ.plantas.push(p); projLink(PROJ); activatePlanta(PROJ.plantas.length-1,true); try{fit()}catch(e){}
+ if(!quiet)toast("Planta «"+p.pname+"» criada. Clicar num transformador, no conjunto das celas ou no quadro escolhe o conjunto; ao movê-lo, a perspetiva acompanha.",7000); return true}
+/* ---------- memória descritiva ---------- */
+function ptMD(api){const D=PROJ&&PROJ.mods&&PROJ.mods.pt; if(!D||D.G.md===false)return; const G=D.G, R=ptCalc(G), TP=PT_TIPOS[G.tipo], {H,H2,P,E,T}=api;
+ H("POSTO DE TRANSFORMAÇÃO"); H2("CONSTITUIÇÃO");
+ P(`Será instalado um posto de transformação de serviço **${G.serv==="pub"?"de distribuição pública":"particular"}**, do tipo **${TP.n.toLowerCase()}**, alimentado a partir da rede de média tensão a **${gerF(R.U,0)} kV** ${({antena:"em antena",anel:"em anel, com entrada e saída de linha",aerea:"por derivação de linha aérea"})[G.alim]}, com uma potência instalada de **${R.Stot} kVA**.`);
+ P(`O posto será equipado com ${R.nT>1?R.nT+" transformadores":"um transformador"} de **${R.St} kVA**, ${gerF(R.U,0)}/0,4 kV, ligação Dyn11, tensão de curto-circuito de ${gerF(R.ucc,0)} %, ${R.iso==="seco"?"do tipo seco, encapsulado em resina":"imerso em óleo, hermético"}.`); E();
+ H2("DIMENSIONAMENTO DA POTÊNCIA");
+ P(`A potência a alimentar é de ${gerF(R.Sp)} kVA, que, com o coeficiente de simultaneidade de ${gerF(gerN(G.ks)||1,2)} e uma reserva de ${gerF(gerN(G.res),0)} %, conduz a ${gerF(R.Sn)} kVA, ficando o transformador com uma taxa de carga de ${gerF(R.load*100,0)} %.`); E();
+ T(["Grandeza","Valor"],ptRows(G,R).map(r=>[r[0],r[1]]),[3,6]);
+ if(!TP.aereo){H2("APARELHAGEM DE MÉDIA TENSÃO");
+  P(`A aparelhagem de média tensão será constituída por celas modulares de isolamento a ${R.U<=17.5?24:36} kV, de corte em SF6 ou em vácuo, com encravamentos mecânicos que impedem manobras incorretas, pela seguinte ordem:`);
+  T(["N.º","Cela","Função"],R.celas.map((c,i)=>[String(i+1),(PT_CELAS[c.k]||{n:c.k}).n,c.d||""]),[.6,6,4]);
+  if(R.hasDM)P(`A proteção geral será assegurada por disjuntor associado a relé de proteção de máxima intensidade de fase e de terra (funções 50/51 e 50N/51N), com regulações a coordenar com o operador da rede.`);
+  if(R.nQM)P(`A proteção ${R.hasDM?"de cada transformador":"geral e do transformador"} será assegurada por interruptor-fusível combinado, com fusíveis limitadores de ${R.Fus} A e percutor que provoca a abertura tripolar do interruptor.`); E()}
+ else {H2("APARELHAGEM DE MÉDIA TENSÃO"); P(`No topo do poste serão instalados um seccionador tripolar, corta-circuitos fusíveis de expulsão de ${R.Fus} A e descarregadores de sobretensões, de acordo com o projeto-tipo do operador da rede.`); E()}
+ H2("BAIXA TENSÃO");
+ P(`À saída de cada transformador será instalado um disjuntor geral tetrapolar de ${R.Ibt} A, com poder de corte não inferior a ${R.pdc} kA (corrente de curto-circuito nos bornes do transformador de cerca de ${gerF(R.Iccbt/1000,1)} kA). A ligação ao ${G.q} será feita em ${R.cab.desig}, com uma queda de tensão de ${gerF(R.cab.du,2)} %.`); E();
+ H2("LIGAÇÕES À TERRA");
+ P(`O posto terá duas terras distintas: a terra de proteção, à qual serão ligadas todas as massas (invólucros das celas, cuba do transformador, armaduras, portas, grelhas e redes de proteção), com resistência não superior a ${gerF(gerN(G.RP),0)} Ω, e a terra de serviço, à qual será ligado o neutro do transformador, com resistência não superior a ${gerF(gerN(G.RS),0)} Ω. Os elétrodos ficarão afastados de pelo menos ${gerF(gerN(G.dT),0)} m, de acordo com o Regulamento de Segurança de Subestações e Postos de Transformação e de Seccionamento.`);
+ P(`Do lado de baixa tensão o esquema de ligação à terra será ${G.esq==="TN"?"TN-S":"TT"}.`); E();
+ if(!TP.aereo){H2("VENTILAÇÃO E ÓLEO");
+  P(`O posto terá ventilação natural, com entrada de ar junto ao pavimento com área livre não inferior a ${gerF(R.Sin,2)} m² e saída junto ao teto com área livre não inferior a ${gerF(R.Sout,2)} m², para dissipar as perdas de ${gerF(R.PlossN,1)} kW à potência nominal. As grelhas terão rede contra a entrada de pequenos animais.`);
+  if(R.oil)P(`Cada transformador terá por baixo uma fossa de retenção de óleo com capacidade não inferior a ${R.fossa} L, cheia de seixo para extinguir as chamas.`); E()}
+ H2("SEGURANÇA");
+ P("O posto de transformação cumprirá o Regulamento de Segurança de Subestações e Postos de Transformação e de Seccionamento (Decreto n.º 42 895, de 31 de março de 1960, na redação atual) e as condições técnicas do operador da rede de distribuição.");
+ P("O posto será de acesso reservado, com sinalização de perigo de morte, esquema unifilar e instruções de primeiros socorros afixados, iluminação normal e de emergência, tapete isolante, luvas isolantes, vara de manobra e extintor adequado."); E()}
+
+/*PT-END*/
 // lista de comandos: id, nome, grupo, nomes curtos (o primeiro aparece no menu), tecla, ação
 const CMDS=[
  {id:"novo",n:"Novo…",g:"Ficheiro",a:["NOVO","NEW"],k:"Ctrl+N",f:()=>newDialog()},
@@ -5072,6 +5341,7 @@ const CMDS=[
  {id:"cabo",n:"Cabo à mão",g:"Elétrico",a:["CA","CABO","K"],f:()=>setTool("cable")},
  {id:"lin2cab",n:"Linhas → cabos (transformar as linhas selecionadas em cabos, um por troço)",g:"Elétrico",a:["LC","LINHASCABO","L2C","PCABO"],f:()=>linesToCable()},
  {id:"uni",n:"Esquema unifilar…",g:"Elétrico",a:["UN","UNIFILAR"],f:()=>openUni(),sep:true},
+ {id:"modpt",n:"Posto de transformação (tipo, celas, dimensionamento, unifilar, implantação, memória)…",g:"Módulos",a:["PT","POSTO","PTRANSF"],f:()=>ptOpen()},
  {id:"modger",n:"Grupo gerador (dimensionamento, unifilar, implantação, memória)…",g:"Módulos",a:["GERADOR","GG","GRUPO"],f:()=>gerOpen()},
  {id:"legenda",n:"Simbologia no desenho",g:"Elétrico",a:["LEG","LEGENDA","SIMBOLOGIA"],f:()=>legPlace()},
  {id:"legnotas",n:"Simbologia e notas da folha…",g:"Elétrico",a:["NOTAS"],f:()=>legEditDialog()},
