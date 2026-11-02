@@ -3200,7 +3200,10 @@ function uLayout(q){UST=uStyle(q); UCW=+UST.cw||24; const NET=netCalc(), NQ=NET.
  // papel e orientação escolhidos (ou automático) e, se pedido, o esquema centrado na área livre da folha
  const xL=X0-HW, xR=Math.max(XR,...PARX.map(v=>v+26))+16, pg=q.pg||{}, cw=xR-xL, ch=yb, needW=cw+32+8+88.19+5, needH=34+ch+14, vert=pg.ori==="v";
  const FM={A4:[297,210],A3:[420,297],A2:[594,420],A1:[841,594],A0:[1189,841]}; let SZ=null;
- if(FM[pg.fmt]){const f=FM[pg.fmt]; SZ=vert?{w:f[1],h:f[0]}:{w:f[0],h:f[1]}}
+ const PLUS={"A4+":[210,594],"A3+":[297,765],"A2+":[420,841],"A1+":[594,1189],"A0+":[841,1682]};
+ if(pg.fmt==="pers")SZ={w:Math.max(100,uN(pg.pw)||420),h:Math.max(100,uN(pg.ph)||297)};
+ else if(PLUS[pg.fmt]){const hh=PLUS[pg.fmt][0], need=vert?needH:needW, ll=uN(pg.len)>0?Math.max(hh,uN(pg.len)):Math.max(PLUS[pg.fmt][1],Math.ceil(need/5)*5); SZ=vert?{w:hh,h:ll}:{w:ll,h:hh}}
+ else if(FM[pg.fmt]){const f=FM[pg.fmt]; SZ=vert?{w:f[1],h:f[0]}:{w:f[0],h:f[1]}}
  else if(vert){for(const k2 of ["A4","A3","A2","A1","A0"]){const f=FM[k2]; if(f[1]>=needW&&f[0]>=needH){SZ={w:f[1],h:f[0]}; break}} if(!SZ)SZ={w:Math.max(841,Math.ceil(needW)),h:Math.max(1189,Math.ceil(needH))}}
  else SZ=uSheetSize(needW,needH);
  const Wd=SZ.w, Hd=SZ.h, fit=needW<=Wd+.01&&needH<=Hd+.01; let ox=32-xL, oy=34;
@@ -3492,7 +3495,9 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
    +uBtns([["ubStAll","Aplicar a todos os quadros"],["ubStRst","Repor"]])+'</div>'}
  h+='<h3>Folha</h3><div class="small" style="padding:4px 10px">O carimbo usa os dados das Peças escritas (promotor, técnico, obra, data), como nas plantas.</div>'+uFields([["dn","Desenho n.º","text",null,"ex.: ELE.02.01"]],q)
   +(()=>{const pg=q.pg||{}, so=(k,l,ops,v)=>`<div class="row"><label>${l}</label><select data-pg="${k}">${ops.map(([a,b])=>`<option value="${a}" ${String(v)===String(a)?"selected":""}>${b}</option>`).join("")}</select></div>`;
-   let t=so("fmt","Papel",[["auto","Automático (o mais pequeno que serve)"],["A4","A4"],["A3","A3"],["A2","A2"],["A1","A1"],["A0","A0"]],pg.fmt||"auto")+so("ori","Orientação",[["h","Horizontal"],["v","Vertical"]],pg.ori||"h")
+   let t=so("fmt","Papel",[["auto","Automático (o mais pequeno que serve)"],["A4","A4"],["A3","A3"],["A2","A2"],["A1","A1"],["A0","A0"],["A4+","A4+ alongado (210 de altura)"],["A3+","A3+ alongado (297 de altura)"],["A2+","A2+ alongado (420 de altura)"],["A1+","A1+ alongado (594 de altura)"],["A0+","A0+ alongado (841 de altura)"],["pers","Personalizado"]],pg.fmt||"auto")
+    +(/\+$/.test(pg.fmt||"")?`<div class="row"><label>Comprimento (mm)</label><input type="text" inputmode="decimal" data-pg="len" value="${uEsc(pg.len||"")}" placeholder="automático: o que o esquema pede"></div>`:"")
+    +(pg.fmt==="pers"?`<div class="row"><label>Largura (mm)</label><input type="text" inputmode="decimal" data-pg="pw" value="${uEsc(pg.pw||"")}" placeholder="420"></div><div class="row"><label>Altura (mm)</label><input type="text" inputmode="decimal" data-pg="ph" value="${uEsc(pg.ph||"")}" placeholder="297"></div>`:"")+so("ori","Orientação",[["h","Horizontal"],["v","Vertical"]],pg.ori||"h")
     +`<div class="row"><label>Centrar o esquema na folha</label><input type="checkbox" data-pg="ctr" ${pg.ctr?"checked":""}></div>`+so("ls","Tamanho da simbologia",[["0.6","60 %"],["0.8","80 %"],["1","100 %"],["1.25","125 %"],["1.5","150 %"],["2","200 %"]],String(pg.ls||1));
    const Lq=UNI.L; if(Lq&&Lq.fit===false)t+=`<div class="small" style="color:#e8742c;padding:2px 10px">O esquema não cabe nesta folha: precisa de ${Math.ceil(Lq.need[0])} × ${Math.ceil(Lq.need[1])} mm. Escolha um papel maior, a outra orientação ou «Automático».</div>`;
    return t+uBtns([["ubPgAll","Papel igual em todos os quadros"]])})()+uBtns([["ubCb","Editar carimbo…","Mostrar ou retirar secções (promotor, coordenador…) e reescrever os valores só nesta folha"]]);
@@ -3508,7 +3513,7 @@ function uProps(){const box=$("uniprops"); if(!box)return; const q=uQ(); if(!q){
   sb.querySelectorAll("[data-sh]").forEach(el=>el.onchange=()=>{uPush(); const S2=st(); S2.hide=S2.hide||{}; if(el.checked)delete S2.hide[el.dataset.sh]; else S2.hide[el.dataset.sh]=1; uRender(); saveLocal()});
   uOn("ubStAll",()=>{uPush(); uDoc().qs.forEach(o=>{o.st=JSON.parse(JSON.stringify(q.st||{}))}); uRender(); saveLocal(); toast("Aspeto aplicado a todos os esquemas.",2500)});
   uOn("ubStRst",()=>{uPush(); delete q.st; uRender(); uProps(); saveLocal()})}}
- box.querySelectorAll("[data-pg]").forEach(el=>el.onchange=()=>{uPush(); q.pg=q.pg||{}; const k=el.dataset.pg; q.pg[k]=el.type==="checkbox"?el.checked:(k==="ls"?+el.value:el.value); uRender(); uProps(); uFit(); saveLocal()});
+ box.querySelectorAll("[data-pg]").forEach(el=>el.onchange=()=>{uPush(); q.pg=q.pg||{}; const k=el.dataset.pg; q.pg[k]=el.type==="checkbox"?el.checked:(k==="ls"?+el.value:/^(len|pw|ph)$/.test(k)?(el.value.trim()===""?"":uN(el.value)):el.value); uRender(); uProps(); uFit(); saveLocal()});
  uOn("ubPgAll",()=>{uPush(); uDoc().qs.forEach(o=>{o.pg=JSON.parse(JSON.stringify(q.pg||{}))}); uRender(); saveLocal(); toast("Papel, orientação, centragem e simbologia aplicados a todos os esquemas.",3000)});
  uOn("ubCb",()=>{const L=uLayout(q); uPush(); cbDialog(uCbHolder(q,L.W,L.H),{title:"Esquema unifilar\n"+(q.nome||"")},null,()=>{uRender(); saveLocal()})});
  uOn("ubPar",()=>{uPush(); const c=JSON.parse(JSON.stringify(q.root.devs)); (q.root.par=q.root.par||[]).push({id:uId(),devs:c}); uDone(); toast("Entrada em paralelo criada. Clique em «Entrada N» no esquema para lhe dar barramento próprio com interbarras.",4500)}); uOn("ubParDel",()=>{uPush(); uParDel(q,q.root.par.length-1); uDone()}); uOn("ubNet",uNetDialog);
@@ -4804,13 +4809,18 @@ function buildMenus(){const mb=$("menubar"); if(!mb)return; mb.innerHTML="";
 
 /* ================= Folha: impressão em PDF e DXF com formato, escala, janela e pré-visualização ================= */
 const PL_FMT={A4:[297,210],A3:[420,297],A2:[594,420],A1:[841,594],A0:[1189,841],"A3+ (765×297)":[765,297],"A2+ (841×420)":[841,420]};
+// formatos alongados: mantêm a altura do formato base e o comprimento escolhe-se (por defeito o indicado); «pers» = largura e altura à escolha
+const PL_PLUS={"A4+":[210,594],"A3+":[297,765],"A2+":[420,841],"A1+":[594,1189],"A0+":[841,1682]};
+function plFmtOpts(){return [...["A4","A3","A2","A1","A0"].map(k=>[k,k+" ("+PL_FMT[k][0]+" × "+PL_FMT[k][1]+" mm)"]),...Object.keys(PL_PLUS).map(k=>[k,k+" alongado ("+PL_PLUS[k][0]+" mm de altura, comprimento à escolha)"]),["pers","Personalizado (largura × altura)"]]}
 const PL_SCALES=["fit",20,25,50,75,100,150,200,250,500,1000];
 const PL_V=10; // unidades virtuais por mm na folha (o desenho usa "píxeis" virtuais, como no ecrã)
 let PL=null;
 function plDefaults(){const d={fmt:"A3",or:"h",sc:"100",area:"tudo",win:null,lay:{},ref:true,bg:true,esp:false,col:"vr",lw:"1",carimbo:true,leg:true,each:false,tit:"",num:"",mL:25,m:5,vr:1};
  S.doc.layers.forEach(l=>d.lay[l.name]=l.visible&&S.doc.ents.some(e=>e.layer===l.name)); return d}
-function plState(){ if(!S.doc.plot)S.doc.plot=plDefaults(); const p=S.doc.plot; if(p.vr!==1){p.mL=25; p.m=5; p.leg=true; p.vr=1} S.doc.layers.forEach(l=>{ if(p.lay[l.name]==null)p.lay[l.name]=l.visible&&S.doc.ents.some(e=>e.layer===l.name)}); return p}
-function plPaper(p){ if(p.paper)return p.paper; let [w,h]=PL_FMT[p.fmt]||PL_FMT.A3; if(p.or==="v")[w,h]=[h,w]; return {w,h}}
+function plState(){ if(!S.doc.plot)S.doc.plot=plDefaults(); const p=S.doc.plot; if(p.fmt==="A3+ (765×297)"){p.fmt="A3+"; p.plen=p.plen||765} if(p.fmt==="A2+ (841×420)"){p.fmt="A2+"; p.plen=p.plen||841} if(p.vr!==1){p.mL=25; p.m=5; p.leg=true; p.vr=1} S.doc.layers.forEach(l=>{ if(p.lay[l.name]==null)p.lay[l.name]=l.visible&&S.doc.ents.some(e=>e.layer===l.name)}); return p}
+function plPaper(p){ if(p.paper)return p.paper; let w,h; const n=v=>parseFloat(String(v||"").replace(",","."))||0;
+ if(p.fmt==="pers")return {w:Math.max(100,n(p.pw)||420),h:Math.max(100,n(p.ph)||297)};
+ if(PL_PLUS[p.fmt]){h=PL_PLUS[p.fmt][0]; w=Math.max(h,n(p.plen)||PL_PLUS[p.fmt][1])} else [w,h]=PL_FMT[p.fmt]||PL_FMT.A3; if(p.or==="v")[w,h]=[h,w]; return {w,h}}
 function plFrame(p){const P=plPaper(p); return {x:p.mL,y:p.m,w:P.w-p.mL-p.m,h:P.h-2*p.m}}
 // área útil do desenho: a moldura sem a coluna do carimbo e da simbologia
 function plVP(p){const F=plFrame(p); if(!(p.carimbo||p.leg!==false))return F; const P=plPaper(p); return {x:F.x,y:F.y,w:Math.max(20,P.w-88.19-1-F.x),h:F.h}}
@@ -4992,7 +5002,9 @@ function plPreview(){const c=$("plcv"); if(!c||!PL)return; const p=plState(), P=
 function openPlot(){ if(!S.doc)return; PL=PL||{pg:0}; const p=plState(); let el=$("plot"); if(!el){el=document.createElement("div"); el.id="plot"; document.body.appendChild(el)}
  const opt=(v,list)=>list.map(([a,b])=>`<option value="${a}" ${String(v)===String(a)?"selected":""}>${b}</option>`).join("");
  el.innerHTML=`<div class="pehd"><b>Imprimir / exportar folha</b><span class="small" id="plInfo"></span><button id="plX">Fechar</button></div><div class="plbd"><div class="plpv"><canvas id="plcv"></canvas></div><div class="plfm">
-  <label>Formato</label><select data-k="fmt">${opt(p.fmt,Object.keys(PL_FMT).map(k=>[k,k+" ("+PL_FMT[k][0]+" × "+PL_FMT[k][1]+" mm)"]))}</select>
+  <label>Formato</label><select data-k="fmt">${opt(p.fmt,plFmtOpts())}</select>
+  <div id="plFmtL" style="display:${PL_PLUS[p.fmt]?"block":"none"}"><label>Comprimento da folha (mm)</label><input type="text" data-k="plen" inputmode="decimal" value="${uEsc(p.plen||"")}" placeholder="${PL_PLUS[p.fmt]?PL_PLUS[p.fmt][1]:""}"></div>
+  <div id="plFmtP" style="display:${p.fmt==="pers"?"block":"none"}"><label>Largura × altura (mm)</label><div class="row"><input type="text" data-k="pw" inputmode="decimal" value="${uEsc(p.pw||"")}" placeholder="420" style="flex:1"><input type="text" data-k="ph" inputmode="decimal" value="${uEsc(p.ph||"")}" placeholder="297" style="flex:1"></div></div>
   <label>Orientação</label><select data-k="or">${opt(p.or,[["h","Horizontal"],["v","Vertical"]])}</select>
   <label>Escala</label><select data-k="sc">${opt(p.sc,PL_SCALES.map(v=>[String(v),v==="fit"?"Ajustar à folha":"1:"+v]))}</select>
   <label>O que imprimir</label><select data-k="area">${opt(p.area,[["tudo","Tudo"],["vista","O que está no ecrã"],["janela","Janela escolhida no desenho"]])}</select>
@@ -5020,6 +5032,7 @@ function openPlot(){ if(!S.doc)return; PL=PL||{pg:0}; const p=plState(); let el=
  const upd=()=>{saveLocal(); plPreview()};
  el.querySelectorAll("[data-k]").forEach(i=>i.onchange=()=>{const k=i.dataset.k, d0=k==="sc"?plScale(p).den:0; p[k]=i.type==="checkbox"?i.checked:i.value; if(k==="sc"&&typeof annotScaleChanged==="function")annotScaleChanged(d0,plScale(p).den); if(k==="area"&&i.value==="janela"&&!p.win){plPickWin(); return} upd()});
  el.querySelectorAll("[data-lay]").forEach(i=>i.onchange=()=>{p.lay[i.dataset.lay]=i.checked; upd()});
+ {const fs=el.querySelector('[data-k="fmt"]'); if(fs)fs.addEventListener("change",()=>{delete p.paper; const l=$("plFmtL"), q2=$("plFmtP"); if(l){l.style.display=PL_PLUS[p.fmt]?"block":"none"; const i=l.querySelector("input"); if(i)i.placeholder=PL_PLUS[p.fmt]?PL_PLUS[p.fmt][1]:""} if(q2)q2.style.display=p.fmt==="pers"?"block":"none"; upd()})}
  $("plX").onclick=()=>{el.style.display="none"}; $("plLeg").onclick=()=>legEditDialog(()=>plPreview());
  const curPg=()=>{const pg=plPages(p); return pg[Math.min(PL.pg||0,pg.length-1)]};
  $("plCb").onclick=()=>cbDialog(p,curPg(),plScale(p),()=>plPreview()); $("plCtr").onclick=()=>{p.off=null; saveLocal(); plPreview()};
@@ -5054,9 +5067,9 @@ function sheetDraw(light){ if(!S.doc.showSheet||S.plotting||!S.doc.plot&&!S.doc.
   const [x,y]=W2S(...M(F.x+3,F.y+3+hmm)); G.save(); G.translate(x,y); G.font=Math.round(h)+"px Arial, sans-serif"; G.fillStyle=fill>1.001?"#ef4444":col; G.fillText(t,0,0); G.restore();
   if(p.carimbo&&VP.w<F.w-1){const th=typeof vrTitleH==="function"?vrTitleH(p):60, [cx,cy]=W2S(...M(P.w-46.6,P.h-th/2)); G.save(); G.translate(cx,cy); G.font=Math.round(h*1.4)+"px Arial, sans-serif"; G.textAlign="center"; G.globalAlpha=.6; G.fillText("CARIMBO",0,0); const [lx,ly]=W2S(...M(P.w-46.6,(F.y+P.h-th)/2)); G.restore(); G.save(); G.translate(lx,ly); G.font=Math.round(h*1.2)+"px Arial, sans-serif"; G.textAlign="center"; G.globalAlpha=.6; G.fillText("SIMBOLOGIA / NOTAS",0,0); G.restore()}}
  G.restore()}
-function sheetDialog(){const p=plState(); const fm=Object.keys(PL_FMT).map(k=>[k,k]), sc=PL_SCALES.map(v=>[String(v),v==="fit"?"Ajustar à folha":"1:"+v]);
- ask("Folha no desenho",[{k:"show",l:"Mostrar a folha no desenho",type:"check",v:true},{k:"fmt",l:"Formato",type:"select",v:p.fmt||"A3",opts:fm},{k:"or",l:"Orientação",type:"select",v:p.or||"h",opts:[["h","Horizontal"],["v","Vertical"]]},{k:"sc",l:"Escala de impressão",type:"select",v:String(p.sc),opts:sc}],o=>{
-  const d0=plScale(p).den, sc0=p.sc; S.doc.showSheet=!!o.show; p.fmt=o.fmt; p.or=o.or; p.sc=o.sc; delete p.paper; if(o.sc!==sc0&&typeof annotScaleChanged==="function")annotScaleChanged(d0,plScale(p).den); saveLocal(); if(o.show)sheetFit(); draw();
+function sheetDialog(){const p=plState(); const fm=plFmtOpts(), sc=PL_SCALES.map(v=>[String(v),v==="fit"?"Ajustar à folha":"1:"+v]);
+ ask("Folha no desenho",[{k:"show",l:"Mostrar a folha no desenho",type:"check",v:true},{k:"fmt",l:"Formato",type:"select",v:p.fmt||"A3",opts:fm},{k:"plen",l:"Comprimento (só nos formatos alongados, mm)",v:p.plen||""},{k:"pw",l:"Largura (só no personalizado, mm)",v:p.pw||""},{k:"ph",l:"Altura (só no personalizado, mm)",v:p.ph||""},{k:"or",l:"Orientação",type:"select",v:p.or||"h",opts:[["h","Horizontal"],["v","Vertical"]]},{k:"sc",l:"Escala de impressão",type:"select",v:String(p.sc),opts:sc}],o=>{
+  const d0=plScale(p).den, sc0=p.sc; S.doc.showSheet=!!o.show; p.fmt=o.fmt; p.or=o.or; p.sc=o.sc; p.plen=o.plen; p.pw=o.pw; p.ph=o.ph; delete p.paper; if(o.sc!==sc0&&typeof annotScaleChanged==="function")annotScaleChanged(d0,plScale(p).den); saveLocal(); if(o.show)sheetFit(); draw();
   if(o.show){const s=plScale(p), f=s.fitDen/s.den; toast(f>1.001?"Na escala 1:"+s.den+" o desenho não cabe nesta folha: precisa de um formato maior ou de uma escala menor (1:"+Math.ceil(s.fitDen)+" ou mais).":"O desenho ocupa cerca de "+Math.round(f*100)+"% da área útil da folha. Pode mover o desenho dentro da folha na pré-visualização da impressão.",7000)}},
   '<div class="small" style="margin-bottom:6px">A folha aparece no desenho à escala de impressão: papel, moldura, área útil para o desenho e a coluna da simbologia e do carimbo. É a mesma configuração da impressão (Ficheiro › Imprimir).</div>')}
 function sheetFit(){const p=plState(), P=plPaper(p), {M}=plSheetMap(p); const Q=[[0,0],[P.w,0],[P.w,P.h],[0,P.h]].map(q=>toV(...M(q[0],q[1])));
