@@ -4520,6 +4520,7 @@ function peMDBody(M){const d=peData(), S=PE_TPL._samples, al=d.al, im=d.im, pro=
  if(d.md.dst||al.dst){H("DESCARREGADORES DE SOBRETENSÕES"); P("A fim de proteger os bens contra eventuais sobretensões de origem atmosférica ou de manobra, serão instalados descarregadores de sobretensões nos quadros principais, coordenados com os dispositivos a jusante, de acordo com a secção 443 das RTIEBT."); E()}
  if(typeof ptMD==="function")ptMD({H,H2,P,E,B,T});
  if(typeof gerMD==="function")gerMD({H,H2,P,E,B,T});
+ if(typeof veMD==="function")veMD({H,H2,P,E,B,T});
  if(d.md.div){H("DIVERSOS"); P("Todos os materiais que constituem as instalações eléctricas deverão obedecer às disposições do regulamento e ainda às normas e especificações nacionais ou, na sua falta, às da CENELEC e/ou IEC."); E();
   P("Em tudo o omisso nas partes integrantes deste projecto, prevalecerão os regulamentos, normas e demais disposições regulamentares em vigor e, ainda, as prescrições da Entidade Gestora das Instalações e Fiscalização."); E()}
  return x}
@@ -4978,13 +4979,13 @@ function gerIsoRefresh(doc,force){doc=doc||S.doc; const L=doc&&doc.gerLay; if(!L
  seg.forEach(s=>add({t:"line",x1:+(s.a[0]+ox).toFixed(4),y1:+(s.a[1]+oy).toFixed(4),x2:+(s.b[0]+ox).toFixed(4),y2:+(s.b[1]+oy).toFixed(4)}));
  if(isFinite(My))add({t:"text",x:L.Lr+L.t+3.5,y:My+oy+.6,h:.22,s:"PERSPETIVA (sem escala) · vista "+GER_VISTA[L.vista].toLowerCase(),rot:0,b:1});
  // alçado do equipamento visto do corredor (as mesmas peças, de frente), por baixo da planta
- if(L.alc){const filt=e=>/^(cela|transformador)/.test(e.gm.k), A=gerModel(doc,filt), s2=gerIsoLines(A.B,"FR",A.D);
+ if(L.alc){const rx=L.alcRx?new RegExp(L.alcRx):/^(cela|transformador)/, filt=e=>rx.test(e.gm.k), A=gerModel(doc,filt), s2=gerIsoLines(A.B,"FR",A.D);
   if(s2.length){let ax=Infinity,ay=Infinity,AX=-Infinity,AY=-Infinity; s2.forEach(s=>[s.a,s.b].forEach(p=>{ax=Math.min(ax,p[0]);ay=Math.min(ay,p[1]);AX=Math.max(AX,p[0]);AY=Math.max(AY,p[1])}));
    const pmin=Math.min(...doc.ents.filter(e=>e.gm&&e.gm.k!=="iso").flatMap(e=>e.pts?e.pts.map(p=>p[1]):e.t==="line"?[e.y1,e.y2]:[e.y]).filter(v=>isFinite(v)));
    const dx=0-ax, dy=pmin-1.6-AY; s2.forEach(s=>add({t:"line",x1:+(s.a[0]+dx).toFixed(4),y1:+(s.a[1]+dy).toFixed(4),x2:+(s.b[0]+dx).toFixed(4),y2:+(s.b[1]+dy).toFixed(4)}));
    add({t:"line",x1:ax+dx-.3,y1:ay+dy,x2:AX+dx+.3,y2:ay+dy,lw:.5});
    A.T.forEach(t=>{const p=[t.p[0],t.p[1],t.p[2]], q=[p[0],p[2]]; add({t:"text",x:+(q[0]+dx).toFixed(4),y:+(ay+dy-.28-(t.row||0)*.2).toFixed(4),h:t.h||.12,s:t.s,rot:0,c:1})});
-   add({t:"text",x:ax+dx,y:AY+dy+.45,h:.22,s:"ALÇADO DO EQUIPAMENTO (visto do corredor)",rot:0,b:1})}}
+   add({t:"text",x:ax+dx,y:AY+dy+.45,h:.22,s:L.alcT||"ALÇADO DO EQUIPAMENTO (visto do corredor)",rot:0,b:1})}}
  L.sig=sig; doc.nextId=PROJ.nextId; return true}
 // depois de cada alteração na planta do módulo, a perspetiva volta a desenhar-se se o equipamento mudou
 {const _ri=rebuildIndex; rebuildIndex=function(){const r=_ri.apply(this,arguments); if(S.doc&&S.doc.gerLay&&!GER_ISO_T)GER_ISO_T=setTimeout(()=>{GER_ISO_T=null; try{if(gerIsoRefresh(S.doc)){_ri(); draw(); saveLocal()}}catch(e){console.error(e)}},0); return r}}
@@ -5364,6 +5365,465 @@ function ptMD(api){const D=PROJ&&PROJ.mods&&PROJ.mods.pt; if(!D||D.G.md===false)
  P("O posto será de acesso reservado, com sinalização de perigo de morte, esquema unifilar e instruções de primeiros socorros afixados, iluminação normal e de emergência, tapete isolante, luvas isolantes, vara de manobra e extintor adequado."); E()}
 
 /*PT-END*/
+/*VE-BEGIN*/
+/* ================= Módulos: postos de carregamento de veículos elétricos (PCVE) ================= */
+// Pergunta o local, a ligação, os postos e a gestão de carga; dimensiona cada ponto (proteção, diferencial, cabo, queda de tensão),
+// a alimentação do quadro, a potência a requisitar e as terras; cria o esquema unifilar, a planta dos lugares com perspetiva,
+// alçado e pormenor dos postos (a mesma maquinaria do gerador e do PT) e o capítulo da memória descritiva.
+// Base: DL 93/2025 · Portaria 128/2026 (potências mínimas e regras técnicas) · RTIEBT, secção 722 · Regulamento (UE) 2023/1804 (AFIR) · EN/IEC 61851 · IEC 62196.
+const VE_EQ={
+ m2:{n:"Tomada de uso doméstico 16 A (modo 2)",f:"m2",P:3.68,ph:"1F",mode:"Modo 2",con:"Tomada 16 A com obturadores",sv:1,mnt:"parede",w:.09,d:.06,h:.12,z:1.0,dd:1,k16:1},
+ w37:{n:"Wallbox AC monofásica 3,7 kW",f:"wb",P:3.7,ph:"1F",mode:"Modo 3",con:"Tipo 2",sv:1,mnt:"parede",w:.24,d:.12,h:.34,z:.95,dd:1},
+ w74:{n:"Wallbox AC monofásica 7,4 kW",f:"wb",P:7.4,ph:"1F",mode:"Modo 3",con:"Tipo 2",sv:1,mnt:"parede",w:.26,d:.13,h:.38,z:.95,dd:1},
+ w11:{n:"Wallbox AC trifásica 11 kW",f:"wb",P:11,ph:"3F",mode:"Modo 3",con:"Tipo 2",sv:1,mnt:"parede",w:.26,d:.13,h:.38,z:.95,dd:1},
+ w22:{n:"Wallbox AC trifásica 22 kW",f:"wb",P:22,ph:"3F",mode:"Modo 3",con:"Tipo 2",sv:1,mnt:"parede",w:.3,d:.15,h:.44,z:.9,dd:1},
+ p22:{n:"Poste AC 2 × 22 kW (duas tomadas Tipo 2)",f:"post",P:44,ph:"3F",mode:"Modo 3",con:"2 × Tipo 2",sv:2,mnt:"chao",w:.34,d:.24,h:1.45,z:0,dd:1,inner:1},
+ dc25:{n:"Carregador DC mural 25 kW (CCS2)",f:"dcw",P:25,ph:"3F",dc:1,eta:.95,mode:"Modo 4",con:"CCS2",sv:1,mnt:"parede",w:.55,d:.24,h:.8,z:.75},
+ dc50:{n:"Carregador DC 50 kW (CCS2 + CHAdeMO + AC 22 kW)",f:"dc",P:50,acx:22,ph:"3F",dc:1,eta:.95,mode:"Modo 4 + Modo 3",con:"CCS2 · CHAdeMO · Tipo 2",sv:2,mnt:"chao",w:.75,d:.55,h:1.9,z:0},
+ dc100:{n:"Carregador DC 100 kW (2 × CCS2, partilha dinâmica)",f:"dc",P:100,ph:"3F",dc:1,eta:.95,mode:"Modo 4",con:"2 × CCS2",sv:2,mnt:"chao",w:.8,d:.6,h:1.95,z:0},
+ dc150:{n:"Carregador DC 150 kW (2 × CCS2)",f:"dc",P:150,ph:"3F",dc:1,eta:.95,mode:"Modo 4",con:"2 × CCS2",sv:2,mnt:"chao",w:.9,d:.7,h:2.0,z:0},
+ dc300:{n:"Carregador DC 300 kW (2 × CCS2, cabos arrefecidos)",f:"dc",P:300,ph:"3F",dc:1,eta:.95,mode:"Modo 4",con:"2 × CCS2 (arrefecimento líquido)",sv:2,mnt:"chao",w:1.1,d:.8,h:2.1,z:0}};
+Object.keys(VE_EQ).forEach(k=>VE_EQ[k].key=k);
+const VE_LOC={
+ ind:{n:"Moradia (garagem ou lugar individual)"},
+ multi:{n:"Edifício habitacional multifamiliar (garagem coletiva)",scc:1},
+ serv:{n:"Serviços, comércio, hotelaria ou escritórios"},
+ frota:{n:"Frota ou parque de empresa (uso privativo)"},
+ pub:{n:"Acesso público (via pública, área de serviço, hub)",pub:1}};
+const VE_LAY={auto:"Automática",parede:"Uma fila, postos na parede do fundo",linha:"Uma fila, postos em ilha (sem parede)",ilha:"Duas filas com ilha central"};
+const VE_BTN=[3.45,6.9,10.35,13.8,17.25,20.7,27.6,34.5,41.4];
+const VE_DIF=[25,40,63,80,100,125];
+function veDef(){return {loc:"serv",inst:"int",np:"",prep:"",rows:null,lig:"inst",qm:"QGBT",q:"QVE",Lq:30,duq:1.5,Pc:"",Pex:"",Plim:"",scc:"auto",dimF:"total",sccT:"din",
+ esq:"TT",RA:20,rcd:"auto",spd:"auto",emg:"auto",icc:"6",can:"auto",cabT:"auto",du:3,Lauto:true,cont:"nao",com:"eth",lay:"auto",bw:2.5,bl:5,ca:6,pd:2.6,car:"alguns",vista:"SE",por:5,md:true}}
+function veData(){ if(!PROJ.mods)PROJ.mods={}; if(!PROJ.mods.ve)PROJ.mods.ve={G:veDef()}; const G=PROJ.mods.ve.G, d=veDef(); for(const k in d)if(G[k]===undefined)G[k]=d[k]; return PROJ.mods.ve}
+// número mínimo de lugares com ponto de carregamento nas novas operações urbanísticas (Portaria 128/2026, art. 2.º, n.os 3 e 5)
+function veNmin(G){const n=Math.round(gerN(G.np)); if(!(n>0))return 0; if(G.loc==="ind")return 1; if(G.loc==="multi")return Math.ceil(.8+.2*n-1e-9); let N=Math.ceil(.9+.1*n-1e-9); if(n>400)N=Math.min(N,41); return N}
+function veSug(G){const N=veNmin(G);
+ if(G.loc==="ind")return [{k:"w74",n:1,d:"Garagem",cab:"tomada"}];
+ if(G.loc==="multi")return [{k:"w74",n:N||4,d:"Lugares das frações",cab:"tomada"}];
+ if(G.loc==="frota")return [{k:"w22",n:N||4,d:"Viaturas da frota",cab:"cabo"}];
+ if(G.loc==="pub")return [{k:"dc50",n:1,d:"Carregamento rápido"},{k:"p22",n:Math.max(1,Math.ceil(((N||4)-2)/2)),d:"Carregamento normal"}];
+ return [{k:"p22",n:Math.max(1,Math.ceil((N||4)/2)),d:"Lugares de carregamento"}]}
+function veLayK(G){ if(G.lay&&G.lay!=="auto")return G.lay; return G.inst==="ext"?(G.loc==="pub"?"ilha":"linha"):"parede"}
+const VE_RHO=.0225;
+function veDU(I,L,s,tri){return (tri?Math.sqrt(3):2)*I*L*VE_RHO/s/(tri?400:230)*100}
+function vePE(s){return s<=16?s:s<=35?16:({50:25,70:35,95:50,120:70,150:95,185:95,240:120})[s]||s/2}
+function veDesig(T,s,tri,n){const c=tri?(s<=16?"5G"+gerF(s,s%1?1:0):"4x"+s+"+"+vePE(s)+"G"):"3G"+gerF(s,s%1?1:0); const one=T+" "+c; return n>1?n+"x("+one+")":one}
+// secção: Iz × f ≥ In e queda de tensão ≤ dmax (cabos em paralelo só a partir de 70 mm²)
+function veSec(Ib,In,L,tri,f,dmax,smin){for(let n=1;n<=6;n++)for(const s of GER_SEC){ if(s<smin)continue; if(n>1&&s<70)continue; const Iz=GER_IZ[s]*f*n*(n>1?.88:1), du=veDU(Ib,L,s*n,tri); if(Iz>=In-1e-6&&du<=dmax+1e-9)return {s,n,Iz,du}}
+ const s=240, n=6; return {s,n,Iz:GER_IZ[s]*f*n*.88,du:veDU(Ib,L,s*n,tri),bad:1}}
+function veCabD(s,tri){const nc=tri?(s<=16?5:4.5):3; return 8+2.1*Math.sqrt(nc*s)} // diâmetro exterior aproximado (mm)
+function veCalc(G){const R={warn:[],notes:[]}, LOC=VE_LOC[G.loc]||VE_LOC.serv, ext=G.inst==="ext";
+ const rows=(G.rows&&G.rows.length?G.rows:veSug(G)); R.rows=rows; R.lay=veLayK(G);
+ const pts=[]; rows.forEach((r,ri)=>{const E=VE_EQ[r.k]; if(!E)return; const n=Math.max(0,Math.round(gerN(r.n))); for(let j=0;j<n;j++)pts.push({k:r.k,E,ri,d:r.d||"",cab:E.f==="wb"?(r.cab||"tomada"):"",Lr:gerN(r.L)})});
+ if(pts.length>60){pts.length=60; R.warn.push("Este módulo trata até 60 postos por quadro: divida a instalação em mais quadros.")}
+ R.pts=pts; R.N=pts.length; R.nb=pts.reduce((a,p)=>a+(p.E.sv||1),0); R.Nmin=veNmin(G);
+ if(!R.N)R.warn.push("Indique pelo menos um posto.");
+ const can=G.can&&G.can!=="auto"?G.can:(ext?"ent":"cc"); R.can=can; R.cabT=G.cabT&&G.cabT!=="auto"?G.cabT:(ext?"XV":"XZ1");
+ R.UL=LOC.pub&&ext?25:50;
+ // potência de cada ponto
+ pts.forEach((p,i)=>{const E=p.E, tri=E.ph==="3F"; p.tri=tri; p.S=E.dc?E.P/(E.eta||.95)+(E.acx||0):E.P; p.Ib=p.S*1000/(tri?Math.sqrt(3)*400:230);
+  p.In=E.k16?16:(GER_IN.find(v=>v>=Math.round(p.Ib)*(E.dc?1.1:1.25)-1e-6)||6300); p.pol=tri?"4P":"2P"; p.ref="VE"+(i+1);
+  if(E.inner)p.rcd={inner:1,tipo:"A + RDC-DD",idn:"30"};
+  else if(E.dc)p.rcd={tipo:"A",idn:"300"};
+  else if(E.f==="m2")p.rcd={tipo:"A",idn:"30"};
+  else p.rcd={tipo:G.rcd==="B"||!E.dd?"B":"A + RDC-DD",idn:"30"};
+  p.difIn=VE_DIF.find(v=>v>=p.In)||0});
+ R.Stot=pts.reduce((a,p)=>a+p.S,0);
+ // gestão de carga
+ const disp=G.lig==="inst"&&gerN(G.Pc)>0?Math.max(0,gerN(G.Pc)-gerN(G.Pex)):null; R.disp=disp;
+ const lim=gerN(G.Plim)>0?gerN(G.Plim):null;
+ const need=disp!=null&&R.Stot>disp+1e-6, scc=G.scc==="sim"||(G.scc!=="nao"&&(!!LOC.scc||need||(lim!=null&&lim<R.Stot-1e-6)));
+ R.scc=scc; R.Plim=scc?Math.min(R.Stot,lim!=null?lim:disp!=null?disp:R.Stot):R.Stot; R.Smin=R.N*3.68;
+ if(scc&&R.Plim<R.Smin-1e-6)R.warn.push("Com "+R.N+" pontos a potência atribuída tem de ser pelo menos "+gerF(R.Smin)+" kVA (3680 VA por ponto, Portaria 128/2026, art. 2.º, n.º 1). A gestão de carga não pode baixar disso.");
+ if(!scc&&need)R.warn.push("Os postos somam "+gerF(R.Stot)+" kVA e só há "+gerF(disp)+" kVA disponíveis: ligue a gestão de carga (SCC) ou aumente a potência contratada.");
+ if(LOC.scc&&!scc)R.warn.push("Em edifícios habitacionais multifamiliares é obrigatório um sistema de controlo de carga (Portaria 128/2026, art. 2.º, n.º 4).");
+ R.Sf=scc&&G.dimF==="scc"?Math.max(R.Plim,R.Smin):R.Stot; R.perPt=scc&&R.N?R.Plim/R.N:null;
+ // quadro (módulos de 18 mm) e geometria
+ let M=0; pts.forEach(p=>{const E=p.E; M+=E.dc?(p.In>125?9:6):p.tri?4:2; if(!E.inner&&p.In<=125)M+=p.rcd.tipo==="B"?4:p.tri?4:2; if(G.cont!=="nao")M+=p.tri?4:2});
+ M+=(G.lig==="resp"?8:4)+(ext||G.lig==="resp"?8:4)+(scc?4:0)+2; R.M=M; const rowsQ=Math.ceil(M*1.2/24), big=rowsQ>6||pts.some(p=>p.In>125)||R.Sf>140;
+ R.qd=big?{floor:1,w:.8*Math.max(1,Math.ceil(rowsQ/10)),d:ext?.5:.4,h:2.0,z:0,rows:Math.min(10,rowsQ)}:{floor:0,w:.6,d:ext?.25:.2,h:+(.3+rowsQ*.15).toFixed(2),z:0,rows:rowsQ};
+ if(!big)R.qd.z=+Math.max(.4,1.9-R.qd.h).toFixed(2);
+ const Gm=veGeom(G,R); R.geo=Gm;
+ // circuitos dos pontos
+ const fgr=can==="cc"?GER_FG[Math.min(GER_FG.length-1,Math.max(1,R.N))]:can==="ent"?.8:.7, du=gerN(G.du)||3; R.fg=fgr;
+ pts.forEach((p,i)=>{p.L=Math.max(2,Math.round((G.Lauto!==false?Gm.L[i]:(p.Lr||20))*10)/10);
+  const c=veSec(p.Ib,p.In,p.L,p.tri,fgr,du,2.5); p.s=c.s; p.n=c.n; p.Iz=c.Iz; p.du=c.du; p.cabo=veDesig(R.cabT,c.s,p.tri,c.n);
+  if(c.bad)R.warn.push(p.ref+": nem 6 × 240 mm² cumpre a queda de tensão; aproxime o quadro do posto.")});
+ // alimentação do quadro
+ R.IbF=R.Sf*1000/(Math.sqrt(3)*400); R.InF=GER_IN.find(v=>v>=R.IbF-1e-6)||6300;
+ {const c=veSec(R.IbF,R.InF,Math.max(1,gerN(G.Lq)||1),true,can==="ent"?.8:1,gerN(G.duq)||1.5,2.5); R.cabF={...c,desig:veDesig(R.cabT,c.s,true,c.n)}; R.duF=c.du}
+ R.duMax=pts.length?Math.max(...pts.map(p=>p.du))+R.duF:0;
+ if(R.duMax>5+1e-9)R.warn.push("A queda de tensão total chega a "+gerF(R.duMax,2)+" % (RTIEBT 722: máximo 5 %). Baixe a queda admitida nos circuitos ou na alimentação.");
+ // potência a requisitar (ligação própria à rede)
+ if(G.lig==="resp"){const S=R.Sf; R.btn=VE_BTN.find(v=>v>=S-1e-6); R.preq=R.btn?R.btn:Math.ceil(S); R.nivel=R.btn?"BTN":"BTE";
+  if(S>250)R.warn.push("Com "+gerF(S,0)+" kVA a ligação em baixa tensão pode não ser possível: confirme com o operador da rede. O módulo «Posto de transformação» pode alimentar este quadro.")}
+ // proteção contra sobretensões, corte de emergência
+ R.spd=G.spd&&G.spd!=="auto"?G.spd:(ext||G.lig==="resp"?"T1+T2":"T2");
+ R.emg=G.emg==="sim"||(G.emg!=="nao"&&(G.inst==="int"||pts.some(p=>p.S>22)));
+ if(G.emg==="nao"&&pts.some(p=>p.S>22))R.warn.push("Há postos com mais de 22 kVA: o corte de emergência é obrigatório (por botoneira ou interruptor no circuito principal).");
+ // terras
+ const iMax=Math.max(.03,...pts.map(p=>p.rcd.inner?.03:gerN(p.rcd.idn)/1000),G.esq==="TT"&&G.lig==="inst"?.3:0); R.RAmax=R.UL/iMax; R.iMax=iMax;
+ if(G.esq==="TT"&&gerN(G.RA)>R.RAmax)R.warn.push("RA = "+gerF(gerN(G.RA),0)+" Ω passa o máximo de "+gerF(R.RAmax,0)+" Ω (RA × IΔn ≤ "+R.UL+" V).");
+ if(G.esq==="TN"&&ext)R.notes.push("Em TN, os postos no exterior precisam de proteção contra a rotura do PEN (RTIEBT 722.411.4) ou de passar a TT localmente, com elétrodo próprio.");
+ // caminho de cabos / tubos
+ const dS=pts.reduce((a,p)=>a+veCabD(p.s,p.tri)*p.n+6,0); R.tray=[100,150,200,300,400,500,600].find(v=>v>=dS*1.3)||600; if(dS*1.3>600)R.notes.push("Os cabos não cabem numa só camada num caminho de 600 mm: use dois caminhos de cabos ou duas camadas, com o fator de agrupamento correspondente.");
+ R.tube=p=>[40,50,63,75,90,110,125,160].find(v=>v>=Math.max(63,veCabD(p.s,p.tri)*1.9))||160;
+ // mínimos regulamentares
+ if(R.Nmin&&R.nb<R.Nmin)R.warn.push("Para "+Math.round(gerN(G.np))+" lugares de estacionamento são precisos pelo menos "+R.Nmin+" lugares com ponto de carregamento (Portaria 128/2026, art. 2.º, n.º 3); estão previstos "+R.nb+".");
+ pts.forEach(p=>{const zs=p.E.mnt==="parede"?p.E.z+p.E.h*.2:p.E.f==="post"?.72:1.0; if(zs<.5||zs>1.5)R.warn.push(p.ref+": a tomada / conector fica fora de 0,5 m a 1,5 m do pavimento.")});
+ R.ip=ext?"IP54 (mínimo IP44) · IK10, ou IK08 com proteção mecânica (batentes)":"IP41 (mínimo) · IK07; IK08 com proteção mecânica ou IK10 onde haja choques de viaturas";
+ R.notes.push("Fator de simultaneidade 1,00 na soma das potências (Portaria 128/2026, art. 2.º, n.º 2)"+(scc?"; o SCC limita a potência absorvida a "+gerF(R.Plim)+" kVA.":"."));
+ R.notes.push("Correntes de serviço com o posto à potência máxima; disjuntores com In ≥ 1,25 Ib nos postos AC (carga contínua durante horas).");
+ if(pts.some(p=>p.E.dc))R.notes.push("Nos carregadores DC a proteção diferencial e o calibre seguem o manual do fabricante (o ponto de conexão DC tem separação galvânica).");
+ return R}
+// geometria: lugares, postos, quadro, percursos (comprimentos dos cabos)
+function veGeom(G,R){const lay=R.lay, ext=G.inst==="ext", bw=gerN(G.bw)||2.5, bl=gerN(G.bl)||5, ca=gerN(G.ca)||6, Q=R.qd, wall=lay==="parede", np=Math.max(0,Math.round(gerN(G.prep)));
+ const qz=Math.max(1.6,Q.w+1.0), wi=lay==="ilha"?1.4:lay==="linha"?1.2:0, zt=Math.max(2.1,(gerN(G.pd)||2.6)-.2);
+ const C=R.pts.map((p,i)=>({i,p,E:p.E,sv:p.E.sv||1}));
+ let rowA=C, rowB=[]; if(lay==="ilha"){let acc=0; const half=R.nb/2; rowA=[]; C.forEach(c=>{(acc<half-1e-6?rowA:rowB).push(c); if(rowA.includes(c))acc+=c.sv})}
+ const nA=rowA.reduce((a,c)=>a+c.sv,0)+np, nB=rowB.reduce((a,c)=>a+c.sv,0);
+ const Lr=+(qz+Math.max(nA,nB,1)*bw+.6).toFixed(2);
+ let Wr, yA; if(lay==="parede"){Wr=bl+ca; yA=Wr} else if(lay==="linha"){Wr=ca+bl+wi; yA=ca+bl} else {Wr=2*ca+2*bl+wi; yA=ca+bl}
+ const bays=[]; let nbay=0;
+ const place=(row,side)=>{let x=qz; row.forEach(c=>{const E=c.E, x0=x, x1=x+c.sv*bw, cx=(x0+x1)/2; c.bays=[];
+  for(let k=0;k<c.sv;k++){nbay++; const b=side>0?{x0:x0+k*bw,x1:x0+(k+1)*bw,y0:yA-bl,y1:yA,fe:2,n:nbay,side}:{x0:x0+k*bw,x1:x0+(k+1)*bw,y0:yA+wi,y1:yA+wi+bl,fe:0,n:nbay,side}; bays.push(b); c.bays.push(b)}
+  const onW=wall&&E.mnt==="parede", w=E.w, d=E.d; let y0,y1;
+  if(side>0){ if(wall){y1=onW?Wr:Wr-.12; y0=y1-d} else {y0=yA+.25; y1=y0+d}} else {y1=yA+wi-.25; y0=y1-d}
+  Object.assign(c,{x0:cx-w/2,x1:cx+w/2,y0,y1,cx,cy:(y0+y1)/2,fe:side>0?0:2,z0:E.mnt==="parede"?E.z:0,h:E.h,ped:E.mnt==="parede"&&!onW,sign:onW,side,row:side>0?"A":"B"}); x=x1})};
+ place(rowA,1); place(rowB,-1);
+ const prep=[]; {let x=qz+rowA.reduce((a,c)=>a+c.sv,0)*bw; for(let k=0;k<np;k++){nbay++; prep.push({x0:x,x1:x+bw,y0:yA-bl,y1:yA,fe:2,n:nbay,side:1,prep:1}); x+=bw}}
+ // quadro: na parede do fundo à esquerda, ou na ponta da ilha
+ const qx0=.3, qy1=wall?Wr:yA+(lay==="ilha"?wi/2+Q.d/2:Q.d+.25), Qp={x0:qx0,x1:qx0+Q.w,y0:qy1-Q.d,y1:qy1,z0:Q.z,h:Q.h,fe:0}; Qp.cx=(Qp.x0+Qp.x1)/2;
+ // comprimentos: caminho de cabos na parede (interior) ou tubo enterrado (exterior)
+ const L=C.map(c=>{ if(!ext&&wall){const up=zt-(Q.z+Q.h), dn=c.E.mnt==="parede"&&!c.ped?zt-(c.z0+c.h):zt-.3; return .5+Math.max(0,up)+Math.abs(c.cx-Qp.cx)+Math.max(0,dn)+1.5}
+  const qdn=Q.floor?.3:Q.z, cy=c.side>0?c.y0:c.y1; return qdn+.7+Math.abs(c.cx-Qp.cx)+Math.abs(cy-Qp.y0)+.7+(c.E.mnt==="parede"?c.z0:.3)+1.5});
+ const door=!ext?{w:"S",W:Math.min(5,Math.max(3,Lr-qz-1)),c:0,f:0}:null; if(door)door.c=Math.min(Lr-door.W/2-.3,Math.max(door.W/2+.3,Lr-door.W/2-1.2));
+ return {lay,ext,wall,bw,bl,ca,wi,Lr,Wr,yA,zt,qz,C,bays,prep,Q:Qp,L,door,t:ext?0:.2,H:gerN(G.pd)||2.6}}
+function veRows(G,R){const rt=[], LOC=VE_LOC[G.loc], t=R.pts.reduce((o,p)=>(o[p.k]=(o[p.k]||0)+1,o),{});
+ rt.push(["Local",LOC.n+" · "+(G.inst==="ext"?"exterior":"interior / coberto"),R.Nmin?"Mínimo de "+R.Nmin+" lugares com carregamento para "+Math.round(gerN(G.np))+" lugares (Portaria 128/2026, art. 2.º)":""]);
+ rt.push(["Postos",R.N+" posto"+(R.N===1?"":"s")+" · "+R.nb+" lugar"+(R.nb===1?"":"es")+" servido"+(R.nb===1?"":"s"),Object.entries(t).map(([k,n])=>n+" × "+VE_EQ[k].n).join(" · ")]);
+ rt.push(["Potência dos postos",gerF(R.Stot)+" kVA (soma, simultaneidade 1,00)",R.scc?"Gestão de carga (SCC) "+(G.sccT==="est"?"estática":"dinâmica")+" limitada a "+gerF(R.Plim)+" kVA ≈ "+gerF(R.perPt,1)+" kVA por ponto com todos a carregar":"Sem gestão de carga"]);
+ if(R.disp!=null)rt.push(["Potência disponível",gerF(R.disp)+" kVA","Contratada "+gerF(gerN(G.Pc))+" kVA − ponta atual "+gerF(gerN(G.Pex))+" kVA"]);
+ rt.push(["Alimentação do "+G.q,R.InF+" A · "+R.cabF.desig,"Dimensionada para "+gerF(R.Sf)+" kVA (Ib "+gerF(R.IbF,0)+" A) · ΔU "+gerF(R.duF,2)+" % em "+gerF(gerN(G.Lq),0)+" m"+(G.lig==="inst"?" a partir do "+G.qm:" a partir da portinhola / contador")]);
+ if(G.lig==="resp")rt.push(["Potência a requisitar",gerF(R.preq,R.preq%1?2:0)+" kVA ("+R.nivel+")",R.btn?"Escalão normalizado de BTN":"Acima de 41,4 kVA: ligação em BTE"]);
+ rt.push(["Quadro "+G.q,R.qd.floor?"Armário de pavimento "+gerF(R.qd.w,1)+" × "+gerF(R.qd.d,1)+" × 2,0 m":"Quadro mural "+gerF(R.qd.w,1)+" × "+gerF(R.qd.h,2)+" m",R.M+" módulos · DST "+R.spd+(R.emg?" · corte de emergência":"")+(R.scc?" · SCC":"")]);
+ rt.push(["Proteção dos pontos","Um circuito, um disjuntor e um diferencial 30 mA por ponto","Tipo A com deteção DC 6 mA (RDC-DD) no posto, ou tipo B no quadro · corte de todos os condutores ativos, incluindo o neutro"]);
+ rt.push(["Queda de tensão","Máxima "+gerF(R.duMax,2)+" % (circuito + alimentação)","Limite 5 % (RTIEBT 722)"]);
+ rt.push(["Canalizações",R.can==="cc"?"Caminho de cabos metálico "+R.tray+" × 60 mm":R.can==="ent"?"Tubos PEAD enterrados, a ≥ 0,6 m, com fita de sinalização":"Tubos à vista",R.cabT+(R.cabT==="XZ1"?" (sem halogéneos, baixa emissão de fumos)":"")+" · fator de agrupamento "+gerF(R.fg,2)+" · comunicação em cabo separado"]);
+ rt.push(["Terras",G.esq==="TT"?"TT · RA ≤ "+gerF(gerN(G.RA),0)+" Ω (máximo "+gerF(R.RAmax,0)+" Ω)":"TN-S","Tensão de contacto ≤ "+R.UL+" V · ligador de massa de cada posto ao PE"]);
+ rt.push(["Influências externas",R.ip,"Tomadas e conectores entre 0,5 m e 1,5 m do pavimento"]);
+ return rt}
+/* ---------- pormenor 3D: postos, quadro, botoneira, batentes, lugares, viaturas ---------- */
+function veSock(E,c,j,w,d,h){ if(E.f==="post")return [j?w*.72:w*.28,0,h*.5]; if(E.f==="dc")return j?[w+.045,d*.45,h*.56]:[-.045,d*.45,h*.56]; if(E.f==="dcw")return [w+.035,d*.5,h*.45]; if(E.f==="m2")return [w/2,0,h*.45]; return c==="cabo"?[w+.035,d*.5,h*.4]:[w/2,0,h*.2]}
+function veTpl(e,P,p3){const tp=p3.tpl||{}, F=ptFrame(P,tp.fe||0), K=ptKit(F,p3.z0), w=F.w, d=F.d, h=p3.h, z0=p3.z0; K.C=[];
+ const call=(x,y,z,s)=>K.C.push({p:K.P3(x,y,z),s}), L3=(a,b)=>K.D.push([K.P3(a[0],a[1],a[2]),K.P3(b[0],b[1],b[2])]), PL3=pts=>{for(let i=0;i<pts.length-1;i++)L3(pts[i],pts[i+1])};
+ const t2=(cx,cz,r,y)=>{K.fc(cx,cz,r,y); K.fc(cx,cz,r*.78,y,10); [[0,.45],[-.4,.18],[.4,.18],[-.25,-.32],[.25,-.32],[0,-.08],[0,-.55]].forEach(([a,b])=>K.fc(cx+a*r*.7,cz+b*r*.7,r*.09,y,6))};
+ const cable=(a,b,sag)=>{const N=14, pts=[]; for(let k=0;k<=N;k++){const s=k/N; pts.push([a[0]+(b[0]-a[0])*s,a[1]+(b[1]-a[1])*s,Math.max(.03-z0,a[2]+(b[2]-a[2])*s-sag*Math.sin(Math.PI*s))])} PL3(pts)};
+ const sign=()=>{ if(!tp.sign)return; const zb=1.85-z0, zt=2.25-z0, y=d; K.box(w/2-.15,w/2+.15,y-.012,y,zb,zt); const yy=y-.016; K.fr(w/2-.14,zb+.01,w/2+.14,zt-.01,yy);
+  const bx=w/2+.04, bz=zb+.2; [[.03,.13],[-.03,.0],[.015,.0],[-.03,-.13],[.035,.02],[-.01,.02],[.03,.13]].reduce((a,b)=>{K.fl(bx+a[0],bz+a[1],bx+b[0],bz+b[1],yy); return b});
+  const px=w/2-.08; K.fl(px,bz-.12,px,bz+.12,yy); K.fl(px,bz+.12,px+.06,bz+.12,yy); K.fl(px+.06,bz+.12,px+.07,bz+.06,yy); K.fl(px+.07,bz+.06,px+.06,bz,yy); K.fl(px+.06,bz,px,bz,yy); call(w/2,y-.016,zt-.05,"Sinal de lugar reservado a carregamento")};
+ if(tp.t==="ve"){const E=VE_EQ[tp.k]||VE_EQ.w74, cab=tp.cab||"tomada";
+  if(tp.ped){K.box(w/2-.05,w/2+.05,d*.25,d*.25+.1,-z0,0); K.box(w/2-.15,w/2+.15,d*.05,d*.25+.25,-z0,-z0+.02); call(w/2,d*.25,-z0*.5,"Pedestal (com tubo de entrada do cabo)")}
+  if(E.f==="m2"){K.box(0,w,0,d,0,h); K.fr(.008,.008,w-.008,h-.008); K.fc(w/2,h*.45,.03); K.fc(w/2-.012,h*.45,.004,null,6); K.fc(w/2+.012,h*.45,.004,null,6); K.fl(.01,h*.9,w-.01,h*.9); call(w/2,0,h*.45,"Tomada 16 A com tampa (IP44)")}
+  else if(E.f==="wb"){K.box(0,w,0,d,0,h); K.box(.03,w-.03,d,d+.01,.03,h-.03);
+   K.fr(.012,.012,w-.012,h-.012); K.fr(w*.22,h*.88,w*.78,h*.9); call(w*.78,0,h*.89,"LED de estado");
+   if(E.P>=7){K.fr(w*.22,h*.63,w*.78,h*.8); K.fr(w*.25,h*.66,w*.75,h*.77); call(w*.75,0,h*.72,"Ecrã")}
+   K.fc(w/2,h*.48,.034); K.fc(w/2,h*.48,.018,null,8); call(w/2+.03,0,h*.48,"Leitor RFID");
+   if(cab==="cabo"){K.box(w+.004,w+.07,.015,d-.015,h*.3,h*.52); K.fr(w+.012,h*.32,w+.062,h*.5,-.004+.015); call(w+.04,.015,h*.42,"Suporte do conector Tipo 2 (cabo fixo, 5 m)");
+    const a=[w/2,.02,.01], b=[w+.035,.04,h*.3]; cable(a,b,.55)}
+   else {t2(w/2,h*.2,.045); K.fr(w/2-.055,h*.2+.05,w/2+.055,h*.2+.06); call(w/2,0,h*.2,"Tomada Tipo 2 com obturadores")}
+   K.fl(w*.35,.03,w*.65,.03); call(w*.65,0,.03,"Entrada do cabo de alimentação")}
+  else if(E.f==="post"){K.box(-.03,w+.03,-.03,d+.03,0,.06); K.box(0,w,0,d,.06,h-.05); K.box(-.015,w+.015,-.015,d+.015,h-.05,h);
+   K.fr(.03,.1,w-.03,h-.1); call(w*.88,0,h*.3,"Porta técnica (proteções de cada tomada no interior)"); K.fc(w*.88,h*.2,.012,null,8); call(w*.88,0,h*.2,"Fechadura");
+   K.fr(w*.18,h*.76,w*.82,h*.87); call(w*.82,0,h*.82,"Ecrã"); K.fl(.018,h*.35,.018,h*.92); K.fl(w-.018,h*.35,w-.018,h*.92); call(.018,0,h*.92,"Barras LED de estado");
+   K.fc(w/2,h*.68,.03); K.fc(w/2,h*.68,.015,null,8); call(w/2,0,h*.68,"Leitor RFID");
+   [w*.28,w*.72].forEach(x=>{t2(x,h*.5,.042); K.fr(x-.05,h*.5+.048,x+.05,h*.5+.058)}); call(w*.72,0,h*.5,"Tomadas Tipo 2 (2 × 22 kW)");
+   for(let z=.14;z<.3;z+=.035)K.fl(w*.2,z,w*.8,z); call(w*.8,0,.2,"Grelha de ventilação"); call(-.03,0,.03,"Maciço de fundação com tubos")}
+  else if(E.f==="dc"||E.f==="dcw"){const fl=E.f==="dc";
+   if(fl){K.box(-.02,w+.02,-.02,d+.02,0,.08); K.box(0,w,0,d,.08,h-.04); K.box(-.025,w+.025,-.025,d+.025,h-.04,h); K.fr(.02,.1,w-.02,h-.07); call(.02,0,h*.45,"Porta frontal")}
+   else {K.box(0,w,0,d,0,h); K.fr(.012,.012,w-.012,h-.012)}
+   K.fr(w*.18,h*.6,w*.82,h*.86); K.fr(w*.21,h*.63,w*.79,h*.83); call(w*.82,0,h*.75,"Ecrã tátil");
+   K.fr(w*.3,h*.47,w*.7,h*.56); K.fc(w*.4,h*.515,.02,null,8); K.fr(w*.5,h*.485,w*.66,h*.545); call(w*.7,0,h*.515,"Terminal de pagamento ad hoc (cartão) e RFID");
+   K.box(w*.8,w*.92,-.03,0,h*.46,h*.55); K.fc(w*.86,h*.505,.034,-.034); K.fc(w*.86,h*.505,.02,-.034,8); call(w*.92,-.03,h*.505,"Botão de paragem de emergência");
+   K.fr(w*.1,h*.905,w*.9,h*.925); call(w*.9,0,h*.915,"LED de estado");
+   if(fl){for(let z=.16;z<h*.34;z+=.035)K.fl(w*.15,z,w*.85,z); call(w*.85,0,h*.25,"Grelhas de ventilação"); K.fc(w*.92,h*.3,.012,null,8)}
+   const hol=s=>{const x0=s?w:-.09, x1=s?w+.09:0; K.box(x0,x1,d*.3,d*.62,h*.5,h*.66); K.fr(s?w+.01:-.08,h*.52,s?w+.08:-.01,h*.64,d*.3-.004)};
+   hol(0); call(-.045,d*.3,h*.6,fl?"Conector CCS2 (cabo fixo)":"Conector CCS2");
+   if(fl){hol(1); call(w+.045,d*.3,h*.6,tp.k==="dc50"?"Conector CHAdeMO":"Segundo conector CCS2")}
+   const lp=s=>{const x=s?w+.045:-.045; cable([x,d*.45,h*.5],[s?w+.002:-.002,d*.45,h*.32],h*.28)}; lp(0); if(fl)lp(1);
+   if(E.acx){t2(w*.5,h*.38,.04); call(w*.5,0,h*.38,"Tomada Tipo 2 AC 22 kW")}
+   if(tp.k==="dc300")call(w*.5,0,h*.95,"Módulos de potência com arrefecimento líquido")}
+  sign();
+  if(tp.car){const s=veSock(E,cab,tp.cj||0,w,d,h), c=tp.car; cable([s[0],s[1],s[2]],[c[0],c[1],c[2]],.35)}
+  K.lab(w/2,tp.n||"",0,.1); K.lab(w/2,gerF(E.P,E.P%1?1:0)+" kW"+(E.acx?" + "+E.acx:""),1,.09); return K}
+ if(tp.t==="vequ"){const fl=!!tp.floor, zb=fl?.1:0, nd=Math.max(1,Math.round(w/.7));
+  if(fl)K.box(-.02,w+.02,-.02,d+.02,0,.1); K.box(0,w,0,d,zb,h); if(fl)K.box(-.02,w+.02,-.02,d+.02,h-.03,h);
+  const dw=w/nd; for(let i=0;i<nd;i++){const x=i*dw; K.fr(x+.012,zb+.012,x+dw-.012,h-.012); K.fr(x+dw-.05,zb+(h-zb)*.42,x+dw-.032,zb+(h-zb)*.58); K.fc(x+dw-.041,zb+(h-zb)*.64,.01,null,8); K.fl(x+.015,zb+(h-zb)*.15,x+.015,zb+(h-zb)*.2); K.fl(x+.015,h-(h-zb)*.2,x+.015,h-(h-zb)*.15)}
+  const wx0=.06, wx1=dw-.08, rows=Math.max(1,tp.rows||2), wz0=zb+(h-zb)*.12, wz1=h-(h-zb)*.16; K.fr(wx0,wz0,wx1,wz1);
+  for(let r=0;r<rows;r++){const z=wz1-(r+.5)*(wz1-wz0)/rows; K.fl(wx0+.02,z,wx1-.02,z); for(let x=wx0+.03;x<wx1-.02;x+=.018)K.fl(x,z-.03,x,z+.03)}
+  K.fr(w/2-.12,h-.06,w/2+.12,h-.025); call(wx1,0,(wz0+wz1)/2,"Visor dos aparelhos (filas DIN)"); call(dw-.041,0,zb+(h-zb)*.5,"Puxador e fechadura"); call(w/2+.12,0,h-.04,"Chapa de identificação");
+  K.lab(w/2,tp.n||"QVE",0,.12); return K}
+ if(tp.t==="vebot"){K.box(0,w,0,d,0,h); K.fr(.006,.006,w-.006,h-.006); K.box(w*.25,w*.75,-.03,0,h*.3,h*.7); K.fc(w/2,h/2,.032,-.034); K.fc(w/2,h/2,.02,-.034,8);
+  K.box(-.06,w+.06,d-.01,d,h+.04,h+.18); K.fr(-.05,h+.05,w+.05,h+.17,d-.014); call(w/2,-.03,h/2,"Botoneira de corte de emergência (cogumelo com encravamento)"); call(w+.05,d-.014,h+.11,"Sinal «Corte de emergência dos postos de carregamento»"); K.lab(w/2,"Corte",0,.09); return K}
+ if(tp.t==="vebol"){const c=[P.reduce((a,p)=>a+p[0],0)/P.length,P.reduce((a,p)=>a+p[1],0)/P.length], r=Math.hypot(P[0][0]-c[0],P[0][1]-c[1]), lx=(c[0]-F.o[0])*F.u[0]+(c[1]-F.o[1])*F.u[1], ly=(c[0]-F.o[0])*F.i[0]+(c[1]-F.o[1])*F.i[1];
+  K.cyl(lx,ly,r,0,h,16); K.cyl(lx,ly,r*1.06,h-.16,h-.1,16); K.cyl(lx,ly,r*1.06,h-.3,h-.24,16); K.cyl(lx,ly,r*1.4,0,.02,12); return K}
+ if(tp.t==="velugar"){const z=.004, ln=(a,b)=>L3([a[0],a[1],z],[b[0],b[1],z]); ln([0,0],[w,0]); ln([w,0],[w,d]); ln([0,0],[0,d]);
+  if(!tp.prep){const cx=w/2, cy=1.6, s=1.6; [[.06,-.3],[-.08,.02],[.03,.02],[-.07,.3],[.09,-.03],[-.01,-.03],[.06,-.3]].reduce((a,b)=>{ln([cx+a[0]*s,cy+a[1]*s],[cx+b[0]*s,cy+b[1]*s]); return b})}
+  else for(let y=.4;y<d-.2;y+=.6)ln([.3,y],[w-.3,y+.3]); return K}
+ if(tp.t==="vecar"){const W=w, Lc=d, ch=.22;
+  const body=(x0,x1,y0,y1,za,zb,cf)=>{let Pp=[[x0+cf,y0],[x1-cf,y0],[x1,y0+cf],[x1,y1-cf*.6],[x1-cf*.6,y1],[x0+cf*.6,y1],[x0,y1-cf*.6],[x0,y0+cf]].map(q=>K.W(q[0],q[1])); let A=0; for(let i=0;i<Pp.length;i++){const a=Pp[i], b=Pp[(i+1)%Pp.length]; A+=a[0]*b[1]-b[0]*a[1]} if(A<0)Pp=Pp.reverse(); K.B.push({P:Pp,z0:z0+za,z1:z0+zb})};
+  body(0,W,0,Lc,.34,.62,ch); body(.03,W-.03,.25,Lc-.1,.62,.8,ch); body(.12,W-.12,1.35,Lc-.7,.8,1.1,.15); body(.2,W-.2,1.7,Lc-1.0,1.1,1.42,.12);
+  [[-.01,.88],[-.01,Lc-.82],[W-.21,.88],[W-.21,Lc-.82]].forEach(([x,y])=>{K.box(x,x+.22,y-.32,y+.32,0,.64)});
+  const fwin=(y,za,zb,inset)=>{K.fl(inset,za,W-inset,za,-.004+y); K.fl(W-inset,za,W-inset-.06,zb,-.004+y); K.fl(W-inset-.06,zb,inset+.06,zb,-.004+y); K.fl(inset+.06,zb,inset,za,-.004+y)};
+  fwin(1.65,1.16,1.38,.22); [[.04,.72],[W-.04-.24,.72]].forEach(([x,z])=>K.fr(x,z-.06,x+.24,z,-.004)); K.fl(.5,.42,W-.5,.42); K.fl(.5,.5,W-.5,.5);
+  const side=x=>{const P3=(y,z)=>K.P3(x,y,z); [[1.75,1.16],[Lc-1.1,1.16],[Lc-1.1,1.38],[1.75,1.38],[1.75,1.16]].reduce((a,b)=>{K.D.push([P3(a[0],a[1]),P3(b[0],b[1])]); return b}); K.D.push([P3((1.75+Lc-1.1)/2,1.16),P3((1.75+Lc-1.1)/2,1.38)]); K.D.push([P3(1.55,.84),P3(1.55,.36)]); K.D.push([P3(2.85,.84),P3(2.85,.36)])};
+  side(-.004); side(W+.004); {const P3=(y,z)=>K.P3(-.004,y,z); [[.5,.72],[.68,.72],[.68,.84],[.5,.84],[.5,.72]].reduce((a,b)=>{K.D.push([P3(a[0],a[1]),P3(b[0],b[1])]); return b})}
+  return K}
+ return null}
+// cada peça com «tpl» do módulo VE é desenvolvida aqui; as do PT seguem para o ptTpl
+{const _t=ptTpl; ptTpl=function(e,P,p3){const t=p3&&p3.tpl&&p3.tpl.t; if(t&&/^ve/.test(t))return veTpl(e,P,p3); return _t(e,P,p3)}}
+/* ---------- pormenor ampliado dos postos (frente com legenda numerada e perspetiva), por baixo do alçado ---------- */
+function vePormenor(doc){const L=doc.gerLay, f=Math.max(2,Math.min(20,L.vePor.f||5)), LY=L.ly, add=o=>doc.ents.push({id:PROJ.nextId++,layer:LY,gm:{k:"iso"},locked:true,...o});
+ const T=[]; doc.ents.forEach(e=>{const p3=e.gm&&e.gm.p3, t=p3&&p3.tpl; if(!t||!e.pts||!/^(posto|quadro|botoneira)/.test(e.gm.k))return; const key=t.t+"|"+t.k+"|"+(t.cab||"")+"|"+(t.ped?1:0); if(T.some(x=>x.key===key))return; const F=ptFrame(e.pts,t.fe||0); T.push({key,t,w:F.w,d:F.d,z0:p3.z0,h:p3.h})});
+ if(!T.length)return; T.sort((a,b)=>(a.t.t==="ve"?0:1)-(b.t.t==="ve"?0:1));
+ let ymin=Infinity; doc.ents.forEach(e=>{const ys=e.pts?e.pts.map(p=>p[1]):e.t==="line"?[e.y1,e.y2]:e.t==="circle"||e.t==="arc"?[e.y-(e.r||0)]:[e.y]; ys.forEach(y=>{ if(isFinite(y))ymin=Math.min(ymin,y)})});
+ const top=ymin-1.4; let xc=0, rowH=0, tH=.14;
+ add({t:"text",x:0,y:top,h:.22,s:"PORMENOR DO EQUIPAMENTO (ampliado "+f+" × em relação à planta)",rot:0,b:1});
+ T.forEach(B=>{const tp={...B.t,fe:0,car:null,n:"",sign:B.t.t==="ve"?B.t.sign:false}, P=[[0,0],[B.w,0],[B.w,B.d],[0,B.d]], K=veTpl(null,P,{z0:B.z0,h:B.h,tpl:tp}); if(!K)return;
+  const s1=gerIsoLines(K.B,"FR",K.D); if(!s1.length)return; let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity; s1.forEach(s=>[s.a,s.b].forEach(p=>{a=Math.min(a,p[0]);b=Math.min(b,p[1]);c=Math.max(c,p[0]);d=Math.max(d,p[1])}));
+  const zg=Math.min(b,0), dx=xc-a*f, y0=top-.6, dy=y0-d*f; s1.forEach(s=>add({t:"line",x1:+(s.a[0]*f+dx).toFixed(4),y1:+(s.a[1]*f+dy).toFixed(4),x2:+(s.b[0]*f+dx).toFixed(4),y2:+(s.b[1]*f+dy).toFixed(4)}));
+  add({t:"line",x1:a*f+dx-.3,y1:zg*f+dy,x2:c*f+dx+.3,y2:zg*f+dy,lw:.5});
+  if(B.z0>.05){const xd=a*f+dx-.25, yb=B.z0*f+dy, yg=zg*f+dy; add({t:"line",x1:xd,y1:yg,x2:xd,y2:yb,lw:.25}); [yg,yb].forEach(y=>add({t:"line",x1:xd-.07,y1:y-.07,x2:xd+.07,y2:y+.07,lw:.25})); add({t:"line",x1:xd,y1:yb,x2:a*f+dx,y2:yb,lw:.18}); add({t:"text",x:xd-.08,y:(yg+yb)/2,h:.13,s:gerF(B.z0,2)+" m",rot:90,c:1})}
+  const E=VE_EQ[B.t.k], nm=B.t.t==="ve"?E.n:B.t.t==="vequ"?"Quadro "+(B.t.n||"QVE"):"Botoneira de corte de emergência";
+  add({t:"text",x:xc,y:y0+.25,h:.16,s:nm,rot:0,b:1});
+  // legenda numerada: coluna à direita, ordenada pela altura
+  const cs=K.C.map(o=>({x:o.p[0]*f+dx,y:o.p[2]*f+dy,s:o.s})).sort((m,n)=>n.y-m.y), colX=c*f+dx+.6; let yl=Infinity; const lab=[];
+  cs.forEach((o,i)=>{let y=Math.min(o.y,yl-.34); yl=y; lab.push(y); add({t:"line",x1:+o.x.toFixed(4),y1:+o.y.toFixed(4),x2:colX-.13,y2:+y.toFixed(4),lw:.18}); add({t:"circle",x:colX,y:+y.toFixed(4),r:.12}); add({t:"text",x:colX,y:+(y-.05).toFixed(4),h:.1,s:String(i+1),rot:0,c:1}); add({t:"text",x:colX+.2,y:+(y-.05).toFixed(4),h:tH,s:o.s,rot:0})});
+  const tw=Math.max(0,...cs.map(o=>o.s.length))*tH*.62, ix=colX+.4+tw+.6;
+  // perspetiva da mesma peça
+  const s2=gerIsoLines(K.B,L.vista,K.D); let a2=Infinity,b2=Infinity,c2=-Infinity,d2=-Infinity; s2.forEach(s=>[s.a,s.b].forEach(p=>{a2=Math.min(a2,p[0]);b2=Math.min(b2,p[1]);c2=Math.max(c2,p[0]);d2=Math.max(d2,p[1])}));
+  const f2=f*.85, dx2=ix-a2*f2, dy2=y0-d2*f2; s2.forEach(s=>add({t:"line",x1:+(s.a[0]*f2+dx2).toFixed(4),y1:+(s.a[1]*f2+dy2).toFixed(4),x2:+(s.b[0]*f2+dx2).toFixed(4),y2:+(s.b[1]*f2+dy2).toFixed(4)}));
+  const hgt=Math.max((d-zg)*f,(d2-b2)*f2,lab.length?y0-Math.min(...lab):0); rowH=Math.max(rowH,hgt);
+  xc=ix+(c2-a2)*f2+1.5});
+ L.vePorY=top-.6-rowH}
+{const _r=gerIsoRefresh; gerIsoRefresh=function(doc,force){const r=_r.apply(this,arguments); const dd=doc||S.doc; try{ if(r&&dd&&dd.gerLay&&dd.gerLay.vePor)vePormenor(dd)}catch(e){console.error(e)} return r}}
+/* ---------- unifilar: símbolo do posto de carregamento ---------- */
+let VE_UNI=false;
+function veUniInit(){ if(VE_UNI)return; VE_UNI=true;
+ UMOD.push(["ve","Posto de carregamento VE"]); UNAME.ve="Posto de carregamento VE"; UMODTIP.ve="Posto de carregamento de veículo elétrico (potência, modo, conectores, proteções incorporadas)";
+ UFD.ve=[["P","Potência (kW)","text"],["modo","Modo","sel",["Modo 2","Modo 3","Modo 4","Modo 4 + Modo 3"]],["con","Conectores","text"],["inc","Proteções no posto","text"]];
+ {const L=UFD.dif&&UFD.dif.find(x=>x[0]==="tipo"); if(L&&!L[3].includes("A + RDC-DD"))L[3].push("A + RDC-DD")}
+ {const _d=uDev; uDev=function(t,ph){ if(t==="ve")return {t,P:"7,4",modo:"Modo 3",con:"Tipo 2",inc:"RDC-DD 6 mA"}; return _d(t,ph)}}
+ {const _h=uH; uH=function(d){ if(d.t==="ve"){let n=0; try{n=uDevLabels(d).length}catch(e){} return Math.max(18,Math.ceil(7+n*(typeof UST!=="undefined"?UST.fd*1.42:2.7)))} return _h(d)}}
+ {const _p=uDevPrims; uDevPrims=function(d,prevT,prevH){ if(d.t!=="ve")return _p(d,prevT,prevH); const o=[], ex=!!d.ex, H=uH(d);
+  const L=(x1,y1,x2,y2)=>o.push({k:"l",x1,y1,x2,y2,lay:"EQ",ex}), PL=(pts,cl)=>o.push({k:"pl",pts,cl,lay:"EQ",ex}), C=(x,y,r)=>o.push({k:"c",x,y,r,lay:"EQ",ex}), T=(x,y,s,h)=>o.push({k:"t",x,y,s,h:h||2,a:"m",v:"m",lay:"EQ",ex});
+  L(0,0,0,3); PL([[-4.2,3],[4.2,3],[4.2,14],[-4.2,14]],true); T(0,5.4,"VE",2.1); C(0,10.4,2.1); [[0,-.9],[-.9,-.3],[.9,-.3],[-.55,.75],[.55,.75],[0,.15],[0,1.3]].forEach(([a,b])=>C(a,10.4+b*.85,.28));
+  L(-2.6,7.4,-1.4,7.4); L(1.4,7.4,2.6,7.4); return o}}
+ {const _l=uDevLabels; uDevLabels=function(d){ if(d.t!=="ve")return _l(d); const P=[]; if(d.tag)P.push(d.tag); P.push("Posto "+(d.P||"")+" kW",d.modo||"",d.con||"",d.inc||""); return P.filter(Boolean)}}}
+setTimeout(()=>{try{veUniInit()}catch(e){console.error(e)}},0);
+/* ---------- janela ---------- */
+function veOpen(){ if(!PROJ){toast("Abra ou crie um projeto primeiro.");return} veUniInit(); const D=veData(), G=D.G; let el=$("veDlg");
+ if(!el){el=document.createElement("div"); el.id="veDlg"; el.style.cssText="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center"; document.body.appendChild(el)}
+ const qs=(()=>{try{return uDoc().qs.map(q=>q.nome)}catch(e){return []}})();
+ const opt=(v,L)=>L.map(([a,b])=>`<option value="${uEsc(a)}" ${String(v)===String(a)?"selected":""}>${uEsc(b)}</option>`).join("");
+ const fld=(k,l,ty,ops,ph)=>`<label style="display:block;margin:6px 0 2px;font-size:12px;opacity:.85">${l}</label>`+(ty==="sel"?`<select data-g="${k}" style="width:100%">${opt(G[k],ops)}</select>`:`<input type="text" data-g="${k}" inputmode="decimal" value="${uEsc(G[k]==null?"":String(G[k]).replace(".",","))}" ${ph?`placeholder="${uEsc(ph)}"`:""} style="width:100%"${ops?` list="${ops}"`:""}>`);
+ const chk=(k,l)=>`<label class="chk" style="display:block;margin-top:6px"><input type="checkbox" data-g="${k}" ${G[k]!==false?"checked":""}> ${l}</label>`;
+ const STR=["loc","inst","lig","qm","q","scc","dimF","sccT","esq","rcd","spd","emg","icc","can","cabT","cont","com","lay","car","vista"], OPT=["np","prep","Pc","Pex","Plim"];
+ const g2=s=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">${s}</div>`;
+ const draw2=()=>{const R0=veCalc(G);
+ el.innerHTML=`<div style="background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:10px;width:min(1240px,96vw);height:min(900px,94vh);display:flex;flex-direction:column;overflow:hidden">
+ <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)"><b style="font-size:15px">Postos de carregamento de veículos elétricos</b><span class="small" style="flex:1">Local, ligação, postos, gestão de carga, proteções e canalizações · esquema unifilar, planta com perspetiva, alçado e pormenor, memória descritiva</span><button id="veX">Fechar</button></div>
+ <div style="flex:1;display:grid;grid-template-columns:minmax(300px,390px) 1fr;min-height:0">
+  <div style="overflow:auto;padding:8px 14px;border-right:1px solid var(--line)">
+   <b>Local e utilização</b>
+   ${fld("loc","Tipo de local","sel",Object.entries(VE_LOC).map(([k,v])=>[k,v.n]))}
+   ${g2(fld("inst","Instalação","sel",[["int","Interior / parque coberto"],["ext","Exterior"]])+fld("np","Lugares do parque (n)",null,null,"para o mínimo legal")+fld("prep","Lugares só com tubagem preparada",null,null,"0"))}
+   <b style="display:block;margin-top:12px">Ligação e potência</b>
+   ${fld("lig","Alimentação","sel",[["inst","A partir da instalação existente (quadro a montante)"],["resp","Ligação própria à rede (novo contador)"]])}
+   ${g2((G.lig==="inst"?fld("qm","Quadro a montante",null,"veQs","ex.: QGBT"):"")+fld("q","Nome do quadro dos postos")+fld("Lq","Comprimento da alimentação (m)")+fld("duq","ΔU máx. na alimentação (%)")+(G.lig==="inst"?fld("Pc","Potência contratada (kVA)",null,null,"opcional")+fld("Pex","Ponta atual (kVA)",null,null,"medida / faturas"):""))}
+   <datalist id="veQs">${qs.map(n=>`<option value="${uEsc(n)}">`).join("")}</datalist>
+   <b style="display:block;margin-top:12px">Gestão de carga (SCC)</b>
+   ${g2(fld("scc","Sistema de controlo de carga","sel",[["auto","Automático (quando é preciso)"],["sim","Sim"],["nao","Não"]])+fld("sccT","Tipo","sel",[["din","Dinâmico (mede a instalação)"],["est","Estático (limite fixo)"]])+fld("Plim","Potência máxima para os postos (kVA)",null,null,"disponível")+fld("dimF","Dimensionar a alimentação para","sel",[["total","A soma dos postos (fs 1,00)"],["scc","O limite do SCC"]]))}
+   <b style="display:block;margin-top:12px">Proteções e terras</b>
+   ${g2(fld("rcd","Diferencial dos pontos AC","sel",[["auto","Tipo A + RDC-DD no posto (se o tiver)"],["B","Tipo B no quadro"]])+fld("spd","Descarregador no quadro","sel",[["auto","Automático"],["T2","Tipo 2"],["T1+T2","Tipo 1 + 2"]])+fld("emg","Corte de emergência","sel",[["auto","Automático"],["sim","Sim"],["nao","Não"]])+fld("icc","Poder de corte dos disjuntores (kA)","sel",[["4,5","4,5"],["6","6"],["10","10"],["15","15"],["25","25"]])+fld("esq","Esquema de ligação à terra","sel",[["TT","TT"],["TN","TN-S"]])+fld("RA","Resistência de terra RA (Ω)"))}
+   <b style="display:block;margin-top:12px">Canalizações, contagem e comunicação</b>
+   ${g2(fld("can","Canalização","sel",[["auto","Automática"],["cc","Caminho de cabos"],["tubo","Tubo à vista"],["ent","Tubo enterrado"]])+fld("cabT","Cabo","sel",[["auto","Automático"],["XZ1","XZ1 (sem halogéneos)"],["XV","XV"],["LSVAV","LSVAV (armado)"]])+fld("du","ΔU máx. nos circuitos (%)")+fld("cont","Contagem por ponto","sel",[["nao","Sem contador"],["mid","Contador MID (repartição)"],["resp","Contador inteligente (ligação à rede)"]])+fld("com","Comunicação (OCPP)","sel",[["eth","Ethernet (UTP Cat.6)"],["4g","4G / LTE em cada posto"],["wifi","Wi-Fi"]]))}
+   ${chk("Lauto","Comprimentos dos cabos tirados da planta (desligue para usar os da tabela)")}
+   <b style="display:block;margin-top:12px">Implantação</b>
+   ${g2(fld("lay","Disposição","sel",Object.entries(VE_LAY))+fld("car","Viaturas no desenho","sel",[["alguns","Em metade dos postos"],["todos","Em todos os lugares"],["nenhum","Nenhuma"]])+fld("bw","Largura do lugar (m)")+fld("bl","Comprimento do lugar (m)")+fld("ca","Faixa de circulação (m)")+(G.inst==="int"?fld("pd","Pé-direito (m)"):"")+fld("vista","Perspetiva vista da","sel",Object.entries(GER_VISTA))+fld("por","Ampliação do pormenor (×)"))}
+   ${chk("md","Incluir o capítulo «Postos de carregamento» na memória descritiva")}
+  </div>
+  <div style="overflow:auto;padding:8px 14px">
+   <div style="display:flex;align-items:center;gap:8px"><b style="flex:1">Postos</b><button id="veSug" title="Volta a pôr a sugestão para este local e número de lugares">Sugerir</button><button id="veAdd">+ Posto</button></div>
+   <table id="veTab" style="width:100%;border-collapse:collapse;margin-top:6px;font-size:12px"></table>
+   <div class="small" style="margin:4px 0 10px">${G.rows?"Lista editada por si. «Sugerir» repõe a sugestão.":"Lista sugerida pelo tipo de local"+(R0.Nmin?" e pelo mínimo legal ("+R0.Nmin+" lugares)":"")+". Ao editar uma linha passa a ser sua."}</div>
+   <b>Dimensionamento</b><div id="veRes" style="margin-top:6px"></div>
+   <b style="display:block;margin-top:10px">Circuitos dos pontos</b><div id="vePts" style="margin-top:6px"></div>
+   <div class="small" style="margin-top:8px;line-height:1.5">Valores de pré-dimensionamento. As proteções e os calibres dos carregadores DC seguem o manual do fabricante; confirme a potência disponível com o operador da rede e as medidas de segurança contra incêndio do parque.</div>
+  </div></div>
+ <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line)">
+  <button id="veUni">${veHasUni()?"Atualizar":"Criar"} o esquema unifilar</button><button id="vePl">${PROJ.plantas.some(p=>p.veMod)?"Atualizar":"Criar"} a planta, a perspetiva e o pormenor</button><button id="veAll" class="on">${veHasUni()||PROJ.plantas.some(p=>p.veMod)?"Atualizar tudo":"Criar tudo"}</button><span style="flex:1"></span><button id="veCopy">Copiar o dimensionamento</button></div></div>`;
+ const tab=()=>{const R=VE_LAST||veCalc(G), C=G.rows||R.rows, T=$("veTab"), tops=Object.entries(VE_EQ).map(([k,c])=>[k,c.n]);
+   T.innerHTML=`<tr style="text-align:left;opacity:.8"><th style="width:26px">#</th><th style="width:320px">Tipo</th><th style="width:60px">Quant.</th><th style="width:90px">Ligação ao VE</th><th>Lugares / descrição</th><th style="width:70px">${G.Lauto!==false?"":"Dist. (m)"}</th><th style="width:60px"></th></tr>`+C.map((c,i)=>{const E=VE_EQ[c.k]||{};
+    return `<tr><td>${i+1}</td><td><select data-c="${i}" data-f="k" style="width:100%">${opt(c.k,tops)}</select></td><td><input data-c="${i}" data-f="n" value="${uEsc(String(c.n))}" inputmode="numeric" style="width:100%"></td><td>${E.f==="wb"?`<select data-c="${i}" data-f="cab" style="width:100%">${opt(c.cab||"tomada",[["tomada","Tomada"],["cabo","Cabo fixo"]])}</select>`:`<span class="small">${E.f==="m2"?"Cabo modo 2":E.dc?"Cabo fixo":"Tomadas"}</span>`}</td><td><input data-c="${i}" data-f="d" value="${uEsc(c.d||"")}" style="width:100%"></td><td>${G.Lauto!==false?"":`<input data-c="${i}" data-f="L" value="${uEsc(String(c.L||""))}" placeholder="20" style="width:100%">`}</td><td><button data-cu="${i}" title="Subir">↑</button><button data-cx="${i}" title="Apagar">✕</button></td></tr>`}).join("");
+   const own=()=>{ if(!G.rows)G.rows=JSON.parse(JSON.stringify(R.rows)); return G.rows};
+   T.querySelectorAll("[data-c]").forEach(x=>x.onchange=()=>{const L=own(); L[+x.dataset.c][x.dataset.f]=x.dataset.f==="n"||x.dataset.f==="L"?gerN(x.value):x.value; res(); tab()});
+   T.querySelectorAll("[data-cx]").forEach(x=>x.onclick=()=>{const L=own(); L.splice(+x.dataset.cx,1); res(); tab()});
+   T.querySelectorAll("[data-cu]").forEach(x=>x.onclick=()=>{const L=own(), i=+x.dataset.cu; if(i>0)[L[i-1],L[i]]=[L[i],L[i-1]]; res(); tab()})};
+ const res=()=>{const R=veCalc(G); VE_LAST=R; const rows=veRows(G,R);
+  $("veRes").innerHTML=(R.warn.length?`<div style="color:#e8742c;margin-bottom:6px">${R.warn.map(uEsc).join("<br>")}</div>`:"")+`<table style="width:100%;border-collapse:collapse;font-size:12px">${rows.map(([a,b,c])=>`<tr style="border-top:1px solid var(--line)"><td style="padding:4px 6px 4px 0;opacity:.8;white-space:nowrap;vertical-align:top">${uEsc(a)}</td><td style="padding:4px 6px;vertical-align:top"><b>${uEsc(b)}</b>${c?`<div class="small" style="opacity:.75">${uEsc(c)}</div>`:""}</td></tr>`).join("")}</table><div class="small" style="margin-top:6px">${R.notes.map(uEsc).join("<br>")}</div>`;
+  $("vePts").innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="text-align:left;opacity:.8"><th>Circ.</th><th>Posto</th><th>S (kVA)</th><th>Ib (A)</th><th>Disjuntor</th><th>Diferencial</th><th>Cabo</th><th>L (m)</th><th>ΔU</th></tr>${R.pts.map(p=>`<tr style="border-top:1px solid var(--line)"><td>${p.ref}</td><td>${uEsc(p.E.n.split(" (")[0])}</td><td>${gerF(p.S)}</td><td>${gerF(p.Ib,1)}</td><td>C${p.In} ${p.pol}</td><td>${p.rcd.inner?"no posto (por tomada)":p.difIn?p.rcd.idn+" mA "+p.rcd.tipo:"incorporado no disjuntor, "+p.rcd.idn+" mA"}</td><td>${uEsc(p.cabo)}</td><td>${gerF(p.L,0)}</td><td>${gerF(p.du,2)} %</td></tr>`).join("")}</table>`;
+  try{saveLocal()}catch(e){}};
+ el.querySelectorAll("[data-g]").forEach(x=>x.onchange=()=>{const k=x.dataset.g; G[k]=x.type==="checkbox"?x.checked:STR.includes(k)?x.value:OPT.includes(k)&&x.value.trim()===""?"":gerN(x.value);
+   if(["loc","np"].includes(k)&&!G.rows){setTimeout(draw2,0); return} if(["lig","inst","Lauto","qm"].includes(k)){setTimeout(draw2,0); return} res(); tab()});
+ $("veX").onclick=()=>el.remove(); $("veSug").onclick=()=>{G.rows=null; draw2()};
+ $("veAdd").onclick=()=>{const R=VE_LAST||veCalc(G); if(!G.rows)G.rows=JSON.parse(JSON.stringify(R.rows)); G.rows.push({k:"w22",n:1,d:"",cab:"tomada"}); res(); tab()};
+ $("veUni").onclick=()=>{veMakeUni(G,VE_LAST); el.remove()}; $("vePl").onclick=()=>{ if(veMakePlanta(G,VE_LAST)!==false)el.remove()};
+ $("veAll").onclick=()=>{const up=veHasUni()||PROJ.plantas.some(p=>p.veMod); veMakeUni(G,VE_LAST,true); if(veMakePlanta(G,VE_LAST,true)===false)return; el.remove(); toast((up?"Atualizados":"Criados")+" o esquema «"+D.uni+"» e a planta «Postos de carregamento»."+(G.md!==false?" O capítulo entra na memória descritiva.":""),7000)};
+ $("veCopy").onclick=()=>{const R=VE_LAST||veCalc(G); const t=veRows(G,R).map(r=>r[0]+": "+r[1]+(r[2]?" ("+r[2]+")":"")).join("\n")+"\n"+R.pts.map(p=>p.ref+": "+p.E.n+" · C"+p.In+" "+p.pol+" · "+p.cabo+" · "+gerF(p.L,0)+" m · ΔU "+gerF(p.du,2)+" %").join("\n"); try{navigator.clipboard.writeText(t); toast("Dimensionamento copiado.")}catch(e){}};
+ res(); tab()};
+ draw2()}
+/* ---------- esquema unifilar ---------- */
+let VE_LAST=null;
+function veHasUni(){const D=PROJ&&PROJ.mods&&PROJ.mods.ve; try{return !!(D&&D.uni&&uDoc().qs.some(q=>q.nome===D.uni))}catch(e){return false}}
+function veMakeUni(G,R,quiet){veUniInit(); R=R||veCalc(G); const d=uDoc(), D=veData(); UNI.undo.push(JSON.stringify(d)); UNI.redo=[];
+ const old=veHasUni()?d.qs.find(q=>q.nome===D.uni):null; let nome=old?old.nome:(G.q||"QVE"), k9=2; if(!old)while(d.qs.some(q=>q.nome===nome))nome=(G.q||"QVE")+(k9++);
+ const q=uTemplate("vazio",nome); const any3=R.pts.some(p=>p.tri)||R.N>2; q.ph=any3?"3F":"1F"; q.local=G.inst==="ext"?"Parque exterior":"Parque de estacionamento"; q.alim=R.cabF.desig; q.orig=G.lig==="inst"?G.qm:"Rede (ligação própria)"; q.ks="1";
+ if(G.lig==="resp")q.preq=gerF(R.preq,R.preq%1?2:0).replace(",00","");
+ const pol=any3?"4P":"2P", devs=[];
+ if(G.lig==="resp"){devs.push({...uDev("dj",q.ph),In:R.InF,curva:"C",pol,icc:G.icc||"6",tag:"Geral"}); if(G.esq==="TT")devs.push({...uDev("dif",q.ph),In:VE_DIF.find(v=>v>=R.InF)||R.InF,idn:"300",tipo:"A",pol,tag:"Seletivo (S)"})}
+ else devs.push({...uDev("int",q.ph),In:GER_IN.find(v=>v>=R.InF)||R.InF,pol,tag:"Corte geral"});
+ if(R.emg)devs.push({...uDev("bot",q.ph),txt:"Corte de emergência dos postos",bob:"MX"});
+ devs.push({...uDev("dst",q.ph),tipo:R.spd,imax:R.spd==="T2"?"40":"12,5",up:"1,5",prot:"Conforme o fabricante"});
+ if(R.scc)devs.push({...uDev("ana",q.ph),txt:"SCC "+(G.sccT==="est"?"estático":"dinâmico")+" · limite "+gerF(R.Plim,1)+" kVA",com:"Modbus TCP"});
+ devs.push({...uDev("sin",q.ph),n:any3?"3":"1"});
+ q.root.devs=devs;
+ const leaves=R.pts.map((p,i)=>{const E=p.E, dv=[], ph=p.tri?"3F":"1F";
+  const dj={...uDev("dj",ph),In:p.In,curva:"C",pol:p.pol,icc:G.icc||"6"}; if(!E.inner&&!p.difIn){dj.dif=true; dj.idn=p.rcd.idn} dv.push(dj);
+  if(!E.inner&&p.difIn)dv.push({...uDev("dif",ph),In:p.difIn,idn:p.rcd.idn,tipo:p.rcd.tipo,pol:p.pol});
+  if(E.inner){const di=VE_DIF.find(v=>v>=p.In); if(di)dv.push({...uDev("dif",ph),In:di,idn:"300",tipo:"A",pol:p.pol,tag:"Proteção do cabo (S)"}); else {dj.dif=true; dj.idn="300"}}
+  if(G.cont!=="nao")dv.push({...uDev("kwh",ph),tipo:p.In>63?"ti":"dir",txt:G.cont==="mid"?"MID":"Inteligente"});
+  dv.push({...uDev("ve",ph),P:gerF(E.P,E.P%1?1:0)+(E.acx?" + "+E.acx:""),modo:E.mode,con:E.con+(p.cab==="cabo"?" (cabo fixo)":""),inc:E.inner?"2 × (C40 + DR 30 mA A + RDC-DD)":E.dc?"Separação galvânica":E.dd&&p.rcd.tipo!=="B"?"RDC-DD 6 mA":"",tag:"P"+(i+1)});
+  const lug=(R.geo&&R.geo.C[i]&&R.geo.C[i].bays||[]).map(b=>"L"+b.n).join(", ");
+  return uLeaf(dv,{ref:p.ref,des:E.n.split(" (")[0]+"\n"+(lug?"Lugar "+lug:"")+(p.d?" · "+p.d:""),cabo:p.cabo,p:+p.S.toFixed(2),L:p.L,fase:p.tri?"3F":"auto",gm:"ve"})});
+ q.root.kids=leaves;
+ q.notas=["Postos de carregamento de veículos elétricos: "+R.N+" posto(s), "+gerF(R.Stot)+" kVA (simultaneidade 1,00)"+(R.scc?"; sistema de controlo de carga limitado a "+gerF(R.Plim)+" kVA":"")+".","Cada ponto de conexão com circuito, disjuntor e diferencial 30 mA próprios (RTIEBT 722); proteção contra correntes de defeito contínuas por RDC-DD 6 mA no posto ou diferencial tipo B.","Instalação conforme a Portaria n.º 128/2026 e o DL n.º 93/2025."].join("\n");
+ if(old){const keep=(old.root.kids||[]).filter(l=>!(l.circ&&l.circ.gm==="ve")&&!l.kids); old.root.devs=q.root.devs; old.root.kids=q.root.kids.concat(keep); ["ph","local","orig","ks","notas","preq"].forEach(k2=>{ if(q[k2]!==undefined)old[k2]=q[k2]})} else d.qs.push(q);
+ D.uni=nome;
+ // alimentação no quadro a montante (sem duplicar)
+ if(G.lig==="inst"){const up=d.qs.find(x=>x.nome===G.qm); if(up&&up.nome!==nome){const all=uLeafPath(up).map(o=>o.leaf); let lf=all.find(l=>l.circ&&l.circ.gm==="ve"&&l.circ.to===nome)||all.find(l=>l.circ&&l.circ.to===nome);
+   const fd=[{...uDev("dj","3F"),In:R.InF,curva:"C",pol:"4P",icc:"10"}]; if(G.esq==="TT"){const di=VE_DIF.find(v=>v>=R.InF); if(di)fd.push({...uDev("dif","3F"),In:di,idn:"300",tipo:"A",pol:"4P"}); else {fd[0].dif=true; fd[0].idn="300"}}
+   const circ={ref:"VE",des:"Alimentação do "+nome+"\nPostos de carregamento VE",cabo:R.cabF.desig,p:+R.Sf.toFixed(1),L:gerN(G.Lq),fase:"3F",to:nome,gm:"ve"};
+   if(lf){lf.devs=fd; Object.assign(lf.circ,{cabo:circ.cabo,p:circ.p,L:circ.L,fase:"3F",to:nome,gm:"ve"})} else {up.root.kids=up.root.kids||[]; up.root.kids.push(uLeaf(fd,circ))}}}
+ // poder de corte dos disjuntores pela corrente de curto-circuito calculada em cada quadro
+ try{const N=netCalc(), PDC=[4.5,6,10,15,25,36,50], fix=(qq,leafF)=>{const r=N.q[qq.nome]; if(!r||!r.iccMax)return; const need=PDC.find(v=>v*1000>=r.iccMax)||50;
+   const chk=dv=>dv.forEach(x=>{ if(x.t==="dj"&&uN(x.icc)<need)x.icc=gerF(need,need%1?1:0)}); chk(qq.root.devs); uLeafPath(qq).forEach(({leaf})=>{ if(leafF(leaf))chk(leaf.devs)})};
+  const me=d.qs.find(x=>x.nome===nome); if(me)fix(me,()=>true); const up=G.lig==="inst"&&d.qs.find(x=>x.nome===G.qm); if(up)fix(up,l=>l.circ&&l.circ.gm==="ve")}catch(e){console.error(e)}
+ saveLocal(); if(!quiet){toast("Esquema «"+nome+"» "+(old?"atualizado":"criado")+(G.lig==="inst"&&d.qs.some(x=>x.nome===G.qm)?", com a alimentação no «"+G.qm+"»":"")+".",6000); openUni(nome)} return nome}
+/* ---------- planta ---------- */
+function vePlantaEnts(G,R){const E=[], LY="Carregamento VE", id=()=>PROJ.nextId++, Gm=R.geo, {Lr,Wr,t,bw,bl,ca,yA,wi,Q,zt}=Gm, ext=Gm.ext;
+ const gm=(k,o)=>({gm:{k,...(o||{})}});
+ const ln=(x1,y1,x2,y2,o,m)=>E.push({id:id(),t:"line",x1:+x1.toFixed(4),y1:+y1.toFixed(4),x2:+x2.toFixed(4),y2:+y2.toFixed(4),layer:LY,...(o||{}),...(m&&m.gm?m:gm("fixo"))});
+ const pl=(pts,cl,o,m)=>E.push({id:id(),t:"pl",pts:pts.map(p=>[+p[0].toFixed(4),+p[1].toFixed(4)]),closed:!!cl,layer:LY,...(o||{}),...(m&&m.gm?m:gm("fixo"))});
+ const tx=(x,y,s,h,o,m)=>E.push({id:id(),t:"text",x:+x.toFixed(4),y:+y.toFixed(4),h:h||.15,s,rot:0,layer:LY,...(o||{}),...(m&&m.gm?m:gm("fixo"))});
+ const RC=(x0,y0,x1,y1)=>[[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+ const box=(g,k,P,z0,h,o,tp)=>pl(P,true,o||{},{gm:{k,g,p3:{z0:+z0.toFixed(3),h:+h.toFixed(3),...(tp?{tpl:tp}:{})}}});
+ const top=g=>{const e=E[E.length-1]; ptTopLines(e,e.pts,e.gm.p3).forEach(([a,b])=>E.push({id:id(),t:"line",x1:+a[0].toFixed(4),y1:+a[1].toFixed(4),x2:+b[0].toFixed(4),y2:+b[1].toFixed(4),layer:LY,lw:.2,gm:{k:"txt",g}}))};
+ const dimH=(x1,x2,y,off,txt)=>{const yy=y+off, sg=Math.sign(off)||1; ln(x1,y,x1,yy+sg*.1); ln(x2,y,x2,yy+sg*.1); ln(x1,yy,x2,yy); [x1,x2].forEach(x=>ln(x-.07,yy-.07,x+.07,yy+.07)); tx((x1+x2)/2,yy+.08,txt||gerF(x2-x1,2),.13,{c:1})};
+ const dimV=(y1,y2,x,off,txt)=>{const xx=x+off, sg=Math.sign(off)||1; ln(x,y1,xx+sg*.1,y1); ln(x,y2,xx+sg*.1,y2); ln(xx,y1,xx,y2); [y1,y2].forEach(y=>ln(xx-.07,y-.07,xx+.07,y+.07)); tx(xx-.08,(y1+y2)/2,txt||gerF(y2-y1,2),.13,{c:1,rot:90})};
+ // envolvente: paredes do parque (interior) ou pavimento (exterior)
+ if(!ext){const door=Gm.door, A=gerPerim(Lr,Wr,0,door), B=gerPerim(Lr,Wr,t,door); pl(A.P,false,{lw:.5}); pl(B.P,false,{lw:.5}); ln(A.g0[0],A.g0[1],B.g0[0],B.g0[1],{lw:.5}); ln(A.g1[0],A.g1[1],B.g1[0],B.g1[1],{lw:.5});
+  tx(door.c,-t-.35,"Acesso de viaturas",.13,{c:1}); [-.6,0,.6].forEach(o=>{ln(door.c+o,-t-.9,door.c+o,-t+.6,{lw:.25}); ln(door.c+o,-t+.6,door.c+o-.12,-t+.4,{lw:.25}); ln(door.c+o,-t+.6,door.c+o+.12,-t+.4,{lw:.25})})}
+ else box("PAV","pavimento",RC(-.5,-.5,Lr+.5,Wr+.5),-.12,.12,{lt:"dashdot"});
+ if(Gm.wall&&ext)box("FAC","fachada",RC(-.5,Wr,Lr+.5,Wr+.3),0,3.2,{lw:.5});
+ if(Gm.wi)box("ILHA","ilha",RC(Gm.qz-.2,yA,Lr-.3,yA+wi),0,.15,{lw:.35});
+ // lugares
+ const bayEnt=(b)=>{const g="L"+b.n; box(g,"lugar",RC(b.x0,b.y0,b.x1,b.y1),0,.002,{lw:.35,...(b.prep?{lt:"dash"}:{})},{t:"velugar",fe:b.fe,prep:b.prep?1:0});
+  const cy=b.side>0?b.y1-1.6:b.y0+1.6, cx=(b.x0+b.x1)/2; if(!b.prep){const s=1.6; pl([[.06,-.3],[-.08,.02],[.03,.02],[-.07,.3],[.09,-.03],[-.01,-.03],[.06,-.3]].map(([a,c])=>[cx+a*s,cy+c*s*(b.side>0?-1:1)]),false,{lw:.25},{gm:{k:"txt",g}})}
+  tx(cx,b.side>0?b.y0+.45:b.y1-.6,(b.prep?"Preparado · ":"")+"L"+b.n,.13,{c:1},{gm:{k:"txt",g}})};
+ Gm.bays.forEach(bayEnt); Gm.prep.forEach(bayEnt);
+ // postos, batentes, viaturas e sinalização (cada posto é um conjunto: clicar escolhe-o todo)
+ const ncar=G.car==="nenhum"?0:1;
+ Gm.C.forEach((c,i)=>{const g="P"+(i+1), E2=c.E, tp={t:"ve",k:E2.key,fe:c.fe,cab:c.p.cab,ped:c.ped?1:0,sign:c.sign?1:0,n:"P"+(i+1)};
+  const P=RC(c.x0,c.y0,c.x1,c.y1);
+  // viatura no primeiro lugar do posto (todos ou metade), com o cabo ligado à tomada
+  const carOn=ncar&&(G.car==="todos"||i%2===0);
+  const cars=carOn?(G.car==="todos"?c.bays:[c.bays[0]]):[], bolt=E2.mnt!=="parede"||c.ped, nose=b=>b.side>0?Math.min(b.y1-.95,c.y0-(bolt?.45:0)-.3):Math.max(b.y0+.95,c.y1+(bolt?.45:0)+.3);
+  cars.forEach((b,j)=>{const W=1.8, Lc=4.4, cx=(b.x0+b.x1)/2, n0=nose(b), cy0=b.side>0?n0-Lc:n0, cy1=b.side>0?n0:n0+Lc;
+   const CP=RC(cx-W/2,cy0,cx+W/2,cy1), fe=b.side>0?2:0; box(g,"viatura",CP,0,1.42,{lw:.25},{t:"vecar",fe}); top(g);
+   if(j===0){const Fc=ptFrame(CP,fe), w=[Fc.o[0]+Fc.u[0]*0+Fc.i[0]*.6,Fc.o[1]+Fc.u[1]*0+Fc.i[1]*.6], Fp=ptFrame(P,c.fe), lx=(w[0]-Fp.o[0])*Fp.u[0]+(w[1]-Fp.o[1])*Fp.u[1], ly=(w[0]-Fp.o[0])*Fp.i[0]+(w[1]-Fp.o[1])*Fp.i[1]; tp.car=[+lx.toFixed(3),+ly.toFixed(3),+(.78-c.z0).toFixed(3)]; tp.cj=c.bays.indexOf(b)>0?1:0}});
+  box(g,"posto"+(c.side>0?"":"-b"),P,c.z0,c.h,{lw:.5},tp); top(g);
+  // batentes de proteção à frente dos postos de pavimento / pedestais, lomba nos de parede
+  const fy=c.side>0?c.y0-.35:c.y1+.35;
+  if(bolt){[c.x0-.18,c.x1+.18].forEach(x=>{const r=.06, Pc=[]; for(let k=0;k<12;k++){const a=k/12*Math.PI*2; Pc.push([x+r*Math.cos(a),fy+r*Math.sin(a)])} box(g,"batente",Pc,0,.9,{lw:.3},{t:"vebol",fe:0})})}
+  c.bays.forEach(b=>{const n0=nose(b), yb=b.side>0?n0-1.42:n0+1.32; box(g,"batente",RC((b.x0+b.x1)/2-.8,yb,(b.x0+b.x1)/2+.8,yb+.1),0,.12,{lw:.3})});
+  const ty=c.side>0?c.y0-(bolt?.75:.35):c.y1+(bolt?.65:.25); tx(c.cx,ty,"P"+(i+1)+" · "+gerF(E2.P,E2.P%1?1:0)+" kW"+(E2.acx?" + "+E2.acx:"")+" · "+c.p.ref,.13,{c:1},{gm:{k:"txt",g}})});
+ // quadro e botoneira
+ {const qp=RC(Q.x0,Q.y0,Q.x1,Q.y1); box("QG","quadro",qp,Q.z0,Q.h,{lw:.5},{t:"vequ",fe:0,floor:R.qd.floor,rows:R.qd.rows,n:G.q}); top("QG"); tx(Q.cx,Q.y0-.3,G.q,.15,{c:1},{gm:{k:"txt",g:"QG"}})}
+ if(R.emg){const bw2=.09, bd=.06; let bp, k="botoneira";
+  if(!ext&&Gm.door){const x=Math.max(.3,Gm.door.c-Gm.door.W/2-.5); bp=RC(x,0,x+bw2,bd); k="botoneira-acesso"; box("BOT",k,bp,1.4,.12,{lw:.4},{t:"vebot",fe:2}); tx(x+bw2/2,.45,"Botoneira de corte de emergência",.11,{c:1},{gm:{k:"txt",g:"BOT"}})}
+  else {const x=Q.x1+.25; bp=RC(x,Q.y1-bd,x+bw2,Q.y1); box("BOT",k,bp,1.4,.12,{lw:.4},{t:"vebot",fe:0}); tx(x+bw2/2,Q.y0-.55,"Corte de emergência",.11,{c:1},{gm:{k:"txt",g:"BOT"}})}}
+ // canalizações: caminho de cabos na parede (interior) ou valas com tubos (exterior)
+ const last=Math.max(...Gm.C.map(c=>c.cx),Q.cx+.5);
+ if(!ext&&Gm.wall){const y1=Wr-.02, y0=y1-R.tray/1000, x0=Q.x0+.05; box("CC","caminho",RC(x0,y0,last+.15,y1),zt,.06,{lt:"dash",lw:.35});
+  box("CC","caminho",RC(Q.cx-.03,Wr-.08,Q.cx+.03,Wr-.02),Q.z0+Q.h,Math.max(.05,zt-Q.z0-Q.h),{lw:.25});
+  Gm.C.forEach(c=>{const zb=c.E.mnt==="parede"&&!c.ped?c.z0+c.h:.0, zz=Math.max(.05,zt-zb); box("CC","caminho",RC(c.cx-.03,Wr-.08,c.cx+.03,Wr-.02),zb,zz,{lw:.25})});
+  tx(Gm.qz,y0-.3,"Caminho de cabos metálico "+R.tray+" × 60 mm a "+gerF(zt,1)+" m · cabos "+R.cabT+" + UTP Cat.6 em compartimento separado",.12)}
+ else {const route=[]; const yq=Q.y0-.3; Gm.C.forEach(c=>{const yc=c.side>0?c.y0-.15:c.y1+.15; route.push([c.cx,yc])}); const ym=Gm.wi?yA+wi/2:(Gm.wall?Wr-.6:yA+.15);
+  ln(Q.cx,Q.y0,Q.cx,ym,{lt:"dash",lw:.45}); ln(Q.cx,ym,last,ym,{lt:"dash",lw:.45}); Gm.C.forEach(c=>{const yc=c.side>0?c.y0:c.y1; ln(c.cx,ym,c.cx,yc,{lt:"dash",lw:.45}); pl(RC(c.cx-.2,ym-.2,c.cx+.2,ym+.2),true,{lw:.3})});
+  tx(0,-(t||0)-1.0,!ext?"Caminho de cabos no teto, com descidas em tubo até cada posto":"Vala com tubos PEAD (Ø "+Math.max(...R.pts.map(p=>R.tube(p)))+" mm por posto + Ø 40 para comunicação), a ≥ 0,6 m, fita de sinalização · caixas de visita junto aos postos",.11)}
+ // alimentação do quadro e terra
+ {const x=Q.x0+.08; ln(x,Q.y1,x,Wr+t+1.0,{lt:"dashdot",lw:.4}); tx(x+.15,Wr+t+1.0,(G.lig==="inst"?"Alimentação a partir do "+G.qm+": ":"Alimentação a partir da portinhola / contador: ")+R.cabF.desig,.12)}
+ {const ex=-t-1.6, ey=Wr+t+1.0; E.push({id:id(),t:"circle",x:ex,y:ey,r:.15,layer:LY,...gm("fixo")}); ln(ex-.25,ey,ex+.25,ey); ln(ex,ey-.25,ex,ey+.25); tx(ex+.3,ey-.05,G.esq==="TT"?"Elétrodo de terra (RA ≤ "+gerF(gerN(G.RA),0)+" Ω)":"Ligação ao terminal principal de terra",.11)}
+ // faixa de circulação
+ if(Gm.lay!=="ilha"){const yc=Gm.lay==="parede"?ca/2:ca/2; ln(Gm.qz,yc,Lr-.6,yc,{lt:"dashdot",lw:.25}); tx((Gm.qz+Lr)/2,yc+.15,"Faixa de circulação ≥ "+gerF(ca,1)+" m",.12,{c:1})}
+ else {[ca/2,Wr-ca/2].forEach(yc=>{ln(Gm.qz,yc,Lr-.6,yc,{lt:"dashdot",lw:.25}); tx((Gm.qz+Lr)/2,yc+.15,"Faixa de circulação",.12,{c:1})})}
+ // cotas
+ const b0=Gm.bays[0]; if(b0){dimH(b0.x0,b0.x1,b0.side>0?b0.y0:b0.y1,b0.side>0?-.5:.5); dimV(b0.y0,b0.y1,Lr,.6)}
+ dimH(0,Lr,Wr+t,.6); dimV(0,Wr,-t,-.9);
+ const tY=Wr+t+1.5;
+ tx(0,tY+.6,"PLANTA DOS POSTOS DE CARREGAMENTO DE VEÍCULOS ELÉTRICOS",.22,{b:1});
+ tx(0,tY+.3,R.N+" posto(s) · "+R.nb+" lugar(es) · "+gerF(R.Stot)+" kVA"+(R.scc?" · SCC "+gerF(R.Plim)+" kVA":"")+" · "+(ext?"exterior":"interior")+" · "+R.ip.split(" · ")[0],.14);
+ return {E,lay:{Lr,Wr,t,H:Gm.H,sala:!ext,door:Gm.door||{w:"S",c:.5,W:.2,f:1},vista:G.vista||"SE",ly:LY,alc:true,alcRx:"^(posto|quadro|caminho|botoneira|fachada)$",alcT:Gm.lay==="parede"?"ALÇADO DA PAREDE DOS POSTOS (visto da faixa de circulação)":"ALÇADO DOS POSTOS (vistos da faixa de circulação)",vePor:{f:Math.max(2,gerN(G.por)||5)}}}}
+function veMakePlanta(G,R,quiet){R=R||veCalc(G); const cur=S.doc; let idx=PROJ.plantas.findIndex(p=>p.veMod);
+ if(idx>=0){const p=PROJ.plantas[idx]; if(p.gerLay&&p.gerLay.psig&&gerPlanSig(p)!==p.gerLay.psig&&!confirm("Na planta «"+p.pname+"» os objetos dos postos foram mexidos à mão. «Atualizar» volta a pô-los nas posições calculadas (os objetos que desenhou à parte ficam). Continuar?"))return false;
+  activatePlanta(idx,true); pushUndo(); const {E,lay}=vePlantaEnts(G,R); p.ents=p.ents.filter(e=>!e.gm).concat(E); p.gerLay=lay; gerIsoRefresh(p,true); p.gerLay.psig=gerPlanSig(p); rebuildIndex(); refreshUI&&refreshUI(); draw(); saveLocal();
+  if(!quiet)toast("Planta «"+p.pname+"» atualizada.",4000); return true}
+ const p=newDoc(); p.id="p"+(++PROJ.pseq); p.pname="Postos de carregamento VE · implantação"; p.unit=1; p.textH=.15; p.symScale=cur.symScale||1; p.veMod=true;
+ p.layers=cur.layers.map(l=>({...l,visible:true,locked:false})); if(!p.layers.some(l=>l.name==="Carregamento VE"))p.layers.push({name:"Carregamento VE",color:"#22d3ee",aci:7,visible:true,locked:false}); p.active="Carregamento VE";
+ const {E,lay}=vePlantaEnts(G,R); p.ents=E; p.gerLay=lay; gerIsoRefresh(p,true); p.gerLay.psig=gerPlanSig(p); p.nextId=PROJ.nextId;
+ try{p.plot={...plDefaults(),sc:"100",tit:"Postos de carregamento VE · implantação, perspetiva e pormenor"}}catch(e){}
+ PROJ.plantas.push(p); projLink(PROJ); activatePlanta(PROJ.plantas.length-1,true); try{fit()}catch(e){}
+ if(!quiet)toast("Planta «"+p.pname+"» criada. Clicar num posto escolhe o conjunto (posto, batentes, viatura); ao movê-lo, a perspetiva, o alçado e o pormenor acompanham.",7000); return true}
+/* ---------- memória descritiva ---------- */
+function veMD(api){const D=PROJ&&PROJ.mods&&PROJ.mods.ve; if(!D||D.G.md===false)return; const G=D.G, R=veCalc(G), LOC=VE_LOC[G.loc], {H,H2,P,E,T}=api; if(!R.N)return;
+ const cnt=R.pts.reduce((o,p)=>(o[p.k]=(o[p.k]||0)+1,o),{}), lst=Object.entries(cnt).map(([k,n])=>n+" "+(n>1?"unidades":"unidade")+" de "+VE_EQ[k].n.charAt(0).toLowerCase()+VE_EQ[k].n.slice(1)).join("; ");
+ H("POSTOS DE CARREGAMENTO DE VEÍCULOS ELÉTRICOS"); H2("ENQUADRAMENTO");
+ P(`A instalação de carregamento de veículos elétricos cumpre o regime jurídico da mobilidade elétrica (Decreto-Lei n.º 93/2025, de 14 de agosto), a Portaria n.º 128/2026/1, de 26 de março, que fixa as potências mínimas e as regras técnicas dos pontos de carregamento, e as Regras Técnicas das Instalações Elétricas de Baixa Tensão (Portaria n.º 949-A/2006, na redação atual), em particular a secção 722, «Alimentação de veículos elétricos». Os equipamentos cumprem a série EN/IEC 61851, os conectores a EN/IEC 62196 e, nos pontos de acesso público, o anexo II do Regulamento (UE) 2023/1804.`);
+ P(`O local é ${LOC.n.toLowerCase()}, com instalação ${G.inst==="ext"?"no exterior":"em parque interior / coberto"}.${R.Nmin?` Para ${Math.round(gerN(G.np))} lugares de estacionamento, o número mínimo de lugares com ponto de carregamento é de ${R.Nmin} (art. 2.º, n.º 3, da Portaria n.º 128/2026); estão previstos ${R.nb}.`:""}`); E();
+ H2("CONSTITUIÇÃO");
+ P(`Serão instalados ${R.N} posto(s) de carregamento, servindo ${R.nb} lugar(es): ${lst}. Cada ponto de conexão terá uma potência não inferior a 3680 VA.`);
+ P(`Os postos serão alimentados a partir do quadro **${G.q}**, ${G.lig==="inst"?`por sua vez alimentado a partir do **${G.qm}**`:`com ligação própria à rede de distribuição e contador próprio`}, por cabo ${R.cabF.desig} protegido por disjuntor de ${R.InF} A.`);
+ E(); H2("POTÊNCIA");
+ P(`A potência total dos postos é de ${gerF(R.Stot)} kVA, considerando o fator de simultaneidade de 1,00 (art. 2.º, n.º 2, da Portaria n.º 128/2026).${R.scc?` Será instalado um sistema de controlo de carga ${G.sccT==="est"?"estático":"dinâmico, que mede o consumo da instalação"} e reduz a corrente de carregamento dos postos (modo 3 e 4) ou desliga cargas, de modo a não exceder ${gerF(R.Plim)} kVA, cerca de ${gerF(R.perPt,1)} kVA por ponto com todos em carga.`:""}${G.lig==="resp"?` A potência a requisitar ao operador da rede é de ${gerF(R.preq,R.preq%1?2:0)} kVA, em ${R.nivel}.`:""}`); E();
+ T(["Grandeza","Valor"],veRows(G,R).map(r=>[r[0],r[1]]),[3,6]);
+ H2("CIRCUITOS E PROTEÇÕES");
+ P(`Cada ponto de conexão terá um circuito próprio, protegido por disjuntor de curva C e por dispositivo diferencial de corrente diferencial-residual estipulada não superior a 30 mA, que corta todos os condutores ativos, incluindo o neutro. A proteção contra correntes de defeito contínuas será assegurada pelo dispositivo de deteção de 6 mA em corrente contínua (RDC-DD) incorporado no posto ou, na sua falta, por diferencial do tipo B.${R.pts.some(p=>p.E.inner)?" Nos postos com duas tomadas, cada tomada terá dentro do posto o seu disjuntor e o seu diferencial.":""}${R.pts.some(p=>p.E.dc)?" Os carregadores em corrente contínua terão a proteção a montante indicada pelo fabricante, com separação galvânica entre a rede e o veículo.":""}`);
+ T(["Circ.","Posto","S (kVA)","Disjuntor","Diferencial","Cabo","L (m)","ΔU (%)"],R.pts.map(p=>[p.ref,p.E.n.split(" (")[0],gerF(p.S),"C"+p.In+" "+p.pol,p.rcd.inner?"No posto":p.rcd.idn+" mA "+p.rcd.tipo,p.cabo,gerF(p.L,0),gerF(p.du,2)]),[1,4,1.2,1.6,2,3,1,1]);
+ P(`A queda de tensão máxima, somando a alimentação do quadro, é de ${gerF(R.duMax,2)} %, inferior aos 5 % admitidos.${R.emg?" Será instalado um corte de emergência dos postos, por botoneira com encravamento, sinalizada, "+(G.inst==="int"?"junto ao acesso ao parque":"junto ao quadro")+", atuando sobre o aparelho de corte geral do "+G.q+".":""} No quadro será instalado um descarregador de sobretensões do tipo ${R.spd.replace("+"," + ")}; nos postos afastados mais de 10 m do quadro recomenda-se também um descarregador junto ao posto, se este não o tiver incorporado.`); E();
+ H2("CANALIZAÇÕES");
+ P(R.can==="cc"?`Os cabos, do tipo ${R.cabT}${R.cabT==="XZ1"?", sem halogéneos e de baixa emissão de fumos":""}, seguirão em caminho de cabos metálico de ${R.tray} × 60 mm, fixo à parede a cerca de ${gerF(R.geo.zt,1)} m, descendo até cada posto em tubo rígido. Os cabos de comunicação seguirão em compartimento separado.`:R.can==="ent"?`Os cabos, do tipo ${R.cabT}, seguirão em tubos de PEAD enterrados a pelo menos 0,6 m, com fita de sinalização e caixas de visita junto aos postos, um tubo por posto e um tubo de Ø 40 mm para a comunicação.`:`Os cabos, do tipo ${R.cabT}, seguirão em tubo à vista, com um tubo por circuito.`); E();
+ H2("LIGAÇÕES À TERRA");
+ P(G.esq==="TT"?`O esquema de ligação à terra será TT. O ligador de massa de cada posto será ligado ao condutor de proteção da canalização. A resistência de terra não deverá exceder ${gerF(gerN(G.RA),0)} Ω, valor que garante uma tensão de contacto não superior a ${R.UL} V com os diferenciais previstos (máximo de ${gerF(R.RAmax,0)} Ω).`:`O esquema de ligação à terra será TN-S. ${G.inst==="ext"?"Nos postos no exterior será instalada proteção contra a rotura do condutor PEN, ou os postos passarão a TT com elétrodo próprio, como prevê a secção 722.":"O ligador de massa de cada posto será ligado ao condutor de proteção da canalização."}`); E();
+ H2("CONTAGEM, COMUNICAÇÃO E GESTÃO");
+ P(`${G.cont==="resp"?"Cada ponto ligado à rede terá contador inteligente, com as funcionalidades da Portaria n.º 231/2013 (art. 5.º da Portaria n.º 128/2026).":G.cont==="mid"?"Cada ponto terá contador de energia certificado (MID), para a repartição dos consumos.":"A contagem será feita no contador da instalação."} Os postos comunicarão por ${G.com==="eth"?"rede Ethernet (cabo UTP Cat.6) a partir do quadro":G.com==="4g"?"rede móvel 4G em cada posto":"Wi-Fi"}, com o protocolo OCPP (1.6J ou 2.0.1), para a gestão, o carregamento inteligente${R.scc?" e o controlo de carga":""}.${LOC.pub?" Sendo de acesso público, os postos permitirão o carregamento ad hoc, sem contrato, com pagamento eletrónico (DL n.º 93/2025).":""}`); E();
+ H2("SEGURANÇA E SINALIZAÇÃO");
+ P(`Os postos terão grau de proteção e de resistência ao choque adequados ao local (${R.ip}). As tomadas e os conectores ficarão entre 0,5 m e 1,5 m do pavimento. Junto aos postos serão colocados batentes de proteção contra o embate das viaturas e cada lugar será sinalizado no pavimento e por sinal vertical como reservado a veículos elétricos em carregamento.`);
+ if(G.inst==="int")P("Em parque coberto, a localização dos postos, o corte de emergência, a sinalização e os meios de primeira intervenção serão compatibilizados com o projeto de segurança contra incêndio do edifício (RJ-SCIE e RT-SCIE), sem ocupar os caminhos de evacuação.");
+ P("A instalação será executada por técnico ou entidade instaladora habilitados (Lei n.º 14/2015), sujeita a inspeção inicial e a inspeções periódicas, e só será ligada à rede depois de emitido o certificado de exploração."); E()}
+
+/*VE-END*/
 // lista de comandos: id, nome, grupo, nomes curtos (o primeiro aparece no menu), tecla, ação
 const CMDS=[
  {id:"novo",n:"Novo…",g:"Ficheiro",a:["NOVO","NEW"],k:"Ctrl+N",f:()=>newDialog()},
@@ -5425,6 +5885,7 @@ const CMDS=[
  {id:"lin2cab",n:"Linhas → cabos (transformar as linhas selecionadas em cabos, um por troço)",g:"Elétrico",a:["LC","LINHASCABO","L2C","PCABO"],f:()=>linesToCable()},
  {id:"uni",n:"Esquema unifilar…",g:"Elétrico",a:["UN","UNIFILAR"],f:()=>openUni(),sep:true},
  {id:"modpt",n:"Posto de transformação (tipo, celas, dimensionamento, unifilar, implantação, memória)…",g:"Módulos",a:["PT","POSTO","PTRANSF"],f:()=>ptOpen()},
+ {id:"modve",n:"Postos de carregamento de veículos elétricos (PCVE: postos, gestão de carga, unifilar, implantação, memória)…",g:"Módulos",a:["PCVE","CARREGAMENTO","WALLBOX"],f:()=>veOpen()},
  {id:"modger",n:"Grupo gerador (dimensionamento, unifilar, implantação, memória)…",g:"Módulos",a:["GERADOR","GG","GRUPO"],f:()=>gerOpen()},
  {id:"legenda",n:"Simbologia no desenho",g:"Elétrico",a:["LEG","LEGENDA","SIMBOLOGIA"],f:()=>legPlace()},
  {id:"legnotas",n:"Simbologia e notas da folha…",g:"Elétrico",a:["NOTAS"],f:()=>legEditDialog()},
