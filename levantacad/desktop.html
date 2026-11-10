@@ -138,6 +138,7 @@ button.ic small.badge{font-size:10px;font-weight:600}
 .umod{display:flex;align-items:center;gap:8px;padding:5px 7px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);cursor:grab;touch-action:none;font-size:12px;color:var(--txt)}
 .umod svg{width:30px;height:34px;flex:none}
 .umod:hover{border-color:var(--acc)}
+.umodh{font-size:11px;font-weight:600;color:var(--mut,#9aa3ad);text-transform:uppercase;letter-spacing:.04em;padding:10px 2px 0;border-top:1px solid var(--line);margin-top:6px}
 .umod.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset;background:rgba(232,116,44,.14)}
 #uniwrap{position:relative;overflow:hidden;background:var(--canvas);touch-action:none}
 #unisvg{position:absolute;inset:0;width:100%;height:100%;display:block}
@@ -557,7 +558,7 @@ const ESP_RX=[["pt",/\bp\.?\s?t\.?\b|posto de transforma|subesta[cç]/],["wc",/\
  ["ext",/varanda|terra[cç]o|logradouro|p[aá]tio|exterior|jardim|marquise|alpendre/],["qe",/quadro|\bq\.?g\.?b\.?t|\bq\.?e\b/],["tecnica",/t[eé]cnic|m[aá]quinas|bombagem|\bups\b|bastidor|\bati\b|sala de equip/],["ve",/carregamento|\bpcve\b|\bve\b/]];
 function espTipoN(t){const x=ESP_TIPOS.find(q=>q[0]===t); return x?x[1]:"Outro"}
 function espTipoC(t){const x=ESP_TIPOS.find(q=>q[0]===t); return x?x[2]:"#94a3b8"}
-function espHint(){return S.espPoly?"Espaço · contorno à mão: clique nos cantos e feche no primeiro ponto, Enter ou botão direito. P volta à deteção automática.":"Espaço: clique dentro de um compartimento; o contorno é detetado pelas paredes. P desenha à mão. Clicar num espaço existente edita-o."}
+function espHint(){return S.espPoly?"Espaço · contorno à mão: clique nos cantos e feche no primeiro ponto, Enter ou botão direito. P volta à deteção automática.":"Espaço: clique dentro de um compartimento; o contorno é detetado pelas paredes. P desenha à mão. Clicar num espaço existente edita-o."+(S.doc&&S.doc.bg?" Se não encontrar as paredes da imagem, use «Deteção de paredes na imagem de fundo»."  :"")}
 function polyAreaW(pts){let a=0; for(let i=0,n=pts.length;i<n;i++){const p=pts[i],q=pts[(i+1)%n]; a+=p[0]*q[1]-q[0]*p[1]} return a/2}
 function espArea(e){return Math.abs(polyAreaW(e.pts))/(U()*U())}
 function inPolyW(x,y,pts){let c=false; for(let i=0,j=pts.length-1;i<pts.length;j=i++){const a=pts[i],b=pts[j]; if(((a[1]>y)!==(b[1]>y))&&(x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0]))c=!c} return c}
@@ -641,8 +642,7 @@ function espDetect(x,y){const u=U(), cs=.05, cell=cs*u, half=20*u, minx=x-half, 
   else if(r.t==="arc")arc(r.x,r.y,r.r,r.a0,r.a1); else if(r.t==="circle")arc(r.x,r.y,r.r,0,360)};
  S.doc.ref.forEach(r=>{ if(refVisible(r))geo(r)}); S.doc.ents.forEach(e=>{ if(e.t==="cable"||e.t==="sym"||e.t==="text"||(e.t==="pl"&&e.esp))return; const L=layerOf(e); if(L&&L.visible)geo(e)});
  const bp=S.doc.bg&&!S.doc.refHidden?bgPixels():null;
- if(bp){const b=S.doc.bg; for(let j=0;j<NY;j++){const wy=miny+(j+.5)*cell; const py=Math.floor((b.y+b.h-wy)/b.h*bp.h); if(py<0||py>=bp.h)continue;
-  for(let i=0;i<NX;i++){const wx=minx+(i+.5)*cell; const px=Math.floor((wx-b.x)/b.w*bp.w); if(px<0||px>=bp.w)continue; const o=(py*bp.w+px)*4; if(bp.d[o+3]>100&&(bp.d[o]*.3+bp.d[o+1]*.59+bp.d[o+2]*.11)<120)set(i,j)}}}
+ if(bp)bgWallCells(bp,S.doc.bg,minx,miny,cell,NX,NY,set);
  if(nw<10)return null;
  const si=Math.floor((x-minx)/cell), sj=Math.floor((y-miny)/cell), s0=sj*NX+si;
  const dist=new Uint8Array(N).fill(255); {const Q=new Int32Array(N); let h=0,t=0; for(let c=0;c<N;c++)if(wall[c]){dist[c]=0;Q[t++]=c}
@@ -3569,7 +3569,8 @@ function buildUniUI(){const d=document.createElement("div"); d.id="uni";
   <datalist id="uIns">${UIN_L.map(s=>`<option value="${s}">`).join("")}</datalist>`;
  document.body.appendChild(d);
  const gh=document.createElement("div"); gh.id="unighost"; document.body.appendChild(gh);
- $("unimods").innerHTML=UMOD.map(([t,n])=>`<div class="umod" data-t="${t}" data-tip="${uEsc(n+" · "+UMODTIP[t])}">${uTileSVG(t)}<span>${n}</span></div>`).join("");
+ {const MT=["mtim","mtqm","mtdm","mtcm","trp"], tile=([t,n])=>`<div class="umod" data-t="${t}" data-tip="${uEsc(n+" · "+UMODTIP[t])}">${uTileSVG(t)}<span>${n}</span></div>`, bt=UMOD.filter(m=>!MT.includes(m[0])), mt=UMOD.filter(m=>MT.includes(m[0]));
+  $("unimods").innerHTML=bt.map(tile).join("")+(mt.length?`<div class="umodh">Média tensão</div>`+mt.map(tile).join(""):"")}
  $("uQ").onchange=e=>{uDoc().act=+e.target.value||0; UNI.sel=null; UNI.undo.length=0; uDone(); uFit()};
  $("uQNew").onclick=()=>uNewQuadro(); $("uQDel").onclick=uDelQuadro; $("uUndo").onclick=uUndo; $("uRedo").onclick=uRedo; $("uFitB").onclick=uFit; $("uNetB").onclick=uNetDialog;
  $("uDXF").onclick=uExportDXF; $("uSVGB").onclick=uExportSVG; $("uPrt").onclick=uPrint; $("uImpJ").onclick=()=>$("uImpF").click(); $("uExpJ").onclick=uExportJSON;
@@ -6555,6 +6556,125 @@ function genDiagrama(){const D=PROJ.uni; if(!D||!D.qs.length){toast("Ainda não 
  toast(`Diagrama gerado: ${qs.length} quadro(s) em ${floors.length} piso(s). Pode editá-lo e imprimi-lo como qualquer planta; voltar a gerar substitui-o.`,6000)}
 CMDS.push({id:"diag",n:"Diagrama da rede elétrica (gerar)",g:"Elétrico",a:["DIAG","DIAGRAMA"],f:()=>genDiagrama(),sep:true});
 
+/*UX-BEGIN*/
+/* ================= v43: melhorias pedidas por utilizadores ================= */
+// 1. Descarregador de sobretensões com a proteção a montante desenhada (fusível ou disjuntor).
+// 2. Analisador de energia com contagem direta / indireta, TI, TT e corrente nominal.
+// 4. Numeração dos circuitos de um intervalo, com prefixo único ou pela designação (I iluminação, T tomadas).
+// 5. Cabos escritos à mão ficam guardados para as próximas vezes.
+// 6. Deteção de compartimentos sobre a imagem de fundo com traço fraco (sensibilidade e pré-visualização).
+
+// ---------- 1 e 2: descarregador e analisador ----------
+UFD.dst=[["tipo","Tipo","sel",["T1","T1+T2","T2","T3"]],["imax","Imax / Iimp (kA)","text"],["up","Up (kV)","text"],
+ ["pt","Proteção a montante","sel",[["-","Sem aparelho desenhado"],["fus","Fusível"],["dj","Disjuntor"]]],["pIn","Calibre da proteção (A)","num","uIns"],["pcl","Classe / curva","text",null,"gG, C…"],["prot","Observação","text"]];
+UFD.ana=[["txt","Descrição","text"],["med","Contagem","sel",[["dir","Direta"],["ind","Indireta (por TI)"]]],["In","Corrente nominal (A)","num","uIns"],
+ ["tiRel","Relação dos TI (A)","text",null,"ex.: 400/5"],["tiCl","Classe dos TI","sel",["0,2S","0,5","0,5S","1"]],["tt","Com transformadores de tensão (TT)","chk"],["ttRel","Relação dos TT","text",null,"ex.: 15000/√3:100/√3 V"],
+ ["com","Comunicação","sel",["-","Modbus RTU","Modbus TCP"]]];
+UMODTIP.ana="Analisador de energia / multímetro, com contagem direta ou por TI (e TT, se houver)";
+{const _d=uDev; uDev=function(t,ph){
+ if(t==="dst")return {t,tipo:"T1+T2",imax:"25",up:"1,5",pt:"fus",pIn:125,pcl:"gG",prot:""};
+ if(t==="ana")return {t,txt:"Analisador de energia",med:ph==="3F"?"ind":"dir",In:ph==="3F"?250:63,tiRel:ph==="3F"?"250/5":"",tiCl:"0,5",tt:false,ttRel:"",com:"Modbus RTU"};
+ return _d(t,ph)}}
+const uDstProt=d=>d.pt==="fus"||d.pt==="dj";
+{const _h=uH; uH=function(d){const h=_h(d); if(d.t==="dst"&&uDstProt(d))return Math.max(18,h); if(d.t==="ana"&&d.tt)return Math.max(15,h); return h}}
+{const _p=uDevPrims; uDevPrims=function(d,prevT,prevH){
+ if(d.t!=="dst"&&d.t!=="ana")return _p(d,prevT,prevH);
+ const o=[], ex=!!d.ex, H=uH(d); const L=(x1,y1,x2,y2,dash)=>o.push({k:"l",x1,y1,x2,y2,dash,lay:"EQ",ex}), PL=(pts,cl,fill,dash)=>o.push({k:"pl",pts,cl,fill,dash,lay:"EQ",ex}), C=(x,y,r,fill)=>o.push({k:"c",x,y,r,fill,lay:"EQ",ex}), T=(x,y,s,h,a)=>o.push({k:"t",x,y,s,h:h||2.2,a:a||"m",v:"m",lay:"EQ",ex});
+ const earth=(x,y)=>{L(x,y,x,y+1.4); L(x-1.4,y+1.4,x+1.4,y+1.4); L(x-.9,y+2,x+.9,y+2); L(x-.4,y+2.6,x+.4,y+2.6)};
+ const spd=y=>{PL([[-6.2,y],[-3.8,y],[-3.8,y+4.6],[-6.2,y+4.6]],true); L(-5,y+.7,-5,y+3.9); L(-5.6,y+2.9,-5,y+3.9); L(-4.4,y+2.9,-5,y+3.9); earth(-5,y+4.6)};
+ if(d.t==="dst"){L(0,0,0,H);
+  if(d.pt==="fus"){L(0,3,-5,3); L(-5,3,-5,9.4); PL([[-5.8,4.2],[-4.2,4.2],[-4.2,8.2],[-5.8,8.2]],true); spd(9.4)}
+  else if(d.pt==="dj"){L(0,3,-5,3); L(-5,3,-5,4.4); L(-5.7,3.7,-4.3,5.1); L(-5.7,5.1,-4.3,3.7); L(-5,8.4,-7.3,4.8); L(-5,8.4,-5,9.4); spd(9.4)}
+  else {L(0,4,-5,4); spd(4)}
+  return o}
+ // analisador
+ L(0,0,0,H); const ax=-7.4, ay=5;
+ if(d.med==="ind"){C(0,ay,1.6); L(-1.6,ay,ax+2.4,ay,true); T(-2.7,ay-1.6,"TI",1.3)} else L(0,ay,ax+2.4,ay);
+ C(ax,ay,2.4); T(ax,ay,"A",2);
+ if(d.tt){const y=11.2; L(0,y,-2.6,y); C(-3.9,y,1.3); C(-5.9,y,1.3); L(-7.2,y,ax-.9,y,true); L(ax-.9,y,ax-.9,ay+2.2,true); T(-4.9,y+2.4,"TT",1.3)}
+ return o}}
+{const _l=uDevLabels; uDevLabels=function(d){
+ if(d.t==="dst"){const P=[]; if(d.tag)P.push(d.tag); P.push("DST "+(d.tipo||""),(d.imax||"")+" kA","Up "+(d.up||"")+" kV");
+  if(uDstProt(d))P.push((d.pt==="fus"?"Fus. ":"Disj. ")+(d.pcl?d.pcl+" ":"")+uF(uN(d.pIn),0)+" A"); if(d.prot)P.push(d.prot); return P.filter(Boolean)}
+ if(d.t==="ana"){const P=[]; if(d.tag)P.push(d.tag); P.push(d.txt||"Analisador");
+  if(d.med==="ind")P.push("Contagem indireta",(uN(d.In)?"In "+uF(uN(d.In),0)+" A · ":"")+(d.tiRel?"TI "+d.tiRel+" A":"")+(d.tiCl?" cl. "+d.tiCl:""));
+  else if(d.med==="dir")P.push("Contagem direta"+(uN(d.In)?" · "+uF(uN(d.In),0)+" A":""));
+  if(d.tt)P.push("TT "+(d.ttRel||"")); if(d.com&&d.com!=="-")P.push(d.com); return P.filter(Boolean)}
+ return _l(d)}}
+
+// ---------- 5: cabos guardados ----------
+const UCAB_K="lc_cabos_user";
+function uCabUser(){try{const L=JSON.parse(localStorage.getItem(UCAB_K)||"[]"); return Array.isArray(L)?L:[]}catch(e){return []}}
+function uCabSet(L){try{localStorage.setItem(UCAB_K,JSON.stringify(L.slice(0,150)))}catch(e){} uCabRefresh()}
+function uCabSave(v){v=String(v||"").trim(); if(!v||v.length>60)return; uCabSet([v,...uCabUser().filter(x=>x.toLowerCase()!==v.toLowerCase())])}
+function uCabRefresh(){const dl=$("uCabos"); if(!dl)return; if(!dl.dataset.base)dl.dataset.base=JSON.stringify([...dl.options].map(o=>o.value));
+ const base=JSON.parse(dl.dataset.base), U=uCabUser(), seen=new Set(), all=[];
+ [...U,...base].forEach(s=>{const k=s.toLowerCase(); if(!seen.has(k)){seen.add(k); all.push(s)}}); dl.innerHTML=all.map(s=>`<option value="${uEsc(s)}">`).join("")}
+document.addEventListener("change",e=>{const t=e.target; if(t&&t.getAttribute&&t.getAttribute("list")==="uCabos")uCabSave(t.value)},true);
+document.addEventListener("focusin",e=>{const t=e.target; if(t&&t.getAttribute&&t.getAttribute("list")==="uCabos")uCabRefresh()},true);
+function uCabDialog(){const m=$("modal"), b=$("mbox"); const L=uCabUser();
+ b.innerHTML=`<h4>Cabos guardados</h4><div class="small" style="margin-bottom:6px">Os cabos que escrever no esquema ficam guardados aqui e aparecem na lista ao escrever. Um por linha; apague as linhas que não quer.</div>
+ <textarea id="ucabT" rows="12" style="width:100%;font:inherit;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px">${uEsc(L.join("\n"))}</textarea>
+ <div class="acts"><button id="mCancel">Cancelar</button><button id="mOk" class="on">Guardar</button></div>`;
+ m.style.display="flex"; $("mCancel").onclick=()=>{m.style.display="none"};
+ $("mOk").onclick=()=>{const seen=new Set(), N=$("ucabT").value.split("\n").map(s=>s.trim()).filter(s=>s&&s.length<=60&&!seen.has(s.toLowerCase())&&seen.add(s.toLowerCase())); uCabSet(N); m.style.display="none"; toast(N.length+" cabo(s) guardado(s).",2500)}}
+
+// ---------- 4: numerar um intervalo de circuitos ----------
+function uNumKind(des){const s=String(des||"").toLowerCase();
+ if(/ilumin|\bluz|lumin|candeeir|aplique|projetor|projector|led\b|balizag/.test(s))return "I";
+ if(/tomad|\btug\b|\btue\b|t\.\s?uso/.test(s))return "T"; return null}
+function uNumDialog(){const q=uQ(); if(!q)return; const LV=uLayout(q).leaves; if(!LV.length){toast("Este quadro ainda não tem circuitos.",3000); return}
+ const refOf=(l,i)=>l.circ.ref||("C"+(i+1)), lab=(l,i)=>uEsc((refOf(l,i)+(l.circ.des?" · "+String(l.circ.des).split("\n")[0]:"")).slice(0,44));
+ const opts=LV.map((l,i)=>[String(i),lab(l,i)]); let a0="0";
+ const s=UNI.sel&&uResolve&&uResolve(); if(s&&s.k==="node"&&s.n&&!s.n.kids){const k=LV.indexOf(s.n); if(k>=0)a0=String(k)}
+ ask("Numerar circuitos",[{k:"a",l:"Do circuito",type:"select",v:a0,opts},{k:"b",l:"Ao circuito",type:"select",v:String(LV.length-1),opts},
+  {k:"md",l:"Nomenclatura",type:"select",v:"auto",opts:[["auto","Pela designação: I iluminação, T tomadas, os restantes com o prefixo abaixo"],["fix","Todos com o prefixo abaixo"]]},
+  {k:"p",l:"Prefixo",v:"C"},{k:"n0",l:"Primeiro número",v:"1"},
+  {k:"cont",l:"Continuar depois dos números já usados fora do intervalo (com o mesmo prefixo)",type:"check",v:false}],o=>{
+  let a=+o.a, b=+o.b; if(a>b)[a,b]=[b,a]; const p=String(o.p||"").trim(), n0=Math.max(0,Math.round(uN(o.n0)||1)), cnt=new Map(), ch=[];
+  const outside=new Map(); LV.forEach((l,i)=>{ if(i>=a&&i<=b)return; const r=uRefParse(refOf(l,i)); if(r){const k=r.p.toUpperCase(); outside.set(k,Math.max(outside.get(k)||0,r.n))}});
+  for(let i=a;i<=b;i++){const l=LV[i]; let pf=o.md==="auto"?(uNumKind(l.circ.des)||p):p; if(!pf&&o.md==="auto")continue; const K=pf.toUpperCase();
+   if(!cnt.has(K))cnt.set(K,o.cont?Math.max(n0,(outside.get(K)||0)+1):n0); const r=pf+cnt.get(K); cnt.set(K,cnt.get(K)+1); if(refOf(l,i)!==r)ch.push([i,r])}
+  if(!ch.length){toast("Já estava tudo numerado assim.",2500); return}
+  uPush(); let nc=0; ch.forEach(([i,r])=>{const old=refOf(LV[i],i); LV[i].circ.ref=r; nc+=uRenameSrc(LV[i],old,r)}); uDone();
+  const seen=new Map(); LV.forEach((l,i)=>{const r=refOf(l,i).toUpperCase(); seen.set(r,(seen.get(r)||0)+1)}); const dup=[...seen].filter(x=>x[1]>1).map(x=>x[0]);
+  toast(ch.length+" circuito(s) numerado(s), do "+refOf(LV[a],a)+" ao "+refOf(LV[b],b)+(nc?"; o nome de "+nc+" cabo(s) da planta foi atualizado também":"")+"."+(dup.length?" Atenção: há números repetidos ("+dup.join(", ")+").":""),dup.length?8000:5000)})}
+{const _u=uProps; uProps=function(){_u.apply(this,arguments); const box=$("uniprops"); if(!box)return;
+ const add=(after,id,txt,tip,fn)=>{const ref=box.querySelector("#"+after); if(!ref||box.querySelector("#"+id))return; const bt=document.createElement("button"); bt.id=id; bt.textContent=txt; if(tip)bt.title=tip; bt.onclick=fn; ref.after(bt)};
+ add("ubImp","ubNum","Numerar circuitos…","Numera um intervalo de circuitos (do primeiro ao último que escolher), com prefixo único ou pela designação: I para iluminação, T para tomadas",uNumDialog);
+ add("ubNum","ubCabs","Cabos guardados…","Ver e apagar os cabos escritos à mão, que ficam guardados para os próximos esquemas",uCabDialog);
+ add("ubRnAB","ubNumI","Intervalo…","Numerar um intervalo de circuitos com a nomenclatura escolhida (ex.: I1… para iluminação, T1… para tomadas)",uNumDialog)}}
+
+// ---------- 6: deteção de paredes na imagem de fundo ----------
+const BG_SENS=[["Normal (traço preto)",50],["Traço fraco ou cinzento",35],["Traço muito fraco",18]];
+function bgSensLv(){const v=S.doc&&S.doc.bgSens; return v>=0&&v<BG_SENS.length?v:0}
+// limiar de luminosidade: abaixo da cor do papel (a mediana da imagem) por uma margem que diminui com a sensibilidade
+function bgThr(bp,lv){ if(lv==null)lv=bgSensLv(); if(!bp.hist){const H=new Uint32Array(256), d=bp.d, st=4*7; let n=0; for(let o=0;o<d.length;o+=st){ if(d[o+3]<=100)continue; H[(d[o]*.3+d[o+1]*.59+d[o+2]*.11)|0]++; n++}
+  let a=0, paper=255; for(let i=0;i<256;i++){a+=H[i]; if(a>=n*.5){paper=i; break}} bp.hist={paper}}
+ const t=bp.hist.paper-BG_SENS[lv][1]; return Math.max(20,lv===0?Math.min(150,t):t)}
+// marca as células cujo quadrado de imagem tem algum pixel escuro (o mais escuro decide, para não perder traços finos)
+function bgWallCells(bp,b,minx,miny,cell,NX,NY,set){const thr=bgThr(bp), d=bp.d, sx=bp.w/b.w, sy=bp.h/b.h;
+ for(let j=0;j<NY;j++){const wy0=miny+j*cell, wy1=wy0+cell; let py0=Math.floor((b.y+b.h-wy1)*sy), py1=Math.ceil((b.y+b.h-wy0)*sy); if(py1<=0||py0>=bp.h)continue; py0=Math.max(0,py0); py1=Math.min(bp.h,Math.max(py1,py0+1)); const sj=Math.max(1,Math.floor((py1-py0)/6));
+  for(let i=0;i<NX;i++){const wx0=minx+i*cell; let px0=Math.floor((wx0-b.x)*sx), px1=Math.ceil((wx0+cell-b.x)*sx); if(px1<=0||px0>=bp.w)continue; px0=Math.max(0,px0); px1=Math.min(bp.w,Math.max(px1,px0+1)); const si=Math.max(1,Math.floor((px1-px0)/6));
+   let hit=false; for(let py=py0;py<py1&&!hit;py+=sj)for(let px=px0;px<px1;px+=si){const o=(py*bp.w+px)*4; if(d[o+3]>100&&(d[o]*.3+d[o+1]*.59+d[o+2]*.11)<thr){hit=true;break}}
+   if(hit)set(i,j)}}}
+function bgSensDialog(){const bp=S.doc.bg?bgPixels():null; if(!bp){toast("Esta planta não tem imagem ou PDF de fundo. A deteção de compartimentos usa só as linhas desenhadas.",5000); return}
+ const m=$("modal"), b=$("mbox"); let lv=bgSensLv();
+ b.innerHTML=`<h4>Deteção de paredes na imagem de fundo</h4><div class="small" style="margin-bottom:6px">Usada pelo comando «Espaço» para encontrar o contorno do compartimento. Se a planta tiver o traço fino ou cinzento, suba a sensibilidade. A laranja fica o que será tratado como parede.</div>
+ ${BG_SENS.map((s,i)=>`<label class="chk"><input type="radio" name="bgsv" value="${i}" ${i===lv?"checked":""}> ${s[0]}</label>`).join("")}
+ <canvas id="bgsvC" style="width:100%;max-height:52vh;object-fit:contain;border:1px solid var(--line);border-radius:6px;background:#fff;margin-top:6px"></canvas>
+ <div class="acts"><button id="mCancel">Cancelar</button><button id="mOk" class="on">OK</button></div>`;
+ m.style.display="flex"; const cv2=$("bgsvC"), W=Math.min(900,bp.w), H=Math.round(bp.h*W/bp.w), k=bp.w/W; cv2.width=W; cv2.height=H; const cx=cv2.getContext("2d");
+ const prev=()=>{const thr=bgThr(bp,lv), im=cx.createImageData(W,H), o=im.data, d=bp.d, st=Math.max(1,Math.ceil(k));
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){let mn=255; const y0=Math.floor(y*k), x0=Math.floor(x*k); for(let yy=y0;yy<Math.min(bp.h,y0+st);yy++)for(let xx=x0;xx<Math.min(bp.w,x0+st);xx++){const p=(yy*bp.w+xx)*4; if(d[p+3]<=100)continue; const l=d[p]*.3+d[p+1]*.59+d[p+2]*.11; if(l<mn)mn=l}
+   const q=(y*W+x)*4; if(mn<thr){o[q]=232;o[q+1]=116;o[q+2]=44} else {o[q]=o[q+1]=o[q+2]=Math.round(225+mn/255*30)} o[q+3]=255}
+  cx.putImageData(im,0,0)};
+ prev(); b.querySelectorAll('input[name=bgsv]').forEach(r=>r.onchange=()=>{lv=+r.value; prev()});
+ $("mCancel").onclick=()=>{m.style.display="none"};
+ $("mOk").onclick=()=>{pushUndo(); S.doc.bgSens=lv; saveLocal(); m.style.display="none"; toast("Sensibilidade: "+BG_SENS[lv][0].toLowerCase()+". Clique com «Espaço» dentro de um compartimento.",4000)}}
+CMDS.push({id:"bgsens",n:"Deteção de paredes na imagem de fundo (traço fraco)…",g:"Vista",a:["SENSIBILIDADE","TRACOFRACO"],f:()=>bgSensDialog()});
+
+/*UX-END*/
 /* ================= Arranque ================= */
 </script>
 
