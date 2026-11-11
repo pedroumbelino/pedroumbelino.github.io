@@ -1,0 +1,19 @@
+{
+ "name": "VR PDF",
+ "short_name": "VR PDF",
+ "description": "Editor de PDF da Ventura Rodrigues: ver, desenhar, anotar, assinar e organizar páginas, sem rede.",
+ "lang": "pt-PT",
+ "start_url": "./index.html",
+ "scope": "./",
+ "display": "standalone",
+ "orientation": "any",
+ "background_color": "#eef0f3",
+ "theme_color": "#C8302B",
+ "icons": [
+  {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+  {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+  {"src": "icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+  {"src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+ ],
+ "file_handlers": [{"action": "./index.html", "accept": {"application/pdf": [".pdf"]}}]
+}

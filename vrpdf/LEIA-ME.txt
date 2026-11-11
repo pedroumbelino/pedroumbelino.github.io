@@ -1,0 +1,8 @@
+VR PDF (versao web) - Ventura Rodrigues
+
+Endereco: https://pedroumbelino.github.io/vrpdf/
+
+Instalar no tablet ou PC: abrir o endereco no Chrome/Edge e escolher Instalar aplicacao (ou Adicionar ao ecra principal).
+Funciona sem rede depois da primeira abertura. O trabalho fica gravado no dispositivo e e recuperado ao abrir.
+
+Atualizar: substituir index.html/app.js e mudar vrpdf-v1 para vrpdf-v2 no sw.js.
