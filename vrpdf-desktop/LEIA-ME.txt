@@ -1,0 +1,4 @@
+VR PDF (programa para Windows) - atualizacoes
+
+versao.json e o zip com o codigo sao lidos pelo botao Atualizar do VR PDF.
+Para publicar uma versao nova: python tools/publicar.py <esta pasta> "nota" ...

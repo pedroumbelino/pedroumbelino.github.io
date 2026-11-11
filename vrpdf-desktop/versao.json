@@ -1,0 +1,10 @@
+{
+ "versao": "1.1.0",
+ "ficheiro": "vrpdf-1.1.0.zip",
+ "sha256": "dc3ce4b6c821f7e8750681cf70507a424e411027b7f2a0c396a92a064c2c9213",
+ "minimo_exe": "1.1.0",
+ "notas": [
+  "Botão Atualizar: o VR PDF passa a atualizar-se sozinho a partir do site",
+  "Verificação automática de versões novas uma vez por dia"
+ ]
+}
