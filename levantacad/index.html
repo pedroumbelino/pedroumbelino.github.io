@@ -885,7 +885,7 @@ function render(){
  raf=0; const W=cv.clientWidth,H=cv.clientHeight; G.clearRect(0,0,W,H);
  const light=isLight();
  // imagem de fundo
- if(S.doc.bg&&S.img&&S.img.complete&&S.img.naturalWidth&&!S.doc.refHidden&&!plantaRefSrc(S.doc).bgOff){const b=S.doc.bg; const [px,py]=W2S(b.x,b.y+b.h); G.globalAlpha=b.alpha||.6; G.save(); G.translate(px,py); G.rotate(VR()); G.drawImage(S.img,0,0,b.w*S.view.s,b.h*S.view.s); G.restore(); G.globalAlpha=1}
+ if(S.doc.bg&&S.img&&S.img.complete&&S.img.naturalWidth&&!S.doc.refHidden&&!plantaRefSrc(S.doc).bgOff){const b=S.doc.bg; const [px,py]=W2S(b.x,b.y+b.h); G.globalAlpha=b.alpha||.6; G.save(); G.translate(px,py); G.rotate(VR()); G.drawImage(typeof bgImgFor==="function"?bgImgFor():S.img,0,0,b.w*S.view.s,b.h*S.view.s); G.restore(); G.globalAlpha=1}
  // referência
  G.lineWidth=1; G.strokeStyle=light?"#9aa3af":"#5b6472"; G.fillStyle=G.strokeStyle;
  G.beginPath();
@@ -933,6 +933,9 @@ function render(){
   else if(k==="centro do objeto"){G.arc(px,py,8,0,Math.PI*2); G.moveTo(px-11,py); G.lineTo(px+11,py); G.moveTo(px,py-11); G.lineTo(px,py+11)}
   else if(k==="quadrante"){G.moveTo(px,py-7); G.lineTo(px+7,py); G.lineTo(px,py+7); G.lineTo(px-7,py); G.closePath()}
   else if(k==="sobre a reta"){G.moveTo(px-6,py-6); G.lineTo(px+6,py+6); G.moveTo(px-6,py+6); G.lineTo(px+6,py-6)}
+  else if(k==="interseção"){G.moveTo(px-7,py-7); G.lineTo(px+7,py+7); G.moveTo(px-7,py+7); G.lineTo(px+7,py-7)}
+  else if(k==="meio"){G.moveTo(px,py-8); G.lineTo(px+7,py+5); G.lineTo(px-7,py+5); G.closePath()}
+  else if(k==="prolongamento"){G.moveTo(px-6,py); G.lineTo(px+6,py); G.moveTo(px,py-6); G.lineTo(px,py+6); G.moveTo(px+6,py-6); G.arc(px,py,8.5,-Math.PI/4,Math.PI*1.75)}
   else G.rect(px-6,py-6,12,12); G.stroke()}
 }
 /* ================= Anotações à escala da folha: símbolos, textos, etiquetas e afastamento dos cabos acompanham a escala de impressão ================= */
@@ -1543,7 +1546,7 @@ function refreshProps(){const P=$("props"); const sel=[...S.sel];
  if(!sel.length){const c=S.doc.cur||{}, nl=S.doc.ents.filter(e=>e.locked).length; P.innerHTML=(nl?`<div class="pbtns"><button id="pUnlockAll">🔓 Desbloquear os ${nl} objeto(s) bloqueado(s)</button></div>`:"")+`<div class="psec">Nada selecionado</div><div class="small" style="padding:4px 10px 8px">Clique num objeto para ver e mudar a camada, a cor, o tipo de linha, a espessura e a geometria.<br><br>Os objetos novos ficam na camada <b>${uEsc(S.doc.active)}</b>, cor <b>${c.col?c.col.toUpperCase():"por camada"}</b>, linha <b>${c.lt?ltName(c.lt).toLowerCase():"por camada"}</b>, espessura <b>${c.lw?String(c.lw).replace(".",",")+" mm":"por camada"}</b>. Mude-os na faixa de cima, em «Propriedades».</div>`; if($("pUnlockAll"))$("pUnlockAll").onclick=()=>lockSet(S.doc.ents.filter(e=>e.locked),false); return}
  let L=0; sel.forEach(e=>L+=entLen(e));
  const one=sel.length===1?sel[0]:null;
- const TN={leg:"Simbologia",line:"Reta",pl:"Polilinha",cable:"Cabo",circle:"Círculo",arc:"Arco",text:"Texto",sym:"Símbolo"}; const cnt={}; sel.forEach(e=>{const n=e.t==="pl"&&e.esp?"Espaço":TN[e.t]||e.t; cnt[n]=(cnt[n]||0)+1});
+ const TN={dim:"Cota",ldr:"Chamada",lnk:"Ligação de comando",tab:"Tabela",leg:"Simbologia",line:"Reta",pl:"Polilinha",cable:"Cabo",circle:"Círculo",arc:"Arco",text:"Texto",sym:"Símbolo"}; const cnt={}; sel.forEach(e=>{const n=e.t==="pl"&&e.esp?"Espaço":TN[e.t]||e.t; cnt[n]=(cnt[n]||0)+1});
  let h=`<div class="psec">Geral</div><div class="pinfo"><span>${Object.entries(cnt).map(([n,c])=>(c>1?c+" × ":"")+n).join(", ")}</span>${L?`<b>${L.toFixed(2)} m</b>`:""}</div>`;
  const lay=selSame(sel,e=>e.layer), col=selSame(sel,e=>e.col||""), lt=selSame(sel,e=>e.lt||""), lw=selSame(sel,e=>e.lw==null?"":String(e.lw)), tr=selSame(sel,e=>String(e.tr||0));
  h+=`<div class="row"><label>Camada</label><select id="pLay">${lay===MIX?'<option value="__" selected>(várias)</option>':""}${S.doc.layers.map(l=>`<option ${l.name===lay?"selected":""}>${uEsc(l.name)}</option>`).join("")}</select></div>`;
@@ -1713,7 +1716,7 @@ function dxfStr(s){return String(s).replace(/[^\x20-\x7e\xa0-\xff]/g,ch=>{const 
 function exportDXF(opts){
  const o=[]; const w=(c,v)=>{o.push(String(c)); o.push(typeof v==="number"?(+v.toFixed(6)).toString():String(v))};
  const layers=S.doc.layers.filter(l=>opts.layers.includes(l.name));
- const ents=S.doc.ents.filter(e=>opts.layers.includes(e.layer)).flatMap(e=>e.t==="leg"?legExplode(e).map(q=>({...q,layer:q._cab?e.layer:q.layer})):[e]);
+ const ents=S.doc.ents.filter(e=>opts.layers.includes(e.layer)).flatMap(e=>e.t==="leg"?legExplode(e).map(q=>({...q,layer:q._cab?e.layer:q.layer})):typeof annExplode==="function"?annExplode(e):[e]);
  const refLayerNames=opts.ref?[...new Set(S.doc.ref.map(r=>r.layer))]:[];
  const usedE=new Map(); ents.filter(e=>e.t==="sym"&&SYM[e.sym]).forEach(e=>{const b=symBlk(e); if(!usedE.has(b))usedE.set(b,e)}); const used=[...usedE.keys()];
  const k=S.doc.symScale*U();
@@ -1760,7 +1763,7 @@ function exportDXF(opts){
   else if(e.t==="arc"){w(0,"ARC");w(8,lay);col(e);w(10,e.x);w(20,e.y);w(30,0);w(40,e.r);w(50,((e.a0%360)+360)%360);w(51,((e.a1%360)+360)%360)}
   else if(e.t==="text"){String(e.s).split("\n").forEach((ln,j)=>{const r=(e.rot||0)*Math.PI/180, dy=-j*e.h*1.6; w(0,"TEXT");w(8,lay);col(e);w(10,e.x-Math.sin(r)*dy);w(20,e.y+Math.cos(r)*dy);w(30,0);w(40,e.h);w(1,dxfStr(ln));w(50,e.rot||0)})}
   else if(e.t==="sym"){w(0,"INSERT");w(8,lay);col(e);w(2,"LC_"+symBlk(e));w(10,e.x);w(20,e.y);w(30,0);w(41,(e.scale||1)*(e.flip?-1:1));w(42,e.scale||1);w(43,1);w(50,e.rot||0);
-   {const L=labelOf(e,true); if(L){const kk=k*(e.scale||1); w(0,"TEXT");w(8,lay);col(e);w(10,L.x);w(20,L.y);w(30,0);w(40,.12*kk);w(1,dxfStr(e.label));w(50,L.rot||0)}}}
+   {const L=labelOf(e,true); if(L){const kk=k*(e.scale||1); w(0,"TEXT");w(8,lay);col(e);w(10,L.x);w(20,L.y);w(30,0);w(40,.12*kk);w(1,dxfStr(L.s||e.label));w(50,L.rot||0)}}}
  });
  if(fx&&fx.bundles.length){const P=fxPrims(fx); P.L.forEach(l=>{const lay=dxfStr(l.e.layer); w(0,"LINE");w(8,lay);col(l.e);w(10,l.a[0]);w(20,l.a[1]);w(30,0);w(11,l.b[0]);w(21,l.b[1]);w(31,0)});
   P.T.forEach(t=>{const lay=dxfStr(t.e.layer); w(0,"TEXT");w(8,lay);col(t.e);w(10,t.x);w(20,t.y);w(30,0);w(40,t.h);w(1,dxfStr(t.s));w(50,t.rot);w(72,1);w(11,t.x);w(21,t.y);w(31,0);w(73,2)})}
@@ -6109,17 +6112,20 @@ function plDraw(ctx,p,pageLayers,pageTitle){const P=plPaper(p), F=plFrame(p), V=
   S.view={s,ox:vx-ca*s,oy:vy+cb*s,rot:view0.rot||0};
   ctx.save(); ctx.beginPath(); ctx.rect(VP.x*V,VP.y*V,VP.w*V,VP.h*V); ctx.clip();
   const lwK=+p.lw||1;
-  if(p.bg&&!plantaRefSrc(S.doc).bgOff&&S.doc.bg&&S.img&&S.img.complete&&S.img.naturalWidth){const b=S.doc.bg; const [px,py]=W2S(b.x,b.y+b.h); ctx.globalAlpha=b.alpha||.6; ctx.save(); ctx.translate(px,py); ctx.rotate(VR()); ctx.drawImage(S.img,0,0,b.w*s,b.h*s); ctx.restore(); ctx.globalAlpha=1}
+  var fx0=FX;
+  const content=()=>{
+  if(p.bg&&!plantaRefSrc(S.doc).bgOff&&S.doc.bg&&S.img&&S.img.complete&&S.img.naturalWidth){const b=S.doc.bg; const [px,py]=W2S(b.x,b.y+b.h); ctx.globalAlpha=b.alpha||.6; ctx.save(); ctx.translate(px,py); ctx.rotate(VR()); ctx.drawImage(typeof bgImgFor==="function"?bgImgFor():S.img,0,0,b.w*S.view.s,b.h*S.view.s); ctx.restore(); ctx.globalAlpha=1}
   if(p.ref){ctx.lineWidth=1.3*lwK; ctx.strokeStyle=S.doc.ref.some(r=>r.layer==="PLANTA")?"#999999":"#8a8f98"; ctx.fillStyle=ctx.strokeStyle; ctx.setLineDash([]); ctx.beginPath(); for(const r of S.doc.ref){ if(!refVisible(r)||r.t==="text")continue; drawGeom(r,true)} ctx.stroke();
    for(const r of S.doc.ref){ if(r.t==="text"&&refVisible(r))drawText(r,"#6b7280")}}
   if(p.esp)espDrawAll(true);
   const backL=S.doc.layers.filter(l=>l.back).map(l=>l.name), ENTS=backL.length?S.doc.ents.filter(e=>backL.includes(e.layer)).concat(S.doc.ents.filter(e=>!backL.includes(e.layer))):S.doc.ents;
-  var fx0=FX; FX=typeof fxOn==="function"&&fxOn()?fxCompute(S.doc.ents.filter(e=>e.t==="cable"&&pageLayers.includes(e.layer))):null;
+  FX=typeof fxOn==="function"&&fxOn()?fxCompute(S.doc.ents.filter(e=>e.t==="cable"&&pageLayers.includes(e.layer))):null;
   const fxCol=e=>{const own=e.col&&!/^#(e5e7eb|ffffff)$/i.test(e.col)?e.col:null; let c=p.col==="mono"?"#000000":p.col==="vr"?(e.exist?"#1d4ed8":own||"#000000"):colorOf(e); if(p.col==="layers"&&/^#(e5e7eb|ffffff|facc15)$/i.test(c))c=c.toLowerCase()==="#facc15"?"#b45309":"#111827"; return c};
   for(const e of ENTS){ if(!pageLayers.includes(e.layer))continue; if(e.t==="pl"&&e.esp)continue;
    const own=e.col&&!/^#(e5e7eb|ffffff)$/i.test(e.col)?e.col:null; // cor escolhida no objeto: imprime-se, exceto em «Tudo a preto»
    let col=e.layer==="PLANTA"?(e.col||"#999999"):p.col==="mono"?"#000000":p.col==="vr"?(e.exist?"#1d4ed8":own||"#000000"):colorOf(e); if(p.col==="layers"&&/^#(e5e7eb|ffffff|facc15)$/i.test(col))col=col.toLowerCase()==="#facc15"?"#b45309":"#111827";
-   ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=lwOf(e)*V*lwK; ctx.globalAlpha=e.tr?1-e.tr/100:1;
+   const cs=plCtbOf(e.layer,p); if(cs&&cs.c&&e.layer!=="PLANTA"){col=cs.c==="k"?"#000000":cs.c==="g"?"#7f7f7f":cs.c==="l"?((layerByName(e.layer)||{}).color||col):/^#/.test(cs.c)?cs.c:col}
+   ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=(cs&&+cs.lw>0?+cs.lw:lwOf(e))*V*lwK; ctx.globalAlpha=(e.tr?1-e.tr/100:1)*(cs&&+cs.f?1-cs.f/100:1);
    const dsh=ltDash(ltOf(e)); ctx.setLineDash(dsh.length?dsh.map(v=>v*V):[]);
    if(e.t==="text"){ctx.setLineDash([]); drawText(e,col); ctx.globalAlpha=1; continue}
    if(e.t==="leg"){ctx.setLineDash([]); legDraw(e,col,true); ctx.globalAlpha=1; continue}
@@ -6129,7 +6135,10 @@ function plDraw(ctx,p,pageLayers,pageTitle){const P=plPaper(p), F=plFrame(p), V=
    if(e.t==="sym"){const L=labelOf(e,true); if(L)drawText(L,col)} ctx.globalAlpha=1}
   if(FX)fxDraw(FX,fxCol,e=>lwOf(e)*V*lwK);
   if(typeof riserDrawNotes==="function"&&S.doc.ents.some(e=>isRiser(e)&&pageLayers.includes(e.layer)))riserDrawNotes(p.col==="layers"?"#6b21a8":"#000");
+  };
+  content();
   ctx.restore();
+  if(p.det&&p.det.length)plDetails(ctx,p,content);
   // moldura e carimbo
   ctx.setLineDash([]); ctx.strokeStyle="#000"; ctx.lineWidth=5; ctx.beginPath(); ctx.rect(F.x*V,F.y*V,F.w*V,F.h*V); ctx.stroke();
   if(p.carimbo)plCarimbo(ctx,p,F,sc,pageTitle);
@@ -6238,7 +6247,7 @@ function plDxf(p,page){const sc=plScale(p), A=plArea(p), F=plFrame(p), P=plPaper
   if(e.t==="pl"||e.t==="cable"){const pts=e.closed&&e.pts.length>2?[...e.pts,e.pts[0]]:e.pts; const pieces=clipPts(pts); const whole=pieces.length===1&&pieces[0].length===pts.length;
    if(whole){arr.push(e); return} pieces.forEach(pc=>arr.push({...e,pts:pc,closed:false,taps:null,c:e.c?{...e.c,lab:false}:e.c})); return}
   if(keep(e))arr.push(e)};
- D0.ents.filter(e=>page.layers.includes(e.layer)&&!(e.t==="pl"&&e.esp&&!p.esp)).forEach(e=>cut(e,ents)); if(p.ref)D0.ref.filter(refVisible).forEach(r=>cut(r,ref));
+ D0.ents.filter(e=>page.layers.includes(e.layer)&&!(e.t==="pl"&&e.esp&&!p.esp)).flatMap(e=>typeof annExplode==="function"?annExplode(e):[e]).forEach(e=>cut(e,ents)); if(p.ref)D0.ref.filter(refVisible).forEach(r=>cut(r,ref));
  const T={...D0,ents,ref}; const save=S.doc; S.doc=T; let txt;
  try{txt=exportDXF({layers:page.layers.concat(p.esp?["Espaços"]:[]),ref:p.ref,vrColors:p.col!=="layers"})} finally {S.doc=save}
  // moldura + carimbo na camada LC_FOLHA
@@ -6278,6 +6287,7 @@ function openPlot(){ if(!S.doc)return; PL=PL||{pg:0}; const p=plState(); let el=
   <label>Escala</label><select data-k="sc">${opt(p.sc,PL_SCALES.map(v=>[String(v),v==="fit"?"Ajustar à folha":"1:"+v]))}</select>
   <label>O que imprimir</label><select data-k="area">${opt(p.area,[["tudo","Tudo"],["vista","O que está no ecrã"],["janela","Janela escolhida no desenho"]])}</select>
   <div class="row"><button id="plWin" style="flex:1">Escolher janela no desenho…</button></div>
+  <label>Janelas de pormenor (outra escala na mesma folha)</label><div id="plDetL">${(p.det||[]).map((d,i)=>`<div class="row" style="gap:4px"><input type="text" data-dt="${i}" value="${uEsc(d.tit||"")}" style="flex:2;min-width:70px" title="Título"><select data-ds="${i}" title="Escala">${opt(d.sc,[5,10,20,25,50,75].map(v=>[String(v),"1:"+v]))}</select><input type="text" data-dx="${i}" value="${Math.round(d.x)}" style="width:44px" title="Posição na folha: X (mm)"><input type="text" data-dy="${i}" value="${Math.round(d.y)}" style="width:44px" title="Posição na folha: Y (mm)"><button data-dd="${i}" title="Tirar">✕</button></div>`).join("")}</div><div class="row"><button id="plDetA" style="flex:1" title="Escolha uma zona do desenho; aparece ampliada, noutra escala, num canto da folha (só no PDF)">+ Janela de pormenor…</button></div>
   <div class="row"><button id="plCtr" style="flex:1" title="O desenho volta ao centro da moldura">Centrar o desenho</button><button id="plCb" style="flex:1" title="Mostrar ou retirar secções e reescrever os valores do carimbo">Editar carimbo…</button></div>
   <div class="small">Arraste a pré-visualização para mover o desenho na folha (a escala não muda). Clique no carimbo, na simbologia ou nas notas para os editar.</div>
   <label>Especialidades</label>${S.doc.layers.filter(l=>l.name!=="Espaços").map(l=>`<label class="chk"><input type="checkbox" data-lay="${uEsc(l.name)}" ${p.lay[l.name]?"checked":""}> <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${l.color}"></span> ${uEsc(l.name)}</label>`).join("")}
@@ -6286,6 +6296,7 @@ function openPlot(){ if(!S.doc)return; PL=PL||{pg:0}; const p=plState(); let el=
   <label class="chk"><input type="checkbox" data-k="bg" ${p.bg?"checked":""}> Imagem ou PDF de fundo</label>
   <label class="chk"><input type="checkbox" data-k="esp" ${p.esp?"checked":""}> Espaços (cores e áreas)</label>
   <label>Cores</label><select data-k="col">${opt(p.col,[["vr","A executar a preto, existente a azul"],["layers","Cores das especialidades"],["mono","Tudo a preto"]])}</select>
+  <div class="row"><button id="plCtb" style="flex:1" title="Cor, espessura e esbatido de cada camada na impressão, para este perfil de cores">Estilos por camada (tipo CTB)…</button></div>
   <label>Espessura das linhas</label><select data-k="lw">${opt(p.lw,[["0.7","Fina"],["1","Normal"],["1.5","Grossa"]])}</select>
   <label class="chk"><input type="checkbox" data-k="carimbo" ${p.carimbo?"checked":""}> Carimbo da VR (dados das Peças escritas)</label>
   <label class="chk"><input type="checkbox" data-k="se" ${p.se?"checked":""}> Sem escala (S.E.) no carimbo, para diagramas e esquemas</label>
@@ -6317,6 +6328,10 @@ function openPlot(){ if(!S.doc)return; PL=PL||{pg:0}; const p=plState(); let el=
  $("plPdf").onclick=async()=>{const pg=plPages(p), P=plPaper(p), pages=pg.map(g=>{const c=new PdfCtx(P.w,P.h); plDraw(c,p,g.layers,g.title); return {ctx:c,w:P.w,h:P.h}});
   try{const b=await plPdf(pages); download(baseNamePl()+(p.num?"_"+fnSafe(p.num):"")+".pdf",b,"application/pdf"); toast("PDF gerado: "+pages.length+" página(s), "+p.fmt+" a "+plDenTxt(plScale(p))+".")}catch(e){console.error(e); toast("Erro ao gerar o PDF: "+e.message,5000)}};
  $("plDxf").onclick=()=>{const pg=plPages(p); pg.forEach((g,i)=>setTimeout(()=>download(baseNamePl()+g.suf+(p.num?"_"+fnSafe(p.num):"")+".dxf",latin1(plDxf(p,g)),"application/dxf"),i*400)); toast("DXF da folha exportado ("+pg.length+" ficheiro(s)).")};
+ $("plCtb").onclick=()=>ctbDialog(p,()=>plPreview()); $("plDetA").onclick=()=>plDetAdd(p);
+ el.querySelectorAll("[data-dt]").forEach(i=>i.onchange=()=>{p.det[+i.dataset.dt].tit=i.value; upd()}); el.querySelectorAll("[data-ds]").forEach(i=>i.onchange=()=>{p.det[+i.dataset.ds].sc=i.value; upd()});
+ el.querySelectorAll("[data-dx]").forEach(i=>i.onchange=()=>{const v=parseFloat(i.value.replace(",",".")); if(isFinite(v))p.det[+i.dataset.dx].x=v; upd()}); el.querySelectorAll("[data-dy]").forEach(i=>i.onchange=()=>{const v=parseFloat(i.value.replace(",",".")); if(isFinite(v))p.det[+i.dataset.dy].y=v; upd()});
+ el.querySelectorAll("[data-dd]").forEach(b=>b.onclick=()=>{p.det.splice(+b.dataset.dd,1); saveLocal(); openPlot()});
  setTimeout(plPreview,0)}
 function plPickWin(){$("plot").style.display="none"; setTool("plotwin"); hint("Janela a imprimir: clique num canto e depois no canto oposto (ou arraste). Esc volta sem alterar."); toast("Escolha a janela no desenho.",1500)}
 function plWinDone(a,b){const p=plState(); const A=toV(a[0],a[1]), B=toV(b[0],b[1]); if(Math.abs(A[0]-B[0])<1e-6||Math.abs(A[1]-B[1])<1e-6)return; p.win=[Math.min(A[0],B[0]),Math.min(A[1],B[1]),Math.max(A[0],B[0]),Math.max(A[1],B[1])]; p.area="janela"; S.tmp=null; setTool("select"); saveLocal(); openPlot()}
@@ -6344,6 +6359,30 @@ function sheetDialog(){const p=plState(); const fm=plFmtOpts(), sc=PL_SCALES.map
 function sheetFit(){const p=plState(), P=plPaper(p), {M}=plSheetMap(p); const Q=[[0,0],[P.w,0],[P.w,P.h],[0,P.h]].map(q=>toV(...M(q[0],q[1])));
  const a=Math.min(...Q.map(q=>q[0])), c=Math.max(...Q.map(q=>q[0])), b=Math.min(...Q.map(q=>q[1])), d=Math.max(...Q.map(q=>q[1])), W=cv.clientWidth, H=cv.clientHeight, s=Math.min(W/((c-a)||1),H/((d-b)||1))*.94;
  S.view.s=s; S.view.ox=W/2-(a+c)/2*s; S.view.oy=H/2+(b+d)/2*s; draw()}
+
+// ---------- janelas de pormenor: a mesma planta noutra escala, num retângulo da folha ----------
+function plDetails(ctx,p,content){const V=PL_V, mainDen=plScale(p).den, ss0=S.doc.symScale, VP=plVP(p);
+ ctx.save(); ctx.beginPath(); ctx.rect(VP.x*V,VP.y*V,VP.w*V,VP.h*V); ctx.clip(); // os pormenores ficam dentro da área de desenho (não tapam o carimbo)
+ (p.det||[]).forEach((d,i)=>{ if(!d.win)return; const den=+d.sc||20, w=(d.win[2]-d.win[0])*S.doc.unit*1000/den, h=(d.win[3]-d.win[1])*S.doc.unit*1000/den, x=+d.x, y=+d.y;
+  ctx.save(); ctx.globalAlpha=1; ctx.setLineDash([]); ctx.fillStyle="#ffffff"; ctx.fillRect(x*V,y*V,w*V,h*V); ctx.restore();
+  const v0=S.view, s=S.doc.unit*1000/den*V, ca=(d.win[0]+d.win[2])/2, cb=(d.win[1]+d.win[3])/2; S.view={s,ox:(x+w/2)*V-ca*s,oy:(y+h/2)*V+cb*s,rot:v0.rot||0}; S.doc.symScale=ss0*den/mainDen;
+  ctx.save(); ctx.beginPath(); ctx.rect(x*V,y*V,w*V,h*V); ctx.clip(); try{content()}catch(er){console.error(er)} finally{ctx.restore(); S.view=v0; S.doc.symScale=ss0}
+  ctx.save(); ctx.globalAlpha=1; ctx.setLineDash([]); ctx.strokeStyle="#000000"; ctx.lineWidth=2.5; ctx.beginPath(); ctx.rect(x*V,y*V,w*V,h*V); ctx.stroke();
+  ctx.fillStyle="#000000"; ctx.font=Math.round(2.6*V)+"px Arial"; ctx.textAlign="left"; ctx.textBaseline="alphabetic"; ctx.fillText(String(d.tit||("PORMENOR "+(i+1))).toUpperCase()+"   1:"+den,x*V,(y+h+3.6)*V); ctx.restore()}); ctx.restore()}
+function plDetAdd(p){$("plot").style.display="none";
+ xPick("Pormenor: primeiro canto da zona a ampliar.",null,null,a=>xPick("Pormenor: canto oposto.",a,m=>xPrevLine(xRectPts(a,m),true),b=>{const A=toV(a[0],a[1]), B=toV(b[0],b[1]), win=[Math.min(A[0],B[0]),Math.min(A[1],B[1]),Math.max(A[0],B[0]),Math.max(A[1],B[1])];
+  if(win[2]-win[0]<1e-6||win[3]-win[1]<1e-6){openPlot(); return} p.det=p.det||[]; const VP=plVP(p), mw=(win[2]-win[0])*S.doc.unit*1000, mh=(win[3]-win[1])*S.doc.unit*1000, md=plScale(p).den;
+  let den=[5,10,20,25,50,75,100,150,200].find(v=>v<md&&mw/v<=VP.w*.42&&mh/v<=VP.h*.42)||Math.max(1,Math.round(md/2)); const w=mw/den, h=mh/den;
+  p.det.push({win,sc:String(den),x:Math.max(VP.x+3,VP.x+VP.w-w-4),y:Math.max(VP.y+3,VP.y+VP.h-h-8),tit:"Pormenor "+(p.det.length+1)}); saveLocal(); openPlot();
+  toast("Pormenor acrescentado a 1:"+den+". Mude a escala e a posição na lista «Janelas de pormenor».",4500)},()=>openPlot()))}
+// ---------- estilos de impressão por camada (como um CTB do AutoCAD), um quadro por perfil de cores ----------
+function plCtbAll(){const o=(typeof PROJ!=="undefined"&&PROJ)?PROJ:S.doc; if(!o.ctb)o.ctb={}; return o.ctb}
+function plCtbOf(layer,p){const T=plCtbAll()[p.col||"vr"]; return T&&T[layer]||null}
+function ctbDialog(p,after){const prof=p.col||"vr", T=plCtbAll()[prof]||{}, PN={vr:"A executar a preto, existente a azul",layers:"Cores das especialidades",mono:"Tudo a preto"}[prof]||prof;
+ const L=S.doc.layers.filter(l=>l.name!=="Espaços"), o=(v,list)=>list.map(([a,b])=>`<option value="${a}" ${String(v)===String(a)?"selected":""}>${b}</option>`).join("");
+ const html=`<div class="small" style="margin-bottom:6px">Perfil de cores: <b>${PN}</b>. Cada perfil tem os seus estilos; mude o perfil em «Cores» para editar o outro.</div><div style="max-height:52vh;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th style="text-align:left">Camada</th><th>Cor</th><th>Espessura</th><th>Esbater</th></tr>`+
+  L.map(l=>{const c=T[l.name]||{}; return `<tr data-ctb="${uEsc(l.name)}"><td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${l.color}"></span> ${uEsc(l.name)}</td><td><select data-c>${o(c.c||"",[["","Como o perfil"],["k","Preto"],["g","Cinzento"],["l","Cor da camada"]])}</select></td><td><select data-lw>${o(c.lw||"",[["","Como a camada"],...[.13,.18,.25,.35,.5,.7,1].map(v=>[String(v),String(v).replace(".",",")+" mm"])])}</select></td><td><select data-f>${o(c.f||"",[["","—"],["30","30 %"],["50","50 %"],["70","70 %"]])}</select></td></tr>`}).join("")+`</table></div>`;
+ xDlg("Estilos de impressão por camada",html,b=>{const N={}; b.querySelectorAll("[data-ctb]").forEach(r=>{const c=r.querySelector("[data-c]").value, lw=r.querySelector("[data-lw]").value, f=r.querySelector("[data-f]").value; if(c||lw||f)N[r.dataset.ctb]={c,lw,f}}); plCtbAll()[prof]=N; saveLocal(); if(after)after()})}
 
 /* ================= Normas de desenho da Ventura Rodrigues: símbolos, unifilar MT, simbologia, carimbo e diagrama da rede ================= */
 // ---------- símbolos novos (geometria tirada dos blocos dos desenhos da VR, à escala da biblioteca) ----------
@@ -6438,6 +6477,8 @@ function vrMonth(iso){const d=new Date((iso||"")+"T12:00:00"); if(isNaN(d))retur
 // devolve linhas, textos e imagens do carimbo em mm da folha (origem no canto superior esquerdo, y para baixo)
 // O carimbo é feito por secções, de baixo para cima; cada secção pode ser retirada (p.cb.hide) e cada valor reescrito ou apagado (p.cb.v).
 const VR_SECS=[["num","Desenho n.º",14.07],["esc","Escala, data e referência",9.77],["obra","Obra, especialidade, local e fase",21.27],["des","Designação",21.39],["tecs","Técnicos",16.91],["eng","Engenharia (VR e técnico responsável)",25.06],["coord","Coordenador",26.19],["pro","Promotor",32.25]];
+// secção das revisões: só ocupa espaço quando a planta tem revisões (Desenho › Revisões desta planta)
+{const r=["rev","Revisões",0]; Object.defineProperty(r,2,{get(){const R=(typeof S!=="undefined"&&S.doc&&S.doc.revs)||[]; return R.length?5.4+Math.min(R.length,5)*3.1:0}}); VR_SECS.splice(2,0,r)}
 const VR_FIELDS=[["pro","Promotor","pro",0,"Sem texto, usa o logótipo do promotor (se houver)"],["coord","Coordenador","coord",0,"Sem texto, usa o logótipo do coordenador (se houver)"],["tecResp","Técnico responsável","eng"],["oe","Inscrição na Ordem","eng"],["cont","Contactos","eng",4],
  ["tecnicos","Técnicos","tecs",3],["desig","Designação","des",3],["obra","Obra","obra",2],["espec","Especialidade","obra"],["local","Local","obra"],["fase","Fase","obra"],["escala","Escala","esc"],["data","Data","esc"],["ref","Referência","esc"],["num","Desenho n.º","num"]];
 function vrCbDefaults(p,page,sc){const d=PROJ.pe||{}, pro=d.pro||{}, tec=d.tec||{}, im=d.im||{};
@@ -6457,6 +6498,8 @@ function vrTitleLayout(p,page,sc){const P=plPaper(p), d=PROJ.pe||{}, X=bx=>P.w+b
   else if(k==="esc"){vl(-56.2); vl(-26.7); lab("ESCALA",-86.92,6.76); lab("DATA",-55.20,6.76); lab("REFERÊNCIA",-25.68,6.66); val(v.escala,-84.97,4.89); val(v.data,-53.25,4.89); val(v.ref,-23.72,4.89)}
   else if(k==="obra"){vl(-41.1); lab("OBRA",-86.91,18.61); lab("ESPECIALIDADE",-40.14,18.61); lab("LOCAL",-86.87,8.29); lab("FASE",-40.10,8.29);
    lines(v.obra,2).forEach((s,i)=>val(fit(s,26),-84.97,16.38-i*2.4)); val(fit(v.espec,24),-38.21,17.43); val(fit(v.local,26),-84.97,6.61); val(fit(v.fase,24),-38.19,6.61)}
+  else if(k==="rev"){const R=((S.doc&&S.doc.revs)||[]).slice(-5).reverse(); if(R.length){lab("REV.",-86.92,h-2.6); lab("DATA",-77.6,h-2.6); lab("DESCRIÇÃO",-61.6,h-2.6); L.push([xl,Y(h-3.4),xr,Y(h-3.4)],[X(-78.6),Y(0),X(-78.6),Y(h)],[X(-62.6),Y(0),X(-62.6),Y(h)]);
+   R.forEach((r,i)=>{const o=h-3.9-i*3.1; val(fit(r.n,5),-86.5,o,1.7); val(fit(r.d,10),-77.6,o,1.5); val(fit(r.t,38),-61.6,o,1.5)})}}
   else if(k==="des"){lab("DESIGNAÇÃO",-86.85,18.44); lines(v.desig,3).forEach((s,i)=>val(fit(s,52),-84.97,15.79-i*2.8))}
   else if(k==="tecs"){lab("TÉCNICOS",-87.0,14.1); lines(v.tecnicos,3).forEach((s,i)=>val(fit(s,44),-84.55,12.16-i*2.68))}
   else if(k==="eng"){lab("ENGENHARIA",-87.0,22.18); I.push({k:"vr",x0:X(-86.5),y0:Y(20.09),x1:X(-51),y1:Y(1.59)});
@@ -6675,6 +6718,563 @@ function bgSensDialog(){const bp=S.doc.bg?bgPixels():null; if(!bp){toast("Esta p
 CMDS.push({id:"bgsens",n:"Deteção de paredes na imagem de fundo (traço fraco)…",g:"Vista",a:["SENSIBILIDADE","TRACOFRACO"],f:()=>bgSensDialog()});
 
 /*UX-END*/
+/*D44-BEGIN*/
+/* ================= v44: ferramentas de desenho ================= */
+// Objetos de anotação novos: cota (dim), chamada (ldr), ligação de comando (lnk) e tabela (tab).
+// A geometria calcula-se a cada desenho (acompanham os objetos ligados) e, no DXF, sai desfeita em retas, polilinhas e textos.
+// Polilinhas ganham decorações: calha com largura real (tray), trama (hatch) e nuvem de revisão (cloud).
+const ANN_T=new Set(["dim","ldr","lnk","tab"]);
+const xK=()=>(S.doc.symScale||1)*U();
+const xF=(v,d)=>(+v).toFixed(d==null?2:d).replace(".",",");
+const xN=v=>{const x=parseFloat(String(v==null?"":v).replace(",",".")); return isFinite(x)?x:null};
+function xRd(a){const s=((a-VR()*180/Math.PI)%360+540)%360-180; return s>90?a-180:s<=-90?a+180:a} // texto sempre legível no ecrã
+function xUnit(a,b){const L=Math.hypot(b[0]-a[0],b[1]-a[1])||1; return [(b[0]-a[0])/L,(b[1]-a[1])/L]}
+function xVdir(vx,vy){const o=fromV(0,0), q=fromV(vx,vy); return [q[0]-o[0],q[1]-o[1]]}
+const xVA=()=>VR()*180/Math.PI; // rotação de um texto horizontal no ecrã
+function xEsc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function xDone(sel,msg){ if(sel)S.sel=new Set(sel); rebuildIndex(); refreshUI(); saveLocal(); draw(); if(msg)toast(msg,3500)}
+
+// ---------- objetos ligados ----------
+let ANNM=null;
+function annById(id){ if(id==null||!S.doc)return null; const d=S.doc; if(!ANNM||ANNM.d!==d||ANNM.n!==d.ents.length||ANNM.v!==LC_VER)ANNM={d,n:d.ents.length,v:LC_VER,m:new Map(d.ents.map(e=>[e.id,e]))};
+ const e=ANNM.m.get(id); return e&&e.id===id?e:null}
+function annVert(t,i){ if(!t)return null; if(t.t==="line")return i?[t.x2,t.y2]:[t.x1,t.y1]; if((t.t==="pl"||t.t==="cable")&&i>=0&&t.pts[i])return [t.pts[i][0],t.pts[i][1]]; if(t.x!=null&&t.t!=="text")return [t.x,t.y]; return null}
+function annLinkAt(p){const tol=4/S.view.s; let best=null,bd=tol;
+ for(const e of S.doc.ents){ if(ANN_T.has(e.t)||!layerOf(e).visible)continue;
+  const V=e.t==="line"?[[e.x1,e.y1],[e.x2,e.y2]]:(e.t==="pl"||e.t==="cable")?e.pts:[];
+  for(let i=0;i<V.length;i++){const d=Math.hypot(V[i][0]-p[0],V[i][1]-p[1]); if(d<bd){bd=d; best={id:e.id,i}}}
+  if((e.t==="sym"||e.t==="circle"||e.t==="arc")){const d=Math.hypot(e.x-p[0],e.y-p[1]); if(d<bd){bd=d; best={id:e.id,i:-1}}}}
+ return best}
+function symCircName(e){ if(!e||e.t!=="sym")return ""; const ci=(S.doc.circs||[]).find(c=>(c.objs||[]).includes(e.id)); return ci?circName(ci):""}
+
+// ---------- cota ----------
+function dimPts(e){let a=e.a, b=e.b; if(e.la){const v=annVert(annById(e.la.id),e.la.i); if(v){a=v; e.a=v}} if(e.lb){const v=annVert(annById(e.lb.id),e.lb.i); if(v){b=v; e.b=v}} return [a,b]}
+function dimDir(e,a,b){ if(e.m==="h")return xUnit([0,0],xVdir(1,0)); if(e.m==="v")return xUnit([0,0],xVdir(0,1)); return xUnit(a,b)}
+function dimGeo(e){const [a,b]=dimPts(e), u=dimDir(e,a,b), n=[-u[1],u[0]], o=e.o||b;
+ const da=(o[0]-a[0])*n[0]+(o[1]-a[1])*n[1], db=(o[0]-b[0])*n[0]+(o[1]-b[1])*n[1];
+ return {a,b,u,n,da,db,A:[a[0]+n[0]*da,a[1]+n[1]*da],B:[b[0]+n[0]*db,b[1]+n[1]*db],val:Math.abs((b[0]-a[0])*u[0]+(b[1]-a[1])*u[1])*S.doc.unit}}
+function dimText(e,val){const v=xF(val,e.dec==null?2:e.dec); return e.txt?String(e.txt).replace("<>",v):v}
+function dimPrims(e){const g=dimGeo(e), K=xK()*(e.sc||1), R={L:[],P:[],F:[],T:[]}, {A,B,n}=g, gap=.05*K, ext=.08*K;
+ [[g.a,A,g.da],[g.b,B,g.db]].forEach(([p,P,d])=>{const s=Math.sign(d)||1; if(Math.abs(d)>gap)R.L.push([p[0]+n[0]*s*gap,p[1]+n[1]*s*gap,P[0]+n[0]*s*ext,P[1]+n[1]*s*ext])});
+ const dl=Math.hypot(B[0]-A[0],B[1]-A[1]), w=dl>1e-12?[(B[0]-A[0])/dl,(B[1]-A[1])/dl]:g.u;
+ if(e.tk==="seta"){const ah=.13*K, aw=.04*K, out=dl<ah*2.6; R.L.push(out?[A[0]-w[0]*ah*1.6,A[1]-w[1]*ah*1.6,B[0]+w[0]*ah*1.6,B[1]+w[1]*ah*1.6]:[A[0],A[1],B[0],B[1]]);
+  [[A,out?-1:1],[B,out?1:-1]].forEach(([P,s])=>R.F.push({pts:[[P[0],P[1]],[P[0]+w[0]*ah*s+n[0]*aw,P[1]+w[1]*ah*s+n[1]*aw],[P[0]+w[0]*ah*s-n[0]*aw,P[1]+w[1]*ah*s-n[1]*aw]]}))}
+ else {const ov=.07*K, t=.07*K, d45=[(w[0]+n[0])*Math.SQRT1_2,(w[1]+n[1])*Math.SQRT1_2]; R.L.push([A[0]-w[0]*ov,A[1]-w[1]*ov,B[0]+w[0]*ov,B[1]+w[1]*ov]);
+  [A,B].forEach(P=>R.L.push([P[0]-d45[0]*t,P[1]-d45[1]*t,P[0]+d45[0]*t,P[1]+d45[1]*t]))}
+ const rot=xRd(Math.atan2(w[1],w[0])*180/Math.PI), rr=rot*Math.PI/180, up=[-Math.sin(rr),Math.cos(rr)], h=.1*K, M=[(A[0]+B[0])/2,(A[1]+B[1])/2];
+ R.T.push({x:M[0]+up[0]*(h*.5+.04*K),y:M[1]+up[1]*(h*.5+.04*K),h,s:dimText(e,g.val),rot,c:1});
+ e.x=M[0]; e.y=M[1]; return R}
+
+// ---------- chamada (seta + texto) ----------
+const LDR_F=[["nome","Nome do objeto"],["lab","Etiqueta (ex.: quadro)"],["h","Altura de montagem"],["circ","Circuito"],["ip","Índice de proteção"],["cabo","Cabo"]];
+function ldrAuto(t,F){const L=[];
+ if(t.t==="sym"){const o=symOptVal(t);
+  F.forEach(f=>{ if(f==="nome")L.push(symName(t)); else if(f==="lab"&&t.label)L.push(t.label); else if(f==="h"&&o.h!=null&&o.h!=="")L.push("h = "+xF(o.h)+" m"); else if(f==="circ"){const c=symCircName(t); if(c)L.push("Circuito "+c)} else if(f==="ip"&&o.ip)L.push(o.ip)})}
+ else if(t.t==="cable"){ if(F.includes("cabo")||F.includes("nome")){try{L.push(cabLabel(t,cabCalc(t)))}catch(er){}} if(F.includes("circ")&&t.c&&t.c.circ)L.push("Circuito "+t.c.circ)}
+ return L.filter(Boolean).join("\n")}
+function ldrText(e){ if(e.lk!=null&&e.auto&&e.auto.length){const t=annById(e.lk); if(t){const s=ldrAuto(t,e.auto); if(s)return s}} return e.s||""}
+function ldrPts(e){ if(e.lk!=null&&e.tipOff){const t=annById(e.lk), c=t&&annVert(t,-1)||(t&&(t.t==="cable"||t.t==="pl")&&t.pts[0]); if(c&&t.t==="sym"){e.pts[0]=[t.x+e.tipOff[0],t.y+e.tipOff[1]]}} return e.pts}
+function ldrPrims(e){const P=ldrPts(e), K=xK()*(e.sc||1), h=.1*K, R={L:[],P:[],F:[],T:[]}; if(P.length<2)return R;
+ R.P.push({pts:P.map(p=>[p[0],p[1]])});
+ const d=xUnit(P[1],P[0]), nn=[-d[1],d[0]], ah=.14*K, aw=.045*K, t=P[0];
+ R.F.push({pts:[[t[0],t[1]],[t[0]-d[0]*ah+nn[0]*aw,t[1]-d[1]*ah+nn[1]*aw],[t[0]-d[0]*ah-nn[0]*aw,t[1]-d[1]*ah-nn[1]*aw]]});
+ const Q=P[P.length-1], Qv=toV(Q[0],Q[1]), Rv=toV(P[P.length-2][0],P[P.length-2][1]), side=Qv[0]>=Rv[0]?1:-1, lg=.12*K, Q2v=[Qv[0]+side*lg,Qv[1]], Q2=fromV(Q2v[0],Q2v[1]);
+ R.L.push([Q[0],Q[1],Q2[0],Q2[1]]);
+ const s=ldrText(e), lines=String(s).split("\n"), n=lines.length, w=Math.max(...lines.map(l=>l.length))*h*.66, gx=.05*K;
+ const xv=side>0?Q2v[0]+gx:Q2v[0]-gx-w, yv=Qv[1]-h*.5+(n-1)*.8*h, p=fromV(xv,yv);
+ if(s)R.T.push({x:p[0],y:p[1],h,s,rot:xVA()});
+ e.x=Q[0]; e.y=Q[1]; return R}
+
+// ---------- ligação de comando (interruptor → pontos de luz) ----------
+function lnkPrims(e){const R={L:[],P:[],F:[],T:[]}, A=annById(e.a), B=annById(e.b), pa=A?[A.x,A.y]:e.pa, pb=B?[B.x,B.y]:e.pb; if(!pa||!pb)return R;
+ const ra=A&&A.t==="sym"?Math.min(symHalfW(A)*.8,.25*xK()):.1*xK(), rb=B&&B.t==="sym"?Math.min(symHalfW(B)*.8,.25*xK()):.1*xK();
+ const L=Math.hypot(pb[0]-pa[0],pb[1]-pa[1]); if(L<=ra+rb)return R; const u=xUnit(pa,pb), n=[-u[1],u[0]], bend=e.bend==null?.18:e.bend;
+ const p0=[pa[0]+u[0]*ra,pa[1]+u[1]*ra], p2=[pb[0]-u[0]*rb,pb[1]-u[1]*rb], m=[(p0[0]+p2[0])/2,(p0[1]+p2[1])/2], c=[m[0]+n[0]*bend*L*2,m[1]+n[1]*bend*L*2], pts=[];
+ for(let i=0;i<=20;i++){const t=i/20, a=(1-t)*(1-t), b=2*(1-t)*t, cc=t*t; pts.push([a*p0[0]+b*c[0]+cc*p2[0],a*p0[1]+b*c[1]+cc*p2[1]])} R.P.push({pts});
+ const mid=pts[10]; if(e.lt){const K=xK(), h=.09*K, s=Math.sign(bend)||1; R.T.push({x:mid[0]+n[0]*s*(h*.9),y:mid[1]+n[1]*s*(h*.9),h,s:e.lt,rot:xVA(),c:1})}
+ e.x=mid[0]; e.y=mid[1]; return R}
+
+// ---------- tabela ----------
+function tabLayout(e){const K=xK()*(e.sc||1), h=.09*K, rh=h*2.1, cw=h*.8, pad=h*.7, rows=[e.hdr||[],...(e.rows||[])], nc=Math.max(1,...rows.map(r=>r.length));
+ const W=[]; for(let j=0;j<nc;j++)W.push(Math.max(2,...rows.map(r=>String(r[j]==null?"":r[j]).length))*cw+pad*2);
+ return {h,rh,W,tw:W.reduce((a,b)=>a+b,0),rows,nc,tit:e.title?1:0}}
+function tabPrims(e){const R={L:[],P:[],F:[],T:[]}, Lo=tabLayout(e), O=toV(e.x,e.y), f=(x,y)=>fromV(O[0]+x,O[1]-y), nr=Lo.rows.length+Lo.tit, H=nr*Lo.rh;
+ const ln=(x1,y1,x2,y2)=>{const a=f(x1,y1), b=f(x2,y2); R.L.push([a[0],a[1],b[0],b[1]])};
+ for(let i=0;i<=nr;i++)ln(0,i*Lo.rh,Lo.tw,i*Lo.rh); ln(0,0,0,H); ln(Lo.tw,0,Lo.tw,H);
+ let x=0; Lo.W.forEach((w,j)=>{x+=w; if(j<Lo.nc-1)ln(x,Lo.tit*Lo.rh,x,H)});
+ if(Lo.tit){const p=f(Lo.h*.6,Lo.rh*.68); R.T.push({x:p[0],y:p[1],h:Lo.h*1.1,s:e.title,rot:xVA()})}
+ Lo.rows.forEach((r,i)=>{let x0=0; Lo.W.forEach((w,j)=>{const v=r[j]; if(v!=null&&v!==""){const p=f(x0+Lo.h*.6,(i+Lo.tit)*Lo.rh+Lo.rh*.68); R.T.push({x:p[0],y:p[1],h:Lo.h,s:String(v),rot:xVA()})} x0+=w})});
+ if(Lo.rows.length>1){const a=f(0,(1+Lo.tit)*Lo.rh), b=f(Lo.tw,(1+Lo.tit)*Lo.rh); R.L.push([a[0],a[1],b[0],b[1]])} // cabeçalho com traço duplo
+ return R}
+
+function annPrims(e){ try{ if(e.t==="dim")return dimPrims(e); if(e.t==="ldr")return ldrPrims(e); if(e.t==="lnk")return lnkPrims(e); if(e.t==="tab")return tabPrims(e)}catch(er){console.error(er)} return {L:[],P:[],F:[],T:[]}}
+
+// ---------- decorações das polilinhas: calha, trama, nuvem ----------
+function offPl(P,d,closed){const n=P.length, out=[]; if(n<2)return P.slice();
+ const nrm=i=>{const a=P[i], b=P[(i+1)%n], u=xUnit(a,b); return [-u[1],u[0]]};
+ for(let i=0;i<n;i++){const hasPrev=closed||i>0, hasNext=closed||i<n-1;
+  if(!hasPrev){const m=nrm(0); out.push([P[0][0]+m[0]*d,P[0][1]+m[1]*d]); continue}
+  if(!hasNext){const m=nrm(n-2); out.push([P[n-1][0]+m[0]*d,P[n-1][1]+m[1]*d]); continue}
+  const m1=nrm((i-1+n)%n), m2=nrm(i); let bx=m1[0]+m2[0], by=m1[1]+m2[1]; const bl=Math.hypot(bx,by); if(bl<1e-9){out.push([P[i][0]+m1[0]*d,P[i][1]+m1[1]*d]); continue}
+  bx/=bl; by/=bl; const cs=Math.max(.25,bx*m1[0]+by*m1[1]); out.push([P[i][0]+bx*d/cs,P[i][1]+by*d/cs])}
+ return out}
+function trayPrims(e){const R={L:[],P:[],F:[],T:[]}, T=e.tray, P=e.pts, cl=!!e.closed&&P.length>2, hw=(xN(T.w)||300)/1000*U()/2;
+ const A=offPl(P,hw,cl), B=offPl(P,-hw,cl); R.P.push({pts:A,cl},{pts:B,cl});
+ if(!cl){R.L.push([A[0][0],A[0][1],B[0][0],B[0][1]],[A[A.length-1][0],A[A.length-1][1],B[B.length-1][0],B[B.length-1][1]])}
+ if(T.lab!==false){let bi=0,bl=0; for(let i=0;i<P.length-1;i++){const l=Math.hypot(P[i+1][0]-P[i][0],P[i+1][1]-P[i][1]); if(l>bl){bl=l; bi=i}}
+  const a=P[bi], b=P[bi+1]||P[bi], u=xUnit(a,b), rot=xRd(Math.atan2(u[1],u[0])*180/Math.PI), h=Math.min(.09*xK(),hw*1.3), s=trayName(T);
+  if(bl>h*s.length*.7)R.T.push({x:(a[0]+b[0])/2,y:(a[1]+b[1])/2,h,s,rot,c:1})}
+ return R}
+function trayName(T){return (T.k||"Calha")+" "+(xN(T.w)||300)+(xN(T.hh)?"×"+xN(T.hh):"")+(T.d?" · "+T.d:"")}
+function plPoly(e){ if(e.t==="circle"){const P=[]; for(let i=0;i<64;i++){const a=i/64*Math.PI*2; P.push([e.x+e.r*Math.cos(a),e.y+e.r*Math.sin(a)])} return P} return e.pts}
+const HATCH=[["diag","Diagonal (45°)"],["diag2","Diagonal (135°)"],["cruz","Cruzada"],["horiz","Horizontal"],["vert","Vertical"],["solido","Sólido (cor clara)"]];
+function hatchSegs(P,sp,angDeg){const out=[]; if(P.length<3||!(sp>0))return out; const a=angDeg*Math.PI/180, c=Math.cos(a), s=Math.sin(a);
+ const Q=P.map(p=>[p[0]*c+p[1]*s,-p[0]*s+p[1]*c]), y0=Math.min(...Q.map(q=>q[1])), y1=Math.max(...Q.map(q=>q[1])); let st=sp; if((y1-y0)/st>1500)st=(y1-y0)/1500;
+ for(let y=Math.ceil(y0/st)*st;y<=y1;y+=st){const X=[]; for(let i=0;i<Q.length;i++){const p=Q[i], q=Q[(i+1)%Q.length]; if((p[1]>y)!==(q[1]>y))X.push(p[0]+(y-p[1])*(q[0]-p[0])/(q[1]-p[1]))}
+  X.sort((u,v)=>u-v); for(let k=0;k+1<X.length;k+=2)out.push([X[k]*c-y*s,X[k]*s+y*c,X[k+1]*c-y*s,X[k+1]*s+y*c])}
+ return out}
+function hatchPrims(e){const R={L:[],P:[],F:[],T:[]}, H=e.hatch, P=plPoly(e); if(!H||P.length<3)return R; const va=xVA();
+ if(H.p==="solido"){R.F.push({pts:P,a:H.a==null?.22:H.a}); return R}
+ const sp=(xN(H.sp)||.15)*xK(), base=xN(H.ang)||0, A={diag:[45],diag2:[135],cruz:[45,135],horiz:[0],vert:[90]}[H.p]||[45];
+ A.forEach(a=>R.L.push(...hatchSegs(P,sp,a+base+va))); return R}
+function cloudPrims(e){const R={L:[],P:[],F:[],T:[]}, P=e.pts, n=P.length; if(n<2)return R; const K=xK(), r=(xN(e.cloud.r)||.25)*K;
+ let ar=0; for(let i=0;i<n;i++){const a=P[i], b=P[(i+1)%n]; ar+=a[0]*b[1]-b[0]*a[1]} const out=ar>0?-1:1, cl=!!e.closed&&n>2, m=cl?n:n-1, pts=[];
+ for(let i=0;i<m;i++){const a=P[i], b=P[(i+1)%n], L=Math.hypot(b[0]-a[0],b[1]-a[1]); if(L<1e-12)continue; const k=Math.max(1,Math.round(L/(2*r))), u=xUnit(a,b), nn=[-u[1]*out,u[0]*out], c=L/k;
+  for(let j=0;j<k;j++){const s0=[a[0]+u[0]*c*j,a[1]+u[1]*c*j]; for(let q=0;q<=8;q++){ if(j+q>0&&q===0&&pts.length)continue; const t=q/8, ang=Math.PI*t; pts.push([s0[0]+u[0]*c*t+nn[0]*Math.sin(ang)*c*.45,s0[1]+u[1]*c*t+nn[1]*Math.sin(ang)*c*.45])}}}
+ R.P.push({pts,cl});
+ if(e.cloud.rev){let bi=0,bv=-Infinity; P.forEach((p,i)=>{const v=toV(p[0],p[1]); if(v[0]+v[1]>bv){bv=v[0]+v[1]; bi=i}}); const cv=toV(P[bi][0],P[bi][1]), s=.32*K, c0=[cv[0]+s*.7,cv[1]+s*.7];
+  const tri=[[c0[0],c0[1]+s*.62],[c0[0]-s*.55,c0[1]-s*.33],[c0[0]+s*.55,c0[1]-s*.33]].map(q=>fromV(q[0],q[1])); R.P.push({pts:tri,cl:true}); const t=fromV(c0[0],c0[1]-s*.02);
+  R.T.push({x:t[0],y:t[1],h:.13*K,s:String(e.cloud.rev),rot:xVA(),c:1})}
+ return R}
+function plDeco(e){ if(e.t!=="pl"&&e.t!=="circle")return null; if(!(e.tray||e.cloud||e.hatch))return null; const R={L:[],P:[],F:[],T:[]}, add=X=>{R.L.push(...X.L); R.P.push(...X.P); R.F.push(...X.F); R.T.push(...X.T)};
+ if(e.hatch)add(hatchPrims(e)); if(e.t==="pl"&&e.tray)add(trayPrims(e)); else if(e.t==="pl"&&e.cloud)add(cloudPrims(e)); return R}
+
+// ---------- saltos nos cruzamentos de cabos ----------
+function jumpPts(e){const out=[], P=e.pts, ents=S.doc.ents, me=ents.indexOf(e), r=.1*xK(); if(me<0)return null;
+ const others=[]; for(let i=0;i<me;i++){const o=ents[i]; if(o.t==="cable"&&o!==e&&layerOf(o).visible)others.push(o)} if(!others.length)return null;
+ let any=false; out.push([P[0][0],P[0][1]]);
+ for(let i=1;i<P.length;i++){const a=P[i-1], b=P[i], L=Math.hypot(b[0]-a[0],b[1]-a[1]); if(L<1e-12)continue; const u=[(b[0]-a[0])/L,(b[1]-a[1])/L], nn=[-u[1],u[0]], T=[];
+  others.forEach(o=>{for(let j=1;j<o.pts.length;j++){const c=o.pts[j-1], d=o.pts[j], den=(b[0]-a[0])*(d[1]-c[1])-(b[1]-a[1])*(d[0]-c[0]); if(Math.abs(den)<1e-12)continue;
+   const t=((c[0]-a[0])*(d[1]-c[1])-(c[1]-a[1])*(d[0]-c[0]))/den, s=((c[0]-a[0])*(b[1]-a[1])-(c[1]-a[1])*(b[0]-a[0]))/den; if(t*L>r*1.2&&(1-t)*L>r*1.2&&s>1e-6&&s<1-1e-6)T.push(t*L)}});
+  T.sort((x,y)=>x-y).forEach((t,k)=>{ if(k&&t-T[k-1]<r*2.2)return; any=true; for(let q=0;q<=8;q++){const ang=Math.PI*(1-q/8); out.push([a[0]+u[0]*(t+r*Math.cos(ang))+nn[0]*r*Math.sin(ang),a[1]+u[1]*(t+r*Math.cos(ang))+nn[1]*r*Math.sin(ang)])}});
+  out.push([b[0],b[1]])}
+ return any?out:null}
+
+// ---------- desenho ----------
+function annDrawPrims(R){
+ R.L.forEach(l=>{const [a,b]=W2S(l[0],l[1]),[c,d]=W2S(l[2],l[3]); G.moveTo(a,b); G.lineTo(c,d)});
+ R.P.forEach(o=>{o.pts.forEach((p,i)=>{const [a,b]=W2S(p[0],p[1]); i?G.lineTo(a,b):G.moveTo(a,b)}); if(o.cl&&o.pts.length){const [a,b]=W2S(o.pts[0][0],o.pts[0][1]); G.lineTo(a,b)}});
+ if(R.F.length||R.T.length){G.stroke(); G.setLineDash([]); const col=G.strokeStyle;
+  R.F.forEach(f=>{G.save(); if(f.a!=null)G.globalAlpha=G.globalAlpha*f.a; G.fillStyle=col; G.beginPath(); f.pts.forEach((p,i)=>{const [a,b]=W2S(p[0],p[1]); i?G.lineTo(a,b):G.moveTo(a,b)}); G.closePath(); G.fill(); G.restore()});
+  R.T.forEach(t=>drawText(t,col)); G.beginPath()}}
+{const _dg=drawGeom; drawGeom=function(e,isRef){
+ if(!isRef&&ANN_T.has(e.t)){annDrawPrims(annPrims(e)); return}
+ if(!isRef&&e.t==="pl"&&(e.tray||e.cloud)){ if(e.hatch)annDrawPrims(hatchPrims(e)); annDrawPrims(e.tray?trayPrims(e):cloudPrims(e)); return}
+ if(!isRef&&e.t==="cable"&&S.doc.jumps&&!(FX&&!FXfull&&FX.pieces&&FX.pieces.has(e))){const J=jumpPts(e); if(J){J.forEach((p,i)=>{const [a,b]=W2S(p[0],p[1]); i?G.lineTo(a,b):G.moveTo(a,b)}); return}}
+ _dg(e,isRef);
+ if(!isRef&&e.hatch&&(e.t==="pl"||e.t==="circle"))annDrawPrims(hatchPrims(e))}}
+
+// ---------- pontos, caixa e distância (seleção) ----------
+function annAll(e){ if(ANN_T.has(e.t))return annPrims(e); return plDeco(e)}
+function annPtsOf(R){const P=[]; R.L.forEach(l=>P.push([l[0],l[1]],[l[2],l[3]])); R.P.forEach(o=>o.pts.forEach(p=>P.push(p))); R.F.forEach(f=>f.pts.forEach(p=>P.push(p)));
+ R.T.forEach(t=>{const n=String(t.s).split("\n"), w=Math.max(...n.map(s=>s.length))*t.h*.66, r=(t.rot||0)*Math.PI/180, c=Math.cos(r), s=Math.sin(r), x0=t.c?-w/2:0, y0=t.c?-t.h/2:-(n.length-1)*1.6*t.h, y1=t.c?t.h/2:t.h;
+  [[x0,y0],[x0+w,y0],[x0+w,y1],[x0,y1]].forEach(q=>P.push([t.x+q[0]*c-q[1]*s,t.y+q[0]*s+q[1]*c]))}); return P}
+function annDist(e,x,y){const R=annAll(e); if(!R)return Infinity; let d=Infinity;
+ R.L.forEach(l=>d=Math.min(d,dSeg(x,y,l[0],l[1],l[2],l[3])[0]));
+ R.P.forEach(o=>{const p=o.pts; for(let i=1;i<p.length;i++)d=Math.min(d,dSeg(x,y,p[i-1][0],p[i-1][1],p[i][0],p[i][1])[0]); if(o.cl&&p.length>2)d=Math.min(d,dSeg(x,y,p[p.length-1][0],p[p.length-1][1],p[0][0],p[0][1])[0])});
+ R.T.forEach(t=>{const P=annPtsOf({L:[],P:[],F:[],T:[t]}); if(inPolyW(x,y,P))d=0});
+ if(e.t==="tab"){const P=annPtsOf(R); const xs=P.map(p=>toV(p[0],p[1])), v=toV(x,y); if(v[0]>=Math.min(...xs.map(q=>q[0]))&&v[0]<=Math.max(...xs.map(q=>q[0]))&&v[1]>=Math.min(...xs.map(q=>q[1]))&&v[1]<=Math.max(...xs.map(q=>q[1])))d=0}
+ if(e.hatch&&e.hatch.p==="solido"&&inPolyW(x,y,plPoly(e)))d=Math.min(d,1/S.view.s);
+ return d}
+{const _pk=pick; pick=function(x,y,inclLocked){const r=_pk(x,y,inclLocked), tol=8/S.view.s; let best=null,bd=tol;
+ for(let i=S.doc.ents.length-1;i>=0;i--){const e=S.doc.ents[i]; if(!(ANN_T.has(e.t)||e.tray||e.cloud||e.hatch))continue; const L=layerOf(e); if(!L.visible||L.locked||(e.locked&&!inclLocked))continue;
+  const d=annDist(e,x,y); if(d<bd){bd=d; best=e}}
+ if(!r)return best; if(best&&best!==r&&bd<tol*.4)return best; return r}}
+{const _ib=inBox; inBox=function(e,x0,y0,x1,y1){ if(!ANN_T.has(e.t))return _ib(e,x0,y0,x1,y1); const [a0,b0]=toV(x0,y0),[a1,b1]=toV(x1,y1), A=Math.min(a0,a1),B=Math.max(a0,a1),C=Math.min(b0,b1),D=Math.max(b0,b1);
+ return annPtsOf(annPrims(e)).every(p=>{const v=toV(p[0],p[1]); return v[0]>=A&&v[0]<=B&&v[1]>=C&&v[1]<=D})}}
+{const _cb=crossBox; crossBox=function(e,x0,y0,x1,y1){ if(!ANN_T.has(e.t))return _cb(e,x0,y0,x1,y1); const [a0,b0]=toV(x0,y0),[a1,b1]=toV(x1,y1), A=Math.min(a0,a1),B=Math.max(a0,a1),C=Math.min(b0,b1),D=Math.max(b0,b1);
+ const P=annPtsOf(annPrims(e)).map(p=>toV(p[0],p[1])); if(!P.length)return false; const xs=P.map(p=>p[0]), ys=P.map(p=>p[1]); return Math.max(...xs)>=A&&Math.min(...xs)<=B&&Math.max(...ys)>=C&&Math.min(...ys)<=D}}
+
+// ---------- mover, rodar, escalar, espelhar, pegas ----------
+function annXf(e,fn,o){o=o||{};
+ if(e.t==="dim"){ if(e.a)e.a=fn(e.a[0],e.a[1]); if(e.b)e.b=fn(e.b[0],e.b[1]); if(e.o)e.o=fn(e.o[0],e.o[1]); if(o.scale)e.sc=(e.sc||1)*o.scale}
+ else if(e.t==="ldr"){e.pts=e.pts.map(p=>fn(p[0],p[1])); if(e.tipOff){const t=annById(e.lk); if(t&&t.t==="sym")e.tipOff=[e.pts[0][0]-t.x,e.pts[0][1]-t.y]} if(o.scale)e.sc=(e.sc||1)*o.scale}
+ else if(e.t==="tab"){[e.x,e.y]=fn(e.x,e.y); if(o.scale)e.sc=(e.sc||1)*o.scale}
+ else if(e.t==="lnk"){ if(e.pa)e.pa=fn(e.pa[0],e.pa[1]); if(e.pb)e.pb=fn(e.pb[0],e.pb[1]); if(o.mirror!=null)e.bend=-(e.bend==null?.18:e.bend)}}
+{const _mv=moveEnt; moveEnt=function(e,dx,dy){ if(ANN_T.has(e.t))return annXf(e,(x,y)=>[x+dx,y+dy]); return _mv(e,dx,dy)}}
+{const _xf=xformEnts; xformEnts=function(ents,fn,o){const mine=ents.filter(e=>ANN_T.has(e.t)), rest=ents.filter(e=>!ANN_T.has(e.t)); if(rest.length)_xf(rest,fn,o); mine.forEach(e=>annXf(e,fn,o))}}
+{const _re=rotateEnts; rotateEnts=function(ents,deg,mode,cx,cy){const mine=ents.filter(e=>ANN_T.has(e.t)), rest=ents.filter(e=>!ANN_T.has(e.t)); if(!mine.length||!deg)return _re(ents,deg,mode,cx,cy);
+ if(rest.length)_re(rest,deg,mode,cx,cy); else pushUndo(); const r=deg*Math.PI/180, c=Math.cos(r), s=Math.sin(r);
+ mine.forEach(e=>{let ox=cx,oy=cy; if(mode==="each")[ox,oy]=[e.x,e.y]; annXf(e,(x,y)=>[ox+(x-ox)*c-(y-oy)*s,oy+(x-ox)*s+(y-oy)*c])}); rebuildIndex(); refreshProps(); draw(); saveLocal()}}
+{const _vo=vertsOf; vertsOf=function(e){ if(e.t==="dim"){const g=dimGeo(e); return [g.a,g.b,[(g.A[0]+g.B[0])/2,(g.A[1]+g.B[1])/2]]} if(e.t==="ldr")return ldrPts(e); if(e.t==="tab")return [[e.x,e.y]]; if(e.t==="lnk")return []; return _vo(e)}}
+{const _sv=setVert; setVert=function(e,i,p){
+ if(e.t==="dim"){ if(i===0){e.a=[p[0],p[1]]; const l=annLinkAt(p); if(l)e.la=l; else delete e.la} else if(i===1){e.b=[p[0],p[1]]; const l=annLinkAt(p); if(l)e.lb=l; else delete e.lb} else e.o=[p[0],p[1]]; return}
+ if(e.t==="ldr"){e.pts[i]=[p[0],p[1]]; if(i===0&&e.lk!=null){const t=annById(e.lk); if(t&&t.t==="sym")e.tipOff=[p[0]-t.x,p[1]-t.y]} return}
+ if(e.t==="tab"){e.x=p[0]; e.y=p[1]; return}
+ if(e.t==="lnk")return; return _sv(e,i,p)}}
+// cópias: as ligações passam para os objetos copiados juntamente; as outras ficam presas ao sítio
+{const _ce=cloneEnts; cloneEnts=function(ents){const out=_ce(ents); out.forEach((c,i)=>{const o=ents[i]; c._oid=o.id!=null?o.id:o._oid}); return out}}
+function annRemap(news){ if(!news||!news.length)return; const M=new Map(); news.forEach(e=>{ if(e._oid!=null)M.set(e._oid,e.id)});
+ news.forEach(e=>{const id=v=>v!=null&&M.has(v)?M.get(v):null;
+  if(e.t==="dim"){["la","lb"].forEach(k=>{ if(e[k]){const n=id(e[k].id); if(n!=null)e[k]={id:n,i:e[k].i}; else delete e[k]}})}
+  else if(e.t==="ldr"&&e.lk!=null){const n=id(e.lk); if(n!=null)e.lk=n; else {e.s=e.s||e._txt||""; delete e.lk; delete e.tipOff}}
+  else if(e.t==="lnk"){const na=id(e.a), nb=id(e.b); if(na!=null&&nb!=null){e.a=na; e.b=nb} else {e._dead=1}}
+  delete e._oid});
+ const dead=news.filter(e=>e._dead); if(dead.length)S.doc.ents=S.doc.ents.filter(e=>!e._dead)}
+{const _ac=addClones; addClones=function(ents){const n=_ac(ents); annRemap(n); return n.filter(e=>!e._dead)}}
+{const _pa=pasteAt; pasteAt=function(p){const n0=S.doc.ents.length; _pa(p); annRemap(S.doc.ents.slice(n0)); S.sel=new Set([...S.sel].filter(e=>!e._dead)); draw()}}
+// desfazer em objetos simples (explodir e DXF)
+function annExplode(e){const D=ANN_T.has(e.t)?annPrims(e):plDeco(e); if(!D)return [e];
+ const base={layer:e.layer}; ["col","lt","lw","tr","exist"].forEach(k=>{ if(e[k]!=null)base[k]=e[k]}); const out=[];
+ if(!ANN_T.has(e.t)&&!(e.tray||e.cloud)){const c={...e}; delete c.hatch; out.push(c)}
+ D.L.forEach(l=>out.push({t:"line",x1:l[0],y1:l[1],x2:l[2],y2:l[3],...base}));
+ D.P.forEach(o=>out.push({t:"pl",pts:o.pts.map(p=>[p[0],p[1]]),closed:!!o.cl,...base}));
+ D.F.forEach(f=>{ if(f.a==null)out.push({t:"pl",pts:f.pts.map(p=>[p[0],p[1]]),closed:true,...base})});
+ D.T.forEach(t=>{let x=t.x,y=t.y; if(t.c){const n=String(t.s).split("\n"), w=Math.max(...n.map(s=>s.length))*t.h*.62, r=(t.rot||0)*Math.PI/180; x-=Math.cos(r)*w/2-Math.sin(r)*(-t.h*.45); y-=Math.sin(r)*w/2+Math.cos(r)*(-t.h*.45)}
+  out.push({t:"text",x,y,h:t.h,s:String(t.s),rot:t.rot||0,...base})});
+ return out}
+{const _ex=explodeSel; explodeSel=function(){const mine=[...S.sel].filter(e=>(ANN_T.has(e.t)||e.tray||e.cloud||e.hatch)&&!e.locked&&!layerOf(e).locked); if(!mine.length)return _ex();
+ pushUndo(); const nw=[]; mine.forEach(e=>{const parts=annExplode(e).filter(p=>p!==e); const i=S.doc.ents.indexOf(e); S.doc.ents.splice(i,1,...parts); parts.forEach(p=>{p.id=S.doc.nextId++; nw.push(p)})});
+ const rest=[...S.sel].filter(e=>!mine.includes(e)); if(rest.length){S.sel=new Set(rest); _ex()} xDone(nw,"Desfeitos "+mine.length+" objeto(s) em "+nw.length+" retas, polilinhas e textos.")}}
+
+// ---------- pré-visualização e pontos pedidos em sequência ----------
+function xPrevLine(P,closed,dash){ if(P.length<2)return; G.save(); G.setLineDash(dash===false?[]:[6,4]); G.strokeStyle="#e8742c"; G.lineWidth=1.2; G.beginPath(); P.forEach((p,i)=>{const [a,b]=W2S(p[0],p[1]); i?G.lineTo(a,b):G.moveTo(a,b)}); if(closed){const [a,b]=W2S(P[0][0],P[0][1]); G.lineTo(a,b)} G.stroke(); G.restore()}
+function xPrevEnt(e){G.save(); G.setLineDash([]); G.strokeStyle=G.fillStyle="#e8742c"; G.lineWidth=1.2; G.globalAlpha=.85; G.beginPath(); drawGeom(e,false); G.stroke(); G.restore()}
+{const _dp=drawPastePreview; drawPastePreview=function(){_dp.apply(this,arguments);
+ if(S.tool!=="pickpt"){ if(S.xprev||S.xEnd){S.xprev=null; S.xEnd=null; S.xBase=null} return}
+ if(S.xprev&&S.mouse){try{S.xprev(S.hover?[S.hover[0],S.hover[1]]:[S.mouse.x,S.mouse.y])}catch(er){console.error(er)}}
+ if(S.hover&&S.hover[2]==="prolongamento"&&S.hover[3]){xPrevLine([S.hover[3],[S.hover[0],S.hover[1]]],false)}}}
+function xPick(msg,base,prev,cb,end){pickPoint(msg,p=>{S.xprev=null; S.xEnd=null; S.xBase=null; cb(p)}); S.xBase=base||null; S.xprev=prev||null; S.xEnd=end||null; if(base)S.tmp={p:base,x44:1}; const el=$("cmdPr"); if(el)el.textContent=msg.replace(/\..*$/,"")+":"}
+{const _ci=cInput; cInput=function(txt){ if(S.tool==="pickpt"&&S.pickPend&&S.xBase){const c=cParse(txt); if(c&&(c.pt||c.num)){const u=U(), b=S.xBase, m=S.mouse; let q;
+   if(c.pt)q=[b[0]+c.x*u,b[1]+c.y*u]; else {let vx=m.x-b[0], vy=m.y-b[1]; const L=Math.hypot(vx,vy)||1; vx/=L; vy/=L; if(S.ortho){const P=toV(vx,vy),O=toV(0,0); let ax=P[0]-O[0], ay=P[1]-O[1]; if(Math.abs(ax)>Math.abs(ay)){ax=Math.sign(ax);ay=0} else {ay=Math.sign(ay);ax=0} const z=xVdir(ax,ay); vx=z[0]; vy=z[1]} q=[b[0]+vx*c.d*u,b[1]+vy*c.d*u]}
+   const fn=S.pickPend; S.pickPend=null; setTool("select"); fn(q); return true}}
+ return _ci.apply(this,arguments)}}
+{const _sc=spaceCmd; spaceCmd=function(){ if(S.tool==="pickpt"&&S.xEnd){const f=S.xEnd; S.xEnd=null; S.xprev=null; S.pickPend=null; setTool("select"); f(); return} return _sc.apply(this,arguments)}}
+{const _fc=finishOrCancel; finishOrCancel=function(){ if(S.tool==="pickpt"&&S.xEnd){const f=S.xEnd; S.xEnd=null; S.xprev=null; S.pickPend=null; setTool("select"); f(); return} return _fc.apply(this,arguments)}}
+{const _es=escape; escape=function(){S.xprev=null; S.xEnd=null; S.xBase=null; S.trayNext=null; S.replPend=null; return _es.apply(this,arguments)}}
+// pequeno diálogo com campos livres (texto de várias linhas, listas)
+function xDlg(title,html,onOk,okTxt){const m=$("modal"), b=$("mbox"); b.innerHTML=`<h4>${title}</h4>${html}<div class="acts"><button id="mCancel">Cancelar</button><button id="mOk" class="on">${okTxt||"OK"}</button></div>`;
+ m.style.display="flex"; b.querySelectorAll("textarea").forEach(t=>t.onkeydown=ev=>ev.stopPropagation()); const f=b.querySelector("input,textarea,select"); if(f){f.focus(); if(f.select)f.select()}
+ $("mCancel").onclick=()=>{m.style.display="none"}; $("mOk").onclick=()=>{ if(onOk(b)!==false)m.style.display="none"}}
+const xTA=(id,v,rows)=>`<textarea id="${id}" rows="${rows||4}" style="width:100%;font:inherit;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px">${xEsc(v)}</textarea>`;
+
+// ---------- camadas de anotação ----------
+function xLay(n,col){ if(!layerByName(n)){ensureLayer(n); const L=layerByName(n); if(L&&col&&!DEF_LAYERS.find(d=>d.name===n))L.color=col} return n}
+
+// ================= Lote 1 =================
+// ---------- retângulo ----------
+function xRectPts(a,b){const A=toV(a[0],a[1]), B=toV(b[0],b[1]); return [[A[0],A[1]],[B[0],A[1]],[B[0],B[1]],[A[0],B[1]]].map(q=>fromV(q[0],q[1]))}
+function cmdRect(){xPick("Retângulo: primeiro canto.",null,null,a=>xPick("Retângulo: canto oposto (ou @largura,altura em m).",a,m=>xPrevLine(xRectPts(a,m),true),b=>{const P=xRectPts(a,b);
+ if(Math.hypot(P[1][0]-P[0][0],P[1][1]-P[0][1])<1e-9||Math.hypot(P[2][0]-P[1][0],P[2][1]-P[1][1])<1e-9){toast("O retângulo não tem área.");return}
+ pushUndo(); const e=addEnt({t:"pl",pts:P,closed:true}); xDone(null); cmdLog("Retângulo "+xF(Math.hypot(P[1][0]-P[0][0],P[1][1]-P[0][1])*S.doc.unit)+" × "+xF(Math.hypot(P[2][0]-P[1][0],P[2][1]-P[1][1])*S.doc.unit)+" m")}))}
+// ---------- arco por 3 pontos ----------
+function arc3(p1,p2,p3){const [ax,ay]=p1,[bx,by]=p2,[cx,cy]=p3, d=2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by)); if(Math.abs(d)<1e-12)return null;
+ const ux=((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/d, uy=((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/d, r=Math.hypot(ax-ux,ay-uy);
+ const A=p=>Math.atan2(p[1]-uy,p[0]-ux)*180/Math.PI, n=v=>((v%360)+360)%360, a1=A(p1), a2=A(p2), a3=A(p3);
+ return n(a2-a1)<n(a3-a1)?{x:ux,y:uy,r,a0:a1,a1:a3}:{x:ux,y:uy,r,a0:a3,a1:a1}}
+function cmdArc(){xPick("Arco: ponto inicial.",null,null,p1=>xPick("Arco: um ponto do arco.",p1,m=>xPrevLine([p1,m],false),p2=>xPick("Arco: ponto final.",p2,m=>{const a=arc3(p1,p2,m); if(a)xPrevEnt({t:"arc",...a}); else xPrevLine([p1,p2,m],false)},p3=>{const a=arc3(p1,p2,p3); if(!a){toast("Os três pontos estão alinhados: não há arco.");return}
+ pushUndo(); addEnt({t:"arc",...a}); xDone(null); cmdLog("Arco de raio "+xF(a.r*S.doc.unit)+" m")})))}
+
+// ---------- cotas (alinhada, horizontal/vertical, encadeadas) ----------
+function linMode(a,b,m){const A=toV(a[0],a[1]), B=toV(b[0],b[1]), M=toV(m[0],m[1]); const inX=M[0]>Math.min(A[0],B[0])&&M[0]<Math.max(A[0],B[0]), inY=M[1]>Math.min(A[1],B[1])&&M[1]<Math.max(A[1],B[1]);
+ if(inX&&!inY)return "h"; if(inY&&!inX)return "v"; return Math.abs(M[1]-(A[1]+B[1])/2)>=Math.abs(M[0]-(A[0]+B[0])/2)?"h":"v"}
+function cmdDim(kind){const lay=xLay("Cotas","#94a3b8"), nm=kind==="lin"?"Cota horizontal / vertical":"Cota alinhada";
+ xPick(nm+": primeiro ponto.",null,null,a=>{const la=annLinkAt(a);
+  xPick(nm+": segundo ponto.",a,m=>xPrevLine([a,m],false),b=>{const lb=annLinkAt(b); if(Math.hypot(b[0]-a[0],b[1]-a[1])<1e-9){toast("Os dois pontos são iguais.");return}
+   const mk=m=>({t:"dim",a,b,o:m,m:kind==="lin"?linMode(a,b,m):"al",tk:S.doc.dimTk||"traco",layer:lay});
+   xPick(nm+": posição da linha de cota.",null,m=>xPrevEnt(mk(m)),o=>{pushUndo(); const e=addEnt({...mk(o),layer:lay}); if(la)e.la=la; if(lb)e.lb=lb; xDone(null); dimChain(e)})})})}
+function dimChain(prev){const nm="Cota encadeada";
+ xPick(nm+": próximo ponto (Enter ou botão direito termina).",prev.b,m=>xPrevEnt({...prev,id:undefined,la:null,lb:null,a:prev.b,b:m}),p=>{ if(Math.hypot(p[0]-prev.b[0],p[1]-prev.b[1])<1e-9)return dimChain(prev);
+  pushUndo(); const e=addEnt({t:"dim",a:prev.b,b:p,o:prev.o,m:prev.m,tk:prev.tk,layer:prev.layer,sc:prev.sc}); if(prev.lb)e.la={...prev.lb}; const lb=annLinkAt(p); if(lb)e.lb=lb; xDone(null); dimChain(e)},()=>{draw(); cmdPrompt()})}
+
+// ---------- chamada com seta ----------
+function cmdLdr(){xPick("Chamada: ponta da seta (em cima de um símbolo ou cabo, lê os dados dele).",null,null,p1=>{const t=pick(p1[0],p1[1]), tgt=t&&(t.t==="sym"||t.t==="cable")?t:null;
+ xPick("Chamada: onde fica o texto.",p1,m=>{xPrevLine([p1,m],false)},p2=>ldrDialog(null,p1,p2,tgt))})}
+function ldrDialog(e,p1,p2,tgt){const isNew=!e; tgt=tgt||(e&&annById(e.lk)); const def=tgt?(tgt.t==="cable"?["cabo"]:["nome","h","circ"]):[], F=e?(e.auto||[]):def, auto=e?!!(e.auto&&e.auto.length):!!tgt;
+ const opts=tgt?LDR_F.filter(f=>tgt.t==="cable"?["cabo","circ"].includes(f[0]):f[0]!=="cabo"):[];
+ const html=(tgt?`<label class="chk"><input type="checkbox" id="ldA" ${auto?"checked":""}> Texto automático, lido do objeto (atualiza-se se o objeto mudar)</label><div id="ldF" style="padding-left:18px">${opts.map(f=>`<label class="chk"><input type="checkbox" data-ldf="${f[0]}" ${F.includes(f[0])?"checked":""}> ${f[1]}</label>`).join("")}</div>`:"")+
+  `<label>Texto ${tgt?"(quando não é automático)":""}</label>${xTA("ldT",e?e.s||"":(tgt?ldrAuto(tgt,def):""),3)}`;
+ xDlg(isNew?"Chamada":"Editar chamada",html,b=>{const A=tgt&&$("ldA")&&$("ldA").checked, FF=[...b.querySelectorAll("[data-ldf]")].filter(i=>i.checked).map(i=>i.dataset.ldf), s=$("ldT").value;
+  if(!A&&!s.trim()){toast("Escreva o texto da chamada.");return false}
+  pushUndo(); if(isNew){e=addEnt({t:"ldr",pts:[p1,p2],s,layer:tgt?tgt.layer:curLayer()}); if(tgt){e.lk=tgt.id; if(tgt.t==="sym")e.tipOff=[p1[0]-tgt.x,p1[1]-tgt.y]}} else e.s=s;
+  if(A&&FF.length)e.auto=FF; else delete e.auto; xDone([e])})}
+
+// ---------- etiquetas de circuito automáticas nos símbolos ----------
+{const _lo=labelOf; labelOf=function(e,forPlot){const L=_lo(e,forPlot); if(e.t!=="sym"||!S.doc.lbCirc||e.lbHide||S.doc.lbSymOff||isQuadro(e))return L; const cn=symCircName(e); if(!cn)return L;
+ if(L){ if(String(L.s).split(/[\s·,]+/).includes(cn))return L; return {...L,s:L.s+" · "+cn}}
+ const o=e.lbOff||[0,0], k=S.doc.symScale*U()*(e.scale||1); return {x:e.x+.18*k+o[0],y:e.y+.18*k+o[1],h:.1*k*1.2,s:cn,rot:e.lbRot!=null?+e.lbRot:0,ok:true}}}
+
+// ---------- calha / caminho de cabos com largura real ----------
+const TRAY_K=["Esteira","Calha","Caminho de cabos","Calha técnica","Tubo","Vala"];
+function trayAsk(T,cb){ask("Calha / caminho de cabos",[{k:"k",l:"Tipo",type:"select",v:T.k||"Esteira",opts:TRAY_K.map(x=>[x,x])},{k:"w",l:"Largura (mm), desenhada à escala real",v:T.w||300},{k:"hh",l:"Altura ou aba (mm, opcional)",v:T.hh==null?60:T.hh},
+ {k:"d",l:"Observação (ex.: «a 2,80 m», «BT»)",v:T.d||""},{k:"lab",l:"Escrever o tipo e a medida no desenho",type:"check",v:T.lab!==false}],o=>cb({k:o.k,w:xN(o.w)||300,hh:xN(o.hh)||"",d:String(o.d||"").trim(),lab:!!o.lab}))}
+function cmdTray(){const sel=[...S.sel].filter(e=>(e.t==="pl"&&!e.esp&&!e.cloud)||e.t==="line");
+ trayAsk(S.doc.trayLast||{},T=>{S.doc.trayLast=T;
+  if(sel.length){pushUndo(); const out=sel.map(e=>{ if(e.t==="line"){const p={...e,t:"pl",pts:[[e.x1,e.y1],[e.x2,e.y2]],closed:false}; ["x1","y1","x2","y2"].forEach(k=>delete p[k]); S.doc.ents[S.doc.ents.indexOf(e)]=p; e=p} e.tray={...T}; delete e.hatch; return e}); xDone(out,out.length+" traçado(s) passaram a "+trayName(T)+"."); return}
+  S.trayNext=T; setTool("pline"); hint(trayName(T)+": clique nos pontos do eixo; Enter ou botão direito termina; Esc sai.")})}
+{const _pf=plineFinish; plineFinish=function(close){const n0=S.doc.ents.length, T=S.trayNext; _pf(close); const e=S.doc.ents[S.doc.ents.length-1]; if(T&&S.doc.ents.length>n0&&e&&e.t==="pl"){e.tray={...T}; saveLocal(); draw(); toast(trayName(T)+" desenhada ("+xF(entLen(e))+" m). Continue a desenhar outra, ou Esc.",3000)}}}
+
+// ---------- tramas ----------
+function hatchAsk(H,cb){ask("Trama",[{k:"p",l:"Padrão",type:"select",v:H.p||"diag",opts:HATCH},{k:"sp",l:"Espaçamento (como o tamanho dos símbolos; 0,15 é o normal)",v:xF(H.sp||.15,2)},{k:"ang",l:"Rodar o padrão (°)",v:H.ang||0}],
+ o=>cb({p:o.p,sp:xN(o.sp)||.15,ang:xN(o.ang)||0}))}
+function cmdHatch(){const sel=[...S.sel].filter(e=>(e.t==="pl"&&e.closed&&e.pts.length>2&&!e.tray)||e.t==="circle");
+ hatchAsk(S.doc.hatchLast||{},H=>{S.doc.hatchLast=H;
+  if(sel.length){pushUndo(); sel.forEach(e=>e.hatch={...H}); xDone(sel,"Trama aplicada a "+sel.length+" contorno(s)."); return}
+  const go=()=>xPick("Trama: clique dentro da zona (encontra o contorno das paredes); Enter termina.",null,null,p=>{let r=null; try{r=espDetect(p[0],p[1])}catch(er){}
+   if(!r||!r.pts||r.pts.length<3){toast("Não encontrei um contorno fechado à volta deste ponto. Desenhe-o com uma polilinha fechada (ou um retângulo), selecione-o e use Trama.",6000); return go()}
+   pushUndo(); const e=addEnt({t:"pl",pts:r.pts.map(q=>[q[0],q[1]]),closed:true,hatch:{...H}}); xDone(null); go()},()=>{draw()});
+  go()})}
+
+// ---------- nuvem e marca de revisão (ligadas ao carimbo) ----------
+function revList(){ if(!S.doc.revs)S.doc.revs=[]; return S.doc.revs}
+function xNextRev(n){n=String(n||"").trim(); if(/^\d+$/.test(n))return String(+n+1).padStart(n.length,"0"); if(/^[A-Y]$/i.test(n))return String.fromCharCode(n.charCodeAt(0)+1); return n?n+"'":"A"}
+const xToday=()=>new Date().toLocaleDateString("pt-PT");
+function revAsk(cb){const R=revList(), last=R[R.length-1];
+ ask("Revisão",[{k:"n",l:"Revisão (letra ou número)",v:last?xNextRev(last.n):"A"},{k:"d",l:"Data",v:xToday()},{k:"t",l:"Descrição (vai para o carimbo)",v:""}],o=>{const n=String(o.n||"").trim()||"A"; cb({n,d:String(o.d||"").trim(),t:String(o.t||"").trim()})},
+  R.length?`<div class="small" style="margin-bottom:6px">Revisões desta planta: ${R.map(r=>xEsc(r.n)).join(", ")}. Escreva uma que já exista para juntar a nuvem a essa revisão.</div>`:"")}
+function revAdd(r){const R=revList(), f=R.find(x=>x.n===r.n); if(f){ if(r.t)f.t=r.t; if(r.d)f.d=r.d} else R.push(r)}
+function cmdCloud(){const sel=[...S.sel].filter(e=>e.t==="pl"&&e.pts.length>1&&!e.tray);
+ const after=pts=>revAsk(rv=>{pushUndo(); let out; if(pts)out=[addEnt({t:"pl",pts,closed:true,cloud:{rev:rv.n},layer:xLay("Revisões","#ef4444")})]; else {sel.forEach(e=>{e.cloud={rev:rv.n}; e.closed=e.closed||e.pts.length>2}); out=sel}
+  revAdd(rv); xDone(out,"Nuvem da revisão "+rv.n+". A revisão aparece no carimbo (secção «Revisões») quando imprimir.")});
+ if(sel.length)return after(null);
+ xPick("Nuvem de revisão: primeiro canto.",null,null,a=>xPick("Nuvem de revisão: canto oposto.",a,m=>xPrevEnt({t:"pl",pts:xRectPts(a,m),closed:true,cloud:{rev:""}}),b=>after(xRectPts(a,b))))}
+function cmdRevs(){const R=revList(); xDlg("Revisões desta planta",`<div class="small" style="margin-bottom:6px">Uma revisão por linha: <b>revisão | data | descrição</b>. Aparecem no carimbo, na secção «Revisões» (a mais recente em cima).</div>${xTA("rvT",R.map(r=>[r.n,r.d||"",r.t||""].join(" | ")).join("\n"),8)}`,()=>{
+ const N=$("rvT").value.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const p=l.split("|").map(s=>s.trim()); return {n:p[0],d:p[1]||"",t:p.slice(2).join(" | ")}}).filter(r=>r.n); pushUndo(); S.doc.revs=N; saveLocal(); toast(N.length+" revisão(ões).",2000)})}
+
+// ---------- partir ----------
+function plCum(P,closed){const Q=P.slice(); if(closed&&P.length>2)Q.push(P[0]); const C=[0]; for(let i=1;i<Q.length;i++)C.push(C[i-1]+Math.hypot(Q[i][0]-Q[i-1][0],Q[i][1]-Q[i-1][1])); return {Q,C,L:C[C.length-1]}}
+function plS(P,closed,p){const {Q,C}=plCum(P,closed); let best=null; for(let i=1;i<Q.length;i++){const [d,qx,qy]=dSeg(p[0],p[1],Q[i-1][0],Q[i-1][1],Q[i][0],Q[i][1]); if(!best||d<best.d)best={d,s:C[i-1]+Math.hypot(qx-Q[i-1][0],qy-Q[i-1][1])}} return best?best.s:0}
+function plAtS(Q,C,s){for(let i=1;i<Q.length;i++){ if(s<=C[i]+1e-12){const t=(C[i]-C[i-1])>0?(s-C[i-1])/(C[i]-C[i-1]):0; return [Q[i-1][0]+(Q[i][0]-Q[i-1][0])*t,Q[i-1][1]+(Q[i][1]-Q[i-1][1])*t]}} return Q[Q.length-1].slice()}
+function plSub(P,closed,s0,s1){const {Q,C,L}=plCum(P,closed), out=[plAtS(Q,C,s0)]; if(s1>L+1e-12){for(let i=1;i<Q.length;i++)if(C[i]>s0+1e-12)out.push(Q[i].slice()); s1-=L; s0=0}
+ for(let i=1;i<Q.length;i++)if(C[i]>s0+1e-12&&C[i]<s1-1e-12)out.push(Q[i].slice()); out.push(plAtS(Q,C,s1)); return out.filter((p,i)=>!i||Math.hypot(p[0]-out[i-1][0],p[1]-out[i-1][1])>1e-12)}
+function breakEnt(e,p1,p2){const same=!p2||Math.hypot(p2[0]-p1[0],p2[1]-p1[1])<1e-9, base={...e}; delete base.id; delete base.taps; delete base.lbOff; const out=[], n=v=>((v%360)+360)%360, eps=1e-9;
+ if(e.t==="line"){const P=[[e.x1,e.y1],[e.x2,e.y2]], L=Math.hypot(e.x2-e.x1,e.y2-e.y1); let s1=plS(P,false,p1), s2=same?s1:plS(P,false,p2); if(s1>s2)[s1,s2]=[s2,s1];
+  const at=s=>[e.x1+(e.x2-e.x1)*s/L,e.y1+(e.y2-e.y1)*s/L]; if(s1>eps){const q=at(s1); out.push({...base,x2:q[0],y2:q[1]})} if(s2<L-eps){const q=at(s2); out.push({...base,x1:q[0],y1:q[1]})} return out}
+ if(e.t==="pl"||e.t==="cable"){const cl=!!e.closed&&e.pts.length>2, {L}=plCum(e.pts,cl); let s1=plS(e.pts,cl,p1), s2=same?s1:plS(e.pts,cl,p2); if(!cl&&s1>s2)[s1,s2]=[s2,s1];
+  if(cl){ if(same)return [{...base,closed:false,pts:plSub(e.pts,true,s1,s1+L)}]; const a=s2, b=s1<s2?s1+L:s1; return [{...base,closed:false,pts:plSub(e.pts,true,a,b)}]}
+  if(s1>eps)out.push({...base,pts:plSub(e.pts,false,0,s1)}); if(s2<L-eps)out.push({...base,pts:plSub(e.pts,false,s2,L)}); return out.filter(x=>x.pts.length>1)}
+ const ang=p=>Math.atan2(p[1]-e.y,p[0]-e.x)*180/Math.PI;
+ if(e.t==="circle"){ if(same)return null; return [{...base,t:"arc",a0:ang(p2),a1:ang(p1)}]}
+ if(e.t==="arc"){const sw=n(e.a1-e.a0)||360; let t1=n(ang(p1)-e.a0), t2=same?t1:n(ang(p2)-e.a0); t1=Math.min(t1,sw); t2=Math.min(t2,sw); if(t1>t2)[t1,t2]=[t2,t1];
+  if(t1>1e-6)out.push({...base,a0:e.a0,a1:e.a0+t1}); if(t2<sw-1e-6)out.push({...base,a0:e.a0+t2,a1:e.a1}); return out}
+ return null}
+function cmdBreak(){xPick("Partir: clique no objeto, no primeiro ponto.",null,null,p1=>{const e=pick(p1[0],p1[1]); if(!e||!["line","pl","cable","circle","arc"].includes(e.t)||e.esp){toast("Clique numa reta, polilinha, cabo, círculo ou arco.",3000); return cmdBreak()}
+ const go=p2=>{const parts=breakEnt(e,p1,p2); if(!parts){toast("Um círculo parte-se entre dois pontos diferentes.",3500);return} pushUndo(); const i=S.doc.ents.indexOf(e); S.doc.ents.splice(i,1,...parts); parts.forEach(q=>q.id=S.doc.nextId++); xDone(parts,(p2?"Partido entre os dois pontos":"Partido no ponto")+": "+parts.length+" parte(s).")};
+ xPick("Partir: segundo ponto (Enter parte só no primeiro).",p1,m=>xPrevLine([p1,m],false),p2=>go(p2),()=>go(null))})}
+
+// ---------- juntar ----------
+function arcPts(e){let a0=e.a0, a1=e.a1; while(a1<=a0)a1+=360; const n=Math.max(4,Math.ceil((a1-a0)/8)), P=[]; for(let i=0;i<=n;i++){const a=(a0+(a1-a0)*i/n)*Math.PI/180; P.push([e.x+e.r*Math.cos(a),e.y+e.r*Math.sin(a)])} return P}
+function cmdJoin(){needSelThen("Juntar",()=>{const sel=[...S.sel].filter(e=>!e.locked&&(e.t==="line"||e.t==="arc"||(e.t==="pl"&&!e.closed&&!e.esp)||(e.t==="cable"&&!e.closed)));
+ const tol=Math.max(.005*U(),1.5/S.view.s), groups=[sel.filter(e=>e.t!=="cable"),sel.filter(e=>e.t==="cable")], made=[], gone=new Set();
+ groups.forEach(g=>{let items=g.map(e=>({e,P:e.t==="line"?[[e.x1,e.y1],[e.x2,e.y2]]:e.t==="arc"?arcPts(e):e.pts.map(p=>[p[0],p[1]])}));
+  const eq=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1])<=tol;
+  while(items.length){const first=items.shift(); let C=first.P.slice(), mem=[first.e], grew=true;
+   while(grew){grew=false; for(let i=0;i<items.length;i++){const it=items[i], P=it.P; let add=null;
+     if(eq(C[C.length-1],P[0]))add=()=>C=C.concat(P.slice(1)); else if(eq(C[C.length-1],P[P.length-1]))add=()=>C=C.concat(P.slice(0,-1).reverse()); else if(eq(C[0],P[P.length-1]))add=()=>C=P.slice(0,-1).concat(C); else if(eq(C[0],P[0]))add=()=>C=P.slice(1).reverse().concat(C);
+     if(add){add(); mem.push(it.e); items.splice(i,1); grew=true; break}}}
+   if(mem.length>1){const b={...first.e}; ["id","x1","y1","x2","y2","x","y","r","a0","a1","taps","lbOff"].forEach(k=>delete b[k]); const cl=C.length>3&&eq(C[0],C[C.length-1]); if(cl)C.pop();
+    made.push({...b,t:first.e.t==="cable"?"cable":"pl",pts:C,closed:cl}); mem.forEach(m=>gone.add(m))}}});
+ if(!made.length){toast("Não há pontas coincidentes entre os objetos selecionados (tolerância de 5 mm).",4000); return}
+ pushUndo(); S.doc.ents=S.doc.ents.filter(e=>!gone.has(e)); made.forEach(e=>{e.id=S.doc.nextId++; S.doc.ents.push(e)}); xDone(made,gone.size+" objetos juntos em "+made.length+" polilinha(s)"+(made.some(e=>e.t==="cable")?" / cabo(s)":"")+".")})}
+
+// ---------- esticar ----------
+function stretchHits(a,b){const A=toV(a[0],a[1]), B=toV(b[0],b[1]), x0=Math.min(A[0],B[0]), x1=Math.max(A[0],B[0]), y0=Math.min(A[1],B[1]), y1=Math.max(A[1],B[1]), inR=p=>{const v=toV(p[0],p[1]); return v[0]>=x0&&v[0]<=x1&&v[1]>=y0&&v[1]<=y1};
+ const H=[]; S.doc.ents.forEach(e=>{const L=layerOf(e); if(!L.visible||L.locked||e.locked)return;
+  if(e.t==="line"){const k=[inR([e.x1,e.y1]),inR([e.x2,e.y2])]; if(k[0]||k[1])H.push({e,k})}
+  else if(e.t==="pl"||e.t==="cable"||e.t==="ldr"){const P=e.t==="ldr"?ldrPts(e):e.pts, k=P.map(inR); if(k.some(Boolean))H.push({e,k})}
+  else if(e.t==="dim"){const g=dimGeo(e), k=[inR(g.a),inR(g.b),inR(g.o||e.o||g.b)]; if(k.some(Boolean))H.push({e,k})}
+  else if(e.t!=="lnk"&&e.x!=null&&inR([e.x,e.y]))H.push({e,all:true})}); return H}
+function stretchApply(H,dx,dy){H.forEach(({e,k,all})=>{ if(all)return moveEnt(e,dx,dy);
+ if(e.t==="line"){ if(k[0]){e.x1+=dx; e.y1+=dy} if(k[1]){e.x2+=dx; e.y2+=dy}}
+ else if(e.t==="pl"||e.t==="cable"){e.pts.forEach((p,i)=>{ if(k[i]){p[0]+=dx; p[1]+=dy}}); if(k.every(Boolean))espPcXf(e,(x,y)=>[x+dx,y+dy])}
+ else if(e.t==="ldr"){e.pts.forEach((p,i)=>{ if(k[i]){p[0]+=dx; p[1]+=dy}}); if(k[0]&&e.tipOff){const t=annById(e.lk); if(t)e.tipOff=[e.pts[0][0]-t.x,e.pts[0][1]-t.y]}}
+ else if(e.t==="dim"){ if(k[0]){e.a=[e.a[0]+dx,e.a[1]+dy]; delete e.la} if(k[1]){e.b=[e.b[0]+dx,e.b[1]+dy]; delete e.lb} if(k[2]&&e.o)e.o=[e.o[0]+dx,e.o[1]+dy]}})}
+function cmdStretch(){xPick("Esticar: primeiro canto da janela (só os pontos dentro dela se mexem).",null,null,a=>xPick("Esticar: canto oposto da janela.",a,m=>xPrevLine(xRectPts(a,m),true),b=>{const H=stretchHits(a,b);
+ if(!H.length){toast("Não há pontos dentro da janela.",3000);return}
+ xPick("Esticar: ponto base ("+H.length+" objeto(s) apanhado(s)).",null,()=>xPrevLine(xRectPts(a,b),true),base=>xPick("Esticar: destino (ou distância).",base,m=>{xPrevLine([base,m],false); const C=H.map(h=>({...h,e:JSON.parse(JSON.stringify(h.e))})); stretchApply(C,m[0]-base[0],m[1]-base[1]); C.forEach(h=>xPrevEnt(h.e))},
+  dst=>{pushUndo(); stretchApply(H,dst[0]-base[0],dst[1]-base[1]); xDone(H.map(h=>h.e),"Esticado: "+H.length+" objeto(s), "+xF(Math.hypot(dst[0]-base[0],dst[1]-base[1])*S.doc.unit)+" m.")}))}))}
+
+// ================= Lote 2 =================
+// ---------- uma planta por especialidade ----------
+const SEP_SKIP=["Notas","Espaços","PLANTA","Cotas","Revisões"];
+function cmdSepEsp(){ if(!PROJ){toast("Abra um projeto primeiro.");return} const cur=S.doc, cnt={};
+ cur.ents.forEach(e=>{ if(SEP_SKIP.includes(e.layer)||isQuadro(e))return; cnt[e.layer]=(cnt[e.layer]||0)+1});
+ const L=Object.keys(cnt).filter(n=>layerByName(n)); if(!L.length){toast("Esta planta não tem objetos de especialidades para separar.",3500);return}
+ const html=`<div class="small" style="margin-bottom:6px">Cria uma planta nova por especialidade, sobre a mesma planta de fundo (sem a duplicar), com os objetos dessa especialidade, os quadros (para os esquemas continuarem ligados) e os circuitos.</div>`+
+  L.map(n=>`<label class="chk"><input type="checkbox" data-sep="${xEsc(n)}" checked> ${xEsc(n)} <span class="small">(${cnt[n]} objeto(s))</span></label>`).join("")+
+  `<label class="chk" style="margin-top:8px"><input type="checkbox" id="sepN" checked> Copiar também as notas, cotas e textos (camadas Notas e Cotas) para todas</label><label class="chk"><input type="checkbox" id="sepD"> Tirar estes objetos da planta atual (passa a ficar só com o resto)</label>`;
+ xDlg("Uma planta por especialidade",html,b=>{const sel=[...b.querySelectorAll("[data-sep]")].filter(i=>i.checked).map(i=>i.dataset.sep); if(!sel.length)return false; const withN=$("sepN").checked, del=$("sepD").checked;
+  const src=plantaRefSrc(cur), made=[]; pushUndo();
+  sel.forEach(lay=>{const p=newDoc(); p.id="p"+(++PROJ.pseq); p.pname=(cur.pname||"Planta")+" · "+lay; p.esp=lay; p.active=lay;
+   ["unit","symScale","textH","offset","viewRot","name","revs"].forEach(k=>{ if(cur[k]!=null)p[k]=JSON.parse(JSON.stringify(cur[k]))}); p.layers=cur.layers.map(l=>({...l,visible:true,locked:false}));
+   if(src.ref.length||src.bg){p.refOf=src.id; p.ref=src.ref; p.bg=src.bg; p.refLayers=src.refLayers}
+   const pick=cur.ents.filter(e=>e.layer===lay||isQuadro(e)||(withN&&["Notas","Cotas"].includes(e.layer)&&!(e.t==="ldr"&&e.lk!=null&&(annById(e.lk)||{}).layer!==lay))), M=new Map();
+   pick.forEach(e=>{const c=JSON.parse(JSON.stringify(e)); c.id=PROJ.nextId++; M.set(e.id,c.id); p.ents.push(c)});
+   p.ents.forEach(c=>{ if(c.t==="dim"){["la","lb"].forEach(k=>{ if(c[k]){ if(M.has(c[k].id))c[k]={id:M.get(c[k].id),i:c[k].i}; else delete c[k]}})}
+    if(c.t==="ldr"&&c.lk!=null){ if(M.has(c.lk))c.lk=M.get(c.lk); else {delete c.lk; delete c.auto; delete c.tipOff}}
+    if(c.t==="lnk"){ if(M.has(c.a)&&M.has(c.b)){c.a=M.get(c.a); c.b=M.get(c.b)} else c._dead=1}});
+   p.ents=p.ents.filter(c=>!c._dead);
+   p.circs=(cur.circs||[]).filter(ci=>M.has(ci.q)&&(ci.objs||[]).length&&(ci.objs||[]).every(id=>M.has(id))).map(ci=>{const c=JSON.parse(JSON.stringify(ci)); c.id=PROJ.nextId++; c.q=M.get(ci.q); c.objs=ci.objs.map(id=>M.get(id)); return c});
+   PROJ.plantas.push(p); made.push(p.pname)});
+  if(del){const gone=new Set(cur.ents.filter(e=>sel.includes(e.layer)&&!isQuadro(e)).map(e=>e.id)); cur.ents=cur.ents.filter(e=>!gone.has(e.id)); (cur.circs||[]).forEach(ci=>ci.objs=(ci.objs||[]).filter(id=>!gone.has(id))); cur.circs=(cur.circs||[]).filter(ci=>(ci.objs||[]).length)}
+  projLink(PROJ); updPlantaUI(); rebuildIndex(); refreshUI(); saveLocal(); draw(); toast(made.length+" planta(s) criada(s): "+made.join("; ")+". Troque de planta na lista ao lado do nome.",7000)},"Criar plantas")}
+
+// ---------- ligações de comando ----------
+function cmdLnk(){needSelThen("Ligações de comando",()=>{const sel=[...S.sel].filter(e=>e.t==="sym"&&SYM[e.sym]);
+ const sw=sel.filter(e=>SYM[e.sym].cat==="Comandos"), lu=sel.filter(e=>SYM[e.sym].cat!=="Comandos"&&!isQuadro(e));
+ if(!sw.length||!lu.length){toast("Selecione o interruptor (ou outro comando) e os pontos que ele comanda.",5000);return}
+ ask("Ligações de comando",[{k:"md",l:"Traçado",type:"select",v:"cad",opts:[["cad","Em cadeia: comando → ponto mais próximo → seguinte…"],["est","Cada ponto ligado diretamente ao comando"]]},
+  {k:"lt",l:"Letra do comando (opcional, ex.: a)",v:""},{k:"bend",l:"Curvatura",type:"select",v:"0.18",opts:[["0.1","Pouca"],["0.18","Normal"],["0.3","Muita"],["-0.18","Normal, para o outro lado"]]}],o=>{
+  const bend=+o.bend, pairs=[], d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  sw.forEach((s,si)=>{ if(si>0){const n=lu.slice().sort((a,b)=>d(s,a)-d(s,b))[0]; pairs.push([s,n,true]); return}
+   if(o.md==="est"){lu.forEach((l,i)=>pairs.push([s,l,i===0]))} else {let cur=s; const rest=lu.slice(); let first=true; while(rest.length){rest.sort((a,b)=>d(cur,a)-d(cur,b)); const n=rest.shift(); pairs.push([cur,n,first]); first=false; cur=n}}});
+  pushUndo(); const ids=new Set(sel.map(e=>e.id)); S.doc.ents=S.doc.ents.filter(e=>!(e.t==="lnk"&&ids.has(e.a)&&ids.has(e.b)));
+  const out=pairs.map(([a,b,f])=>addEnt({t:"lnk",a:a.id,b:b.id,bend,lt:f&&o.lt?String(o.lt).trim():"",layer:a.layer}));
+  xDone(out,out.length+" ligação(ões) de comando. Acompanham os símbolos quando os mexer; a curvatura muda-se nas Propriedades.")})})}
+
+// ---------- substituir símbolo ----------
+function cmdRepl(){needSelThen("Substituir símbolos",()=>{const sel=[...S.sel].filter(e=>e.t==="sym"&&!e.locked); if(!sel.length){toast("Selecione os símbolos a substituir.");return}
+ S.replPend=sel; hint("Substituir "+sel.length+" símbolo(s): escolha o símbolo novo na paleta (ou procure-o pelo nome). A posição, a rotação, a escala, a etiqueta e o circuito mantêm-se. Esc cancela.");
+ toast("Escolha o símbolo novo na paleta.",3000)})}
+function replApply(L,k){pushUndo(); const lst=symOptList(k);
+ L.forEach(e=>{e.sym=k; if(e.opt){ if(lst){const keep={}; lst.forEach(f=>{ if(e.opt[f.k]!==undefined)keep[f.k]=e.opt[f.k]}); if(Object.keys(keep).length)e.opt=keep; else delete e.opt} else delete e.opt}});
+ xDone(L,L.length+" símbolo(s) passaram a «"+(SYM[k]?SYM[k].n:k)+"».")}
+{const _st=setTool; setTool=function(t){ if(t==="sym"&&S.replPend&&S.sym&&SYM[S.sym]){const k=S.sym, L=S.replPend.filter(e=>S.doc.ents.includes(e)); S.replPend=null; _st("select"); S.sym=null; if(L.length)replApply(L,k); return}
+ if(t!=="pline"&&S.trayNext)S.trayNext=null; return _st.apply(this,arguments)}}
+
+// ---------- espaçar igualmente ----------
+function cmdSpaceEq(){needSelThen("Espaçar igualmente",()=>{const sel=[...S.sel].filter(e=>!e.locked&&!layerOf(e).locked); if(sel.length<3){toast("Selecione pelo menos três objetos.");return}
+ const C=sel.map(e=>centerOf(e)); let bi=0,bj=1,bd=-1; for(let i=0;i<C.length;i++)for(let j=i+1;j<C.length;j++){const d=Math.hypot(C[j][0]-C[i][0],C[j][1]-C[i][1]); if(d>bd){bd=d; bi=i; bj=j}}
+ ask("Espaçar igualmente",[{k:"al",l:"Alinhar também na reta entre os dois extremos",type:"check",v:false}],o=>{const A=C[bi], u=xUnit(A,C[bj]), n=[-u[1],u[0]], L=bd;
+  const I=sel.map((e,i)=>({e,s:(C[i][0]-A[0])*u[0]+(C[i][1]-A[1])*u[1],q:(C[i][0]-A[0])*n[0]+(C[i][1]-A[1])*n[1]})).sort((a,b)=>a.s-b.s);
+  pushUndo(); I.forEach((it,k)=>{const ds=L*k/(I.length-1)-it.s, dq=o.al?-it.q:0; moveEnt(it.e,u[0]*ds+n[0]*dq,u[1]*ds+n[1]*dq)});
+  xDone(sel,sel.length+" objetos espaçados de "+xF(L*S.doc.unit/(I.length-1))+" m.")})})}
+
+// ---------- snaps: meio, fim das polilinhas, interseção, prolongamento ----------
+{const _ri=rebuildIndex; rebuildIndex=function(){const r=_ri.apply(this,arguments); if(!IDX||!S.doc)return r; const {cell,key,grid,sgrid}=IDX;
+ const addP=(x,y,k)=>{const kk=key(Math.floor(x/cell),Math.floor(y/cell)); (grid.get(kk)||grid.set(kk,[]).get(kk)).push([x,y,k])};
+ const addS=s=>{const i0=Math.floor(Math.min(s[0],s[2])/cell),i1=Math.floor(Math.max(s[0],s[2])/cell),j0=Math.floor(Math.min(s[1],s[3])/cell),j1=Math.floor(Math.max(s[1],s[3])/cell); if((i1-i0+1)*(j1-j0+1)>400)return;
+  for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){const k=key(i,j); (sgrid.get(k)||sgrid.set(k,[]).get(k)).push(s)}};
+ const mids=(P,cl)=>{const m=cl&&P.length>2?P.length:P.length-1; for(let i=0;i<m;i++){const a=P[i], b=P[(i+1)%P.length]; addP((a[0]+b[0])/2,(a[1]+b[1])/2,"meio")}};
+ for(const q of S.doc.ref){ if(!refVisible(q))continue; if(q.t==="line")addP((q.x1+q.x2)/2,(q.y1+q.y2)/2,"meio"); else if(q.t==="pl")mids(q.pts,q.closed)}
+ for(const e of S.doc.ents){ if(!layerOf(e).visible||e.gm)continue;
+  if(e.t==="pl"){const P=e.pts, cl=e.closed&&P.length>2; for(let i=1;i<P.length;i++)addS([P[i-1][0],P[i-1][1],P[i][0],P[i][1],e]); if(cl)addS([P[P.length-1][0],P[P.length-1][1],P[0][0],P[0][1],e]); P.forEach(p=>addP(p[0],p[1],"fim")); mids(P,cl)}
+  else if(e.t==="cable")mids(e.pts,false)}
+ return r}}
+function segX(s,t){const r=[s[2]-s[0],s[3]-s[1]], q=[t[2]-t[0],t[3]-t[1]], den=r[0]*q[1]-r[1]*q[0]; if(Math.abs(den)<1e-12)return null;
+ const u=((t[0]-s[0])*q[1]-(t[1]-s[1])*q[0])/den, v=((t[0]-s[0])*r[1]-(t[1]-s[1])*r[0])/den; if(u<-1e-9||u>1+1e-9||v<-1e-9||v>1+1e-9)return null; return [s[0]+r[0]*u,s[1]+r[1]*u]}
+function snapInter(x,y,r){const segs=near(IDX.sgrid,x,y,r).slice(0,90); let best=null,bd=r;
+ for(let i=0;i<segs.length;i++)for(let j=i+1;j<segs.length;j++){const s=segs[i], t=segs[j]; if(s[4]&&s[4]===t[4]&&s[4].t==="sym")continue; const p=segX(s,t); if(!p)continue; const d=Math.hypot(p[0]-x,p[1]-y); if(d<bd){bd=d; best=[p[0],p[1],"interseção"]}}
+ const cs=IDX.circs.filter(c=>Math.abs(Math.hypot(x-c[0],y-c[1])-c[2])<r*2);
+ segs.forEach(s=>cs.forEach(c=>{const dx=s[2]-s[0], dy=s[3]-s[1], fx=s[0]-c[0], fy=s[1]-c[1], A=dx*dx+dy*dy, B=2*(fx*dx+fy*dy), C=fx*fx+fy*fy-c[2]*c[2], D=B*B-4*A*C; if(A<1e-18||D<0)return;
+  [(-B-Math.sqrt(D))/(2*A),(-B+Math.sqrt(D))/(2*A)].forEach(t=>{ if(t<-1e-9||t>1+1e-9)return; const p=[s[0]+dx*t,s[1]+dy*t]; if(c[3]!=null&&!angIn(Math.atan2(p[1]-c[1],p[0]-c[0])*180/Math.PI,c[3],c[4]))return; const d=Math.hypot(p[0]-x,p[1]-y); if(d<bd){bd=d; best=[p[0],p[1],"interseção"]}})}));
+ return best}
+function snapExt(x,y,r){const R=Math.max(r*8,1.2*U()); let best=null,bd=r*.6;
+ for(const s of near(IDX.sgrid,x,y,R)){ if(s[4]&&s[4].t==="sym")continue; const dx=s[2]-s[0],dy=s[3]-s[1],L=Math.hypot(dx,dy); if(L<1e-9||L*S.view.s<12)continue; const ux=dx/L,uy=dy/L, t=(x-s[0])*ux+(y-s[1])*uy; let e0=null;
+  if(t>L&&t-L<R)e0=[s[2],s[3]]; else if(t<0&&-t<R)e0=[s[0],s[1]]; else continue; const px=s[0]+ux*t, py=s[1]+uy*t, d=Math.hypot(px-x,py-y); if(d<bd){bd=d; best=[px,py,"prolongamento",e0]}}
+ return best}
+{const _fs=findSnap; findSnap=function(x,y,from){const r0=_fs(x,y,from); if(!S.snap||!IDX)return r0; const k=r0&&r0[2], r=12/S.view.s;
+ if(!r0||k==="sobre a reta"||k==="no círculo"){const ip=snapInter(x,y,r); if(ip)return ip}
+ if(!r0){const ex=snapExt(x,y,r); if(ex)return ex} return r0}}
+
+// ---------- planta de fundo: cinzento, intensidade, camadas, trancada ----------
+let BGG=null;
+function bgImgFor(){const src=S.doc&&plantaRefSrc(S.doc); if(!S.img||!src||!src.bgGray)return S.img; if(BGG&&BGG.img===S.img&&BGG.w===S.img.naturalWidth)return BGG.c;
+ try{const c=document.createElement("canvas"); c.width=S.img.naturalWidth; c.height=S.img.naturalHeight; const x=c.getContext("2d");
+  if("filter" in x){x.filter="grayscale(1)"; x.drawImage(S.img,0,0)} else {x.drawImage(S.img,0,0); const im=x.getImageData(0,0,c.width,c.height), d=im.data; for(let i=0;i<d.length;i+=4){const l=d[i]*.3+d[i+1]*.59+d[i+2]*.11; d[i]=d[i+1]=d[i+2]=l} x.putImageData(im,0,0)}
+  BGG={img:S.img,w:S.img.naturalWidth,c}; return c}catch(er){return S.img}}
+function bgLocked(){const s=S.doc&&plantaRefSrc(S.doc); return !!(s&&s.bgLock)}
+function cmdBgSet(){const src=plantaRefSrc(S.doc), b=src.bg, RL=[...new Set((src.ref||[]).map(r=>r.layer))].sort(), RLs=S.doc.refLayers||{};
+ if(!b&&!RL.length){toast("Esta planta não tem planta de fundo (imagem, PDF ou DXF).",3500);return}
+ const al=b?Math.round((b.alpha||.6)*100):60;
+ const html=(b?`<label class="chk"><input type="checkbox" id="bgG" ${src.bgGray?"checked":""}> Imagem / PDF de fundo a cinzento</label><label>Intensidade da imagem</label><select id="bgA">${[15,25,35,50,60,75,100].map(v=>`<option value="${v}" ${v===al?"selected":""}>${v} %</option>`).join("")}</select>`:"")+
+  `<label class="chk" style="margin-top:6px"><input type="checkbox" id="bgL" ${src.bgLock?"checked":""}> Trancar a planta de fundo (não se calibra, não se apaga e os contornos não se refazem por engano)</label>`+
+  (RL.length?`<label style="margin-top:8px">Camadas da planta de fundo (DXF/DWG)</label><div style="max-height:34vh;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:4px 8px">${RL.map(n=>`<label class="chk"><input type="checkbox" data-rl="${xEsc(n)}" ${RLs[n]&&RLs[n].hidden?"":"checked"}> ${xEsc(n)}</label>`).join("")}</div><div class="row" style="margin-top:4px"><button id="bgAll" style="flex:1">Todas</button><button id="bgNone" style="flex:1">Nenhuma</button></div>`:"");
+ xDlg("Planta de fundo",html,bx=>{ if(b){src.bgGray=$("bgG").checked; b.alpha=(+$("bgA").value||60)/100} src.bgLock=$("bgL").checked;
+  if(RL.length){S.doc.refLayers=S.doc.refLayers||{}; bx.querySelectorAll("[data-rl]").forEach(i=>{const n=i.dataset.rl; S.doc.refLayers[n]={...(S.doc.refLayers[n]||{}),hidden:!i.checked}}); if(typeof refShare==="function")refShare()}
+  rebuildIndex(); saveLocal(); draw()});
+ if($("bgAll")){$("bgAll").onclick=()=>$("mbox").querySelectorAll("[data-rl]").forEach(i=>i.checked=true); $("bgNone").onclick=()=>$("mbox").querySelectorAll("[data-rl]").forEach(i=>i.checked=false)}}
+
+// ---------- tabelas no desenho ----------
+function tabSrcs(){const o=[["circ","Circuitos desta planta (quadro, pontos, comprimento, cabo)"]]; let qs=[]; try{qs=uDoc().qs||[]}catch(er){} qs.forEach(q=>o.push(["uni:"+q.nome,"Quadro de cargas de «"+q.nome+"» (do esquema unifilar)"])); return o}
+function tabData(src){
+ if(src==="circ"){const C=(S.doc.circs||[]).slice().sort((a,b)=>circName(a).localeCompare(circName(b),"pt",{numeric:true})); if(!C.length)return null;
+  return {title:"CIRCUITOS · "+String(S.doc.pname||"Planta").toUpperCase(),hdr:["Circuito","Quadro","Pontos","Comprimento (m)","Cabo"],rows:C.map(ci=>{const q=circQ(ci), ob=circObjs(ci).filter(e=>e.t==="sym"&&!isQuadro(e)); let L=null; try{L=circLen(ci)}catch(er){}
+   let cab=""; try{const cc=circCables(ci); if(cc&&cc[0])cab=cabLabel(cc[0].e,cabCalc(cc[0].e))}catch(er){} return [circName(ci)||"—",q?quadroName(q)||"—":"—",String(ob.length),L?xF(L.L,1)+(L.est?" (est.)":""):"",cab]})}}
+ if(String(src).startsWith("uni:")){let q=null; try{q=uDoc().qs.find(x=>x.nome===src.slice(4))}catch(er){} if(!q)return null; let LV=[], ph=null; try{LV=uLeafPath(q); ph=uPhases(q).res}catch(er){return null} if(!LV.length)return null;
+  const lab=d=>{try{return uDevLabels(d).filter(s=>s&&s!==d.tag).slice(0,2).join(" ")}catch(er){return ""}};
+  const rows=LV.map(({leaf,path})=>{const c=leaf.circ||{}, pr=(leaf.devs||[]).filter(d=>["dj","fus","int"].includes(d.t)).map(lab).join(" + "); let df="";
+   for(let i=path.length-1;i>=0&&!df;i--){const d=(path[i].devs||[]).find(x=>x.t==="dif"||(x.t==="dj"&&x.dif)); if(d)df=lab(d)} const fd=(leaf.devs||[]).find(x=>x.t==="dif"); if(fd)df=lab(fd);
+   let P=0; try{P=uLeafP(leaf)}catch(er){} return [c.ref||"",String(c.des||"").split("\n")[0],pr,df,c.cabo||"",P?xF(P,2):"",ph&&ph.get(leaf.id)||""]});
+  return {title:"QUADRO DE CARGAS · "+String(q.nome).toUpperCase(),hdr:["Circuito","Designação","Proteção","Diferencial","Cabo","P (kW)","Fase"],rows}}
+ return null}
+function cmdTab(){const S0=tabSrcs(); ask("Tabela no desenho",[{k:"src",l:"O que pôr na tabela",type:"select",v:(S0[1]||S0[0])[0],opts:S0}],o=>{const T=tabData(o.src); if(!T){toast("Não há dados para esta tabela (sem circuitos ou sem esquema).",4000);return}
+ xPick("Tabela: canto superior esquerdo.",null,m=>xPrevEnt({t:"tab",x:m[0],y:m[1],...T}),p=>{pushUndo(); const e=addEnt({t:"tab",x:p[0],y:p[1],...T,src:o.src,layer:xLay("Notas")}); xDone([e],"Tabela inserida com "+T.rows.length+" linha(s). Para a atualizar: Propriedades › Atualizar dados.")})})}
+
+// ---------- comandos de alternar ----------
+function cmdToggle(k,on,off){pushUndo(); S.doc[k]=!S.doc[k]; saveLocal(); draw(); toast(S.doc[k]?on:off,3500)}
+
+// ---------- propriedades dos objetos novos ----------
+{const _rp=refreshProps; refreshProps=function(){_rp.apply(this,arguments); const P=$("props"); if(!P)return; const sel=[...S.sel]; if(sel.length!==1)return; const e=sel[0];
+ const ap=(f,re)=>{pushUndo(); f(); saveLocal(); draw(); if(re)refreshProps()}, row=(l,inp)=>`<div class="row"><label>${l}</label>${inp}</div>`, sel2=(id,v,o)=>`<select id="${id}">${o.map(([a,b])=>`<option value="${a}" ${String(a)===String(v)?"selected":""}>${b}</option>`).join("")}</select>`;
+ let h="", on=[];
+ const scRow=()=>{h+=row("Escala do texto",`<input type="text" inputmode="decimal" id="xSc" value="${xF(e.sc||1,2)}">`); on.push(()=>{$("xSc").onchange=ev=>ap(()=>{const v=xN(ev.target.value); if(v>0)e.sc=v; else delete e.sc})})};
+ if(e.t==="dim"){const g=dimGeo(e); h+=`<div class="psec">Cota</div><div class="pinfo"><span>Medida</span><b>${xF(g.val,3)} m</b></div>`;
+  h+=row("Texto",`<input type="text" id="xDt" value="${xEsc(e.txt||"")}" placeholder="${xEsc(dimText({dec:e.dec},g.val))} (<> = medida)">`);
+  h+=row("Casas decimais",sel2("xDd",e.dec==null?2:e.dec,[[0,"0"],[1,"1"],[2,"2"],[3,"3"]]))+row("Pontas",sel2("xDk",e.tk||"traco",[["traco","Traço oblíquo"],["seta","Seta"]]));
+  h+=row("Direção",sel2("xDm",e.m||"al",[["al","Alinhada com os pontos"],["h","Horizontal"],["v","Vertical"]])); scRow();
+  if(e.la||e.lb)h+=`<div class="small" style="padding:2px 10px">Associativa: acompanha ${e.la&&e.lb?"os dois objetos":"o objeto"} a que está ligada.</div><div class="pbtns"><button id="xDu">Desligar dos objetos</button></div>`;
+  on.push(()=>{$("xDt").onchange=ev=>ap(()=>{const v=ev.target.value.trim(); if(v)e.txt=v; else delete e.txt}); $("xDd").onchange=ev=>ap(()=>e.dec=+ev.target.value); $("xDk").onchange=ev=>ap(()=>{e.tk=ev.target.value; S.doc.dimTk=e.tk}); $("xDm").onchange=ev=>ap(()=>e.m=ev.target.value,true);
+   if($("xDu"))$("xDu").onclick=()=>ap(()=>{delete e.la; delete e.lb},true)})}
+ else if(e.t==="ldr"){const t=e.lk!=null&&annById(e.lk); h+=`<div class="psec">Chamada</div>${t?`<div class="small" style="padding:2px 10px">Ligada a: ${xEsc(t.t==="sym"?symName(t):"cabo")}${e.auto&&e.auto.length?" · texto automático":""}</div>`:""}<div class="pbtns"><button id="xLe">Editar o texto…</button></div>`; scRow();
+  on.push(()=>{$("xLe").onclick=()=>ldrDialog(e)})}
+ else if(e.t==="lnk"){h+=`<div class="psec">Ligação de comando</div>`+row("Letra",`<input type="text" id="xKl" value="${xEsc(e.lt||"")}" placeholder="(sem letra)">`)+row("Curvatura",sel2("xKb",e.bend==null?.18:e.bend,[[.1,"Pouca"],[.18,"Normal"],[.3,"Muita"],[-.1,"Pouca (outro lado)"],[-.18,"Normal (outro lado)"],[-.3,"Muita (outro lado)"]]));
+  on.push(()=>{$("xKl").onchange=ev=>ap(()=>e.lt=ev.target.value.trim()); $("xKb").onchange=ev=>ap(()=>e.bend=+ev.target.value)})}
+ else if(e.t==="tab"){h+=`<div class="psec">Tabela</div>`+row("Título",`<input type="text" id="xTt" value="${xEsc(e.title||"")}">`); scRow(); if(e.src)h+=`<div class="pbtns"><button id="xTu" title="Volta a ler os circuitos ou o esquema unifilar">Atualizar dados</button></div>`;
+  on.push(()=>{$("xTt").onchange=ev=>ap(()=>e.title=ev.target.value); if($("xTu"))$("xTu").onclick=()=>{const T=tabData(e.src); if(!T){toast("A origem desta tabela já não existe.",3000);return} ap(()=>{const tt=e.title; Object.assign(e,T); if(tt)e.title=tt}); toast("Tabela atualizada: "+T.rows.length+" linha(s).",2500)}})}
+ if((e.t==="pl"&&!e.esp)||e.t==="circle"){const closed=e.t==="circle"||(e.closed&&e.pts.length>2), H=e.hatch||{};
+  if(closed&&!e.tray){h+=`<div class="psec">Trama</div>`+row("Padrão",sel2("xHp",e.hatch?H.p:"",[["","Sem trama"],...HATCH]));
+   if(e.hatch)h+=row("Espaçamento",`<input type="text" inputmode="decimal" id="xHs" value="${xF(H.sp||.15,2)}">`)+row("Rodar (°)",`<input type="text" inputmode="decimal" id="xHa" value="${xEsc(H.ang||0)}">`);
+   on.push(()=>{$("xHp").onchange=ev=>ap(()=>{const v=ev.target.value; if(v)e.hatch={...(e.hatch||{sp:.15,ang:0}),p:v}; else delete e.hatch},true); if($("xHs")){$("xHs").onchange=ev=>ap(()=>e.hatch.sp=xN(ev.target.value)||.15); $("xHa").onchange=ev=>ap(()=>e.hatch.ang=xN(ev.target.value)||0)}})}
+  if(e.t==="pl"&&!e.cloud){const T=e.tray; h+=`<div class="psec">Calha / caminho de cabos</div>`+row("É calha",`<input type="checkbox" id="xYo" ${T?"checked":""}>`);
+   if(T)h+=row("Tipo",sel2("xYk",T.k||"Esteira",TRAY_K.map(x=>[x,x])))+row("Largura (mm)",`<input type="text" inputmode="decimal" id="xYw" value="${xEsc(T.w||300)}">`)+row("Altura (mm)",`<input type="text" inputmode="decimal" id="xYh" value="${xEsc(T.hh||"")}">`)+row("Observação",`<input type="text" id="xYd" value="${xEsc(T.d||"")}">`)+row("Escrever no desenho",`<input type="checkbox" id="xYl" ${T.lab!==false?"checked":""}>`);
+   on.push(()=>{$("xYo").onchange=ev=>ap(()=>{ if(ev.target.checked){e.tray={...(S.doc.trayLast||{k:"Esteira",w:300,hh:60,lab:true})}; delete e.hatch} else delete e.tray},true);
+    if(T){$("xYk").onchange=ev=>ap(()=>T.k=ev.target.value); $("xYw").onchange=ev=>ap(()=>T.w=xN(ev.target.value)||300); $("xYh").onchange=ev=>ap(()=>T.hh=xN(ev.target.value)||""); $("xYd").onchange=ev=>ap(()=>T.d=ev.target.value.trim()); $("xYl").onchange=ev=>ap(()=>T.lab=ev.target.checked)}})}
+  if(e.t==="pl"&&!e.tray){const R=revList(); h+=`<div class="psec">Nuvem de revisão</div>`+row("É nuvem",`<input type="checkbox" id="xCo" ${e.cloud?"checked":""}>`);
+   if(e.cloud)h+=row("Revisão",`<input type="text" id="xCr" value="${xEsc(e.cloud.rev||"")}" list="xRevL"><datalist id="xRevL">${R.map(r=>`<option value="${xEsc(r.n)}">`).join("")}</datalist>`)+row("Tamanho dos arcos",`<input type="text" inputmode="decimal" id="xCs" value="${xF(e.cloud.r||.25,2)}">`)+`<div class="pbtns"><button id="xCv">Revisões da planta…</button></div>`;
+   on.push(()=>{$("xCo").onchange=ev=>ap(()=>{ if(ev.target.checked){const r=R[R.length-1]; e.cloud={rev:r?r.n:"A"}; if(!r)revAdd({n:"A",d:xToday(),t:""})} else delete e.cloud},true);
+    if(e.cloud){$("xCr").onchange=ev=>ap(()=>{e.cloud.rev=ev.target.value.trim(); if(e.cloud.rev&&!R.find(r=>r.n===e.cloud.rev))revAdd({n:e.cloud.rev,d:xToday(),t:""})}); $("xCs").onchange=ev=>ap(()=>e.cloud.r=xN(ev.target.value)||.25); $("xCv").onclick=cmdRevs}})}}
+ if(!h)return; const d=document.createElement("div"); d.innerHTML=h; P.appendChild(d); on.forEach(f=>{try{f()}catch(er){console.error(er)}})}}
+
+// ---------- comandos ----------
+CMDS.push(
+ {id:"ret",n:"Retângulo",g:"Desenho",a:["RET","RETANGULO","REC","RECTANG"],f:()=>cmdRect()},
+ {id:"arco",n:"Arco (três pontos)",g:"Desenho",a:["ARCO","ARC"],f:()=>cmdArc()},
+ {id:"cota",n:"Cota alinhada (continue a clicar para cotas encadeadas)",g:"Desenho",a:["COTA","DIM","DIMALI","DAL"],f:()=>cmdDim("al")},
+ {id:"cotahv",n:"Cota horizontal / vertical (continue a clicar para encadear)",g:"Desenho",a:["COTAHV","DIMLIN","DLI"],f:()=>cmdDim("lin")},
+ {id:"chamada",n:"Chamada com seta (lê os dados do símbolo ou cabo)",g:"Desenho",a:["CHAMADA","LEADER","LE"],f:()=>cmdLdr()},
+ {id:"trama",n:"Trama (zonas, existente / a executar)…",g:"Desenho",a:["TRAMA","HATCH"],desk:true,f:()=>cmdHatch()},
+ {id:"nuvem",n:"Nuvem de revisão…",g:"Desenho",a:["NUVEM","REVCLOUD"],desk:true,f:()=>cmdCloud()},
+ {id:"revisoes",n:"Revisões desta planta (aparecem no carimbo)…",g:"Desenho",a:["REVISOES","REVS"],desk:true,f:()=>cmdRevs()},
+ {id:"tabela",n:"Tabela no desenho (circuitos ou quadro de cargas)…",g:"Desenho",a:["TABELA","TABLE"],desk:true,f:()=>cmdTab()},
+ {id:"partir",n:"Partir (num ponto ou entre dois pontos)",g:"Modificar",a:["PARTIR","BREAK","BR"],f:()=>cmdBreak()},
+ {id:"unir",n:"Juntar retas, arcos e polilinhas (ou cabos) numa só",g:"Modificar",a:["UNIR","JOIN","JUNTAR LINHAS"],f:()=>cmdJoin()},
+ {id:"esticar",n:"Esticar (os pontos dentro de uma janela)",g:"Modificar",a:["ESTICAR","STRETCH","STR"],f:()=>cmdStretch()},
+ {id:"substituir",n:"Substituir símbolo (mantém posição, rotação, etiqueta e circuito)",g:"Modificar",a:["SUBSTITUIR","SUBST"],f:()=>cmdRepl()},
+ {id:"espacar",n:"Espaçar igualmente os objetos selecionados",g:"Modificar",a:["ESPACAR","ESPIGUAL"],f:()=>cmdSpaceEq()},
+ {id:"calha",n:"Calha / caminho de cabos com a largura real…",g:"Elétrico",a:["CALHA","ESTEIRA","TRAY"],desk:true,f:()=>cmdTray()},
+ {id:"ligcmd",n:"Ligações de comando (interruptor → pontos de luz)",g:"Elétrico",a:["LIGCMD","LIGACOES"],desk:true,f:()=>cmdLnk()},
+ {id:"lbcirc",n:"Etiquetas de circuito nos símbolos (ligar / desligar)",g:"Elétrico",a:["ETQCIRC","LBCIRC"],desk:true,f:()=>cmdToggle("lbCirc","Etiquetas de circuito ligadas: cada símbolo mostra o circuito a que pertence (e atualizam-se sozinhas).","Etiquetas de circuito desligadas.")},
+ {id:"saltos",n:"Saltos nos cruzamentos de cabos (ligar / desligar)",g:"Elétrico",a:["SALTOS","JUMPS"],desk:true,f:()=>cmdToggle("jumps","Saltos ligados: o cabo desenhado depois salta por cima do que já lá estava.","Saltos desligados.")},
+ {id:"sepesp",n:"Uma planta por especialidade (a partir desta)…",g:"Ficheiro",a:["SEPARAR","SEPESP"],desk:true,f:()=>cmdSepEsp()},
+ {id:"fundopl",n:"Planta de fundo (cinzento, intensidade, camadas, trancar)…",g:"Vista",a:["FUNDOPL","BGSET"],f:()=>cmdBgSet()}
+);
+["calib","pdfvec","bgdel"].forEach(id=>{const c=CMDS.find(x=>x.id===id); if(c){const f=c.f; c.f=function(){ if(bgLocked()){toast("A planta de fundo está trancada (Vista › Planta de fundo… para destrancar).",4000);return} return f.apply(this,arguments)}}});
+// quantidades: as calhas contam à parte, por tipo e medida
+{const _q=quantities; quantities=function(){const r=_q.apply(this,arguments); S.doc.ents.forEach(e=>{ if(e.t!=="pl"||!e.tray||e.layer===PLANTA_LAY)return; const L=entLen(e), k0=e.layer+(e.exist?" (existente)":""), k=trayName(e.tray)+(e.exist?" (existente)":"");
+ if(r.lens.has(k0)){const v=r.lens.get(k0)-L; if(v>1e-9)r.lens.set(k0,v); else r.lens.delete(k0)} r.lens.set(k,(r.lens.get(k)||0)+L)}); return r}}
+
+/*D44-END*/
 /* ================= Arranque ================= */
 </script>
 
