@@ -7275,6 +7275,255 @@ CMDS.push(
  if(r.lens.has(k0)){const v=r.lens.get(k0)-L; if(v>1e-9)r.lens.set(k0,v); else r.lens.delete(k0)} r.lens.set(k,(r.lens.get(k)||0)+L)}); return r}}
 
 /*D44-END*/
+/*U45-BEGIN*/
+/* ================= v45: interface (UI e UX) ================= */
+// Dicas no primeiro uso, gestos e lupa no tablet, teclado numérico próprio, propriedades com o essencial elétrico primeiro,
+// edição em conjunto, painéis e vistas que se lembram, arrastar e largar, abas de plantas, atalhos personalizáveis,
+// círculo a abrir a partir do centro e escalar com o rato (ou a roda).
+const UX45=(()=>{let o={}; try{o=JSON.parse(localStorage.getItem("lc_ux")||"{}")||{}}catch(e){} return Object.assign({tips:true,lupa:true,kp:"auto",keys:{},genOpen:false},o)})();
+function uxSave(){try{localStorage.setItem("lc_ux",JSON.stringify(UX45))}catch(e){}}
+const uxCoarse=()=>{try{return matchMedia("(pointer: coarse)").matches}catch(e){return false}};
+{const st=document.createElement("style"); st.textContent=`
+#tipcard{position:absolute;left:50%;top:38px;transform:translateX(-50%);max-width:min(560px,92%);background:var(--panel);color:var(--txt);border:1px solid var(--acc);border-radius:8px;padding:8px 12px;z-index:22;box-shadow:0 6px 22px #0007;font-size:13px;display:none}
+#tipcard b{color:var(--acc)} #tipcard .tipb{display:flex;gap:6px;justify-content:flex-end;margin-top:6px} #tipcard button{min-height:26px;padding:2px 9px;font-size:12px}
+#lupa{position:fixed;z-index:80;pointer-events:none;border-radius:50%;box-shadow:0 0 0 2px var(--acc),0 6px 18px #0008;display:none;width:150px;height:150px}
+#kpad{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);z-index:120;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;box-shadow:0 8px 28px #000a;display:none;width:min(330px,96vw);touch-action:manipulation}
+#kpad .kph{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--mut);padding:0 2px 4px} #kpad .kpg{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+#kpad .kpg button{min-height:46px;font-size:19px;font-weight:600} #kpad .kpv{font-size:16px;color:var(--txt);font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details.pgen{border-top:1px solid var(--line);margin-top:4px} details.pgen>summary{cursor:pointer;padding:7px 10px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;list-style:revert}
+#pltabs{position:absolute;left:0;top:0;right:0;display:none;gap:2px;padding:3px 6px 0;z-index:12;overflow-x:auto;scrollbar-width:none;pointer-events:none}
+#pltabs button{pointer-events:auto;min-height:24px;padding:2px 10px;font-size:12px;border-radius:6px 6px 0 0;background:var(--panel);opacity:.86;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+#pltabs button.on{background:var(--acc);border-color:var(--acc);color:#fff;opacity:1} #pltabs button.add{opacity:.7;padding:2px 8px}
+#plthumb{position:fixed;z-index:90;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px;box-shadow:0 8px 24px #0009;display:none;pointer-events:none;font-size:12px;color:var(--mut)}
+.rsz{position:absolute;top:0;bottom:0;width:6px;cursor:col-resize;z-index:30} .rsz:hover,.rsz.on{background:var(--acc);opacity:.5}
+#dndghost{position:fixed;z-index:95;pointer-events:none;display:none;background:var(--acc);color:#fff;padding:4px 9px;border-radius:6px;font-size:12px;box-shadow:0 4px 14px #0006;transform:translate(14px,14px)}
+#dropov{position:fixed;inset:0;z-index:150;display:none;align-items:center;justify-content:center;background:rgba(232,116,44,.18);border:4px dashed var(--acc);font-size:22px;color:var(--txt);pointer-events:none}
+.qchips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px} .qchips span{border:1px dashed var(--line);border-radius:6px;padding:4px 10px;font-size:12px} .qchips span.ov{border-color:var(--acc);background:rgba(232,116,44,.15)}
+.hrow[draggable=true]{cursor:grab}
+#wrap.hastabs #symbar{top:36px}`; document.head.appendChild(st)}
+
+// ---------- 1. dica curta no primeiro uso de cada comando ----------
+let TIPS={}; try{TIPS=JSON.parse(localStorage.getItem("lc_tips")||"{}")||{}}catch(e){}
+let tipT=0, tipMute=false;
+function tipShow(key,title){ if(!UX45.tips||tipMute)return; if((TIPS[key]||0)>=2)return;
+ setTimeout(()=>{ if($("modal").style.display==="flex")return; const h=$("hint"), txt=h?h.textContent.trim():""; if(!txt)return;
+  TIPS[key]=(TIPS[key]||0)+1; try{localStorage.setItem("lc_tips",JSON.stringify(TIPS))}catch(e){}
+  let el=$("tipcard"); if(!el){el=document.createElement("div"); el.id="tipcard"; $("wrap").appendChild(el)}
+  el.innerHTML=`<b>${uEsc(title)}</b><div>${uEsc(txt)}</div><div class="tipb"><button id="tipOff">Não mostrar dicas</button><button id="tipOk" class="on">Percebi</button></div>`; el.style.display="block";
+  $("tipOk").onclick=()=>{el.style.display="none"}; $("tipOff").onclick=()=>{UX45.tips=false; uxSave(); el.style.display="none"; toast("Dicas desligadas. Voltam a ligar-se em Definições › Interface.",3500)};
+  clearTimeout(tipT); tipT=setTimeout(()=>{el.style.display="none"},9000)},80)}
+{const _cr=cmdRun; cmdRun=function(c,repeat){tipMute=true; let r; try{r=_cr.apply(this,arguments)}finally{tipMute=false} if(!repeat&&c&&c.id)tipShow("c:"+c.id,String(c.n).replace("…","")); return r}}
+{const _st=setTool; setTool=function(t){const r=_st.apply(this,arguments); if(t!=="select"&&typeof CMDN!=="undefined"&&CMDN[t]&&S.tool===t)tipShow("t:"+t,CMDN[t]); return r}}
+
+// ---------- 2. gestos: toque com dois dedos anula, com três refaz ----------
+{let G2=null;
+ window.addEventListener("pointerdown",ev=>{ if(ev.pointerType!=="touch"||ev.target!==cv)return; if(!G2||G2.done)G2={t:Date.now(),n:0,max:0,pts:new Map(),moved:false,done:false};
+  G2.n++; G2.max=Math.max(G2.max,G2.n); G2.pts.set(ev.pointerId,[ev.clientX,ev.clientY]); if(G2.max>=2){S.touchStart=null; clearTimeout(S.longT); lupaHide()}},true);
+ window.addEventListener("pointermove",ev=>{ if(!G2||G2.done||ev.pointerType!=="touch")return; const p=G2.pts.get(ev.pointerId); if(p&&Math.hypot(ev.clientX-p[0],ev.clientY-p[1])>16)G2.moved=true},true);
+ const up=ev=>{ if(!G2||G2.done||ev.pointerType!=="touch"||!G2.pts.has(ev.pointerId))return; G2.pts.delete(ev.pointerId); G2.n--; if(G2.max>=2){S.touchStart=null; clearTimeout(S.longT)}
+  if(G2.n<=0){const dt=Date.now()-G2.t; if(!G2.moved&&dt<380&&G2.max>=2){ if(G2.max===2){undo(); toast("Anulado (toque com dois dedos).",1300)} else {redo(); toast("Refeito (toque com três dedos).",1300)}} G2.done=true}};
+ window.addEventListener("pointerup",up,true); window.addEventListener("pointercancel",up,true)}
+
+// ---------- 3. lupa no ponto de toque ----------
+function lupaHide(){const el=$("lupa"); if(el)el.style.display="none"}
+function lupaShow(ev){ if(!UX45.lupa)return; if(!(S.tool!=="select"||(S.drag&&(S.drag.grip||S.drag.move||S.drag.lab))))return lupaHide();
+ const r=cv.getBoundingClientRect(), px=ev.clientX-r.left, py=ev.clientY-r.top; let el=$("lupa"); if(!el){el=document.createElement("canvas"); el.id="lupa"; el.width=el.height=300; document.body.appendChild(el)}
+ let x=ev.clientX-75, y=ev.clientY-200; if(y<4)y=ev.clientY+60; x=Math.max(4,Math.min(innerWidth-154,x)); el.style.left=x+"px"; el.style.top=y+"px"; el.style.display="block";
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{const k=cv.width/Math.max(1,cv.clientWidth), c=el.getContext("2d"), R=36;
+  c.save(); c.clearRect(0,0,300,300); c.beginPath(); c.arc(150,150,149,0,Math.PI*2); c.clip(); c.fillStyle=getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim()||"#111"; c.fillRect(0,0,300,300);
+  c.drawImage(cv,(px-R)*k,(py-R)*k,2*R*k,2*R*k,0,0,300,300); c.strokeStyle="#e8742c"; c.lineWidth=2; c.beginPath(); c.moveTo(150,120); c.lineTo(150,180); c.moveTo(120,150); c.lineTo(180,150); c.stroke(); c.restore()}))}
+cv.addEventListener("pointermove",ev=>{ if(ev.pointerType==="touch"&&S.pointers&&S.pointers.size===1&&!S.pinch&&!S.pan)lupaShow(ev)});
+["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,ev=>{ if(ev.pointerType==="touch")lupaHide()}));
+
+// ---------- 4. teclado numérico próprio (tablet) ----------
+const KP_KEYS=["7","8","9","⌫","4","5","6","-","1","2","3",";","0",",","@","OK"];
+let KP=null;
+const kpOn=()=>UX45.kp==="sempre"||(UX45.kp==="auto"&&uxCoarse());
+function kpOpen(inp){let el=$("kpad"); if(!el){el=document.createElement("div"); el.id="kpad";
+  el.innerHTML=`<div class="kph"><span id="kpT"></span><span class="kpv" id="kpV"></span><button data-kk="x" style="min-height:26px;padding:0 9px">✕</button></div><div class="kpg">${KP_KEYS.map(k=>`<button data-kk="${k}" class="${k==="OK"?"on":""}">${k}</button>`).join("")}</div>`;
+  document.body.appendChild(el); el.addEventListener("pointerdown",ev=>ev.preventDefault()); el.querySelectorAll("[data-kk]").forEach(b=>b.onclick=()=>kpKey(b.dataset.kk))}
+ if(inp.type==="number"){inp.dataset.kpnum="1"; try{inp.type="text"}catch(e){}} inp.setAttribute("inputmode","none");
+ const lab=inp.id==="cmd"?"Linha de comando (comprimento, @dx;dy, x;y)":((inp.closest(".row")||inp.parentNode).querySelector("label")||{}).textContent||"Número";
+ KP={inp}; $("kpT").textContent=lab; $("kpV").textContent=inp.value; el.style.display="block"}
+function kpClose(){const el=$("kpad"); if(el)el.style.display="none"; KP=null}
+function kpKey(k){ if(!KP)return; const i=KP.inp;
+ if(k==="x"){kpClose(); i.blur(); return}
+ if(k==="OK"){ if(i.id==="cmd"){const v=i.value; kpClose(); i.focus(); if(v.trim())cmdExec(); i.value=""; i.blur(); return} i.dispatchEvent(new Event("change",{bubbles:true})); kpClose(); i.blur(); return}
+ if(k==="⌫")i.value=i.value.slice(0,-1); else i.value+=(k===","&&i.dataset.kpnum)?".":k;
+ i.dispatchEvent(new Event("input",{bubbles:true})); $("kpV").textContent=i.value}
+document.addEventListener("focusin",ev=>{const t=ev.target; if(!t||t.tagName!=="INPUT"||!kpOn())return; const im=t.getAttribute("inputmode")||""; if(t.type==="number"||t.dataset.kpnum||/decimal|numeric/.test(im))kpOpen(t)});
+document.addEventListener("focusout",ev=>{ if(KP&&ev.target===KP.inp&&KP.inp.id!=="cmd")setTimeout(()=>{ if(KP&&document.activeElement!==KP.inp)kpClose()},200)});
+function kpCmd(){const i=$("cmd"); i.value=""; kpOpen(i); i.focus()}
+
+// ---------- 5 e 6. propriedades: o essencial elétrico primeiro, o resto recolhido; edição em conjunto ----------
+{const _rp=refreshProps; refreshProps=function(){_rp.apply(this,arguments); try{propsReorg()}catch(er){console.error(er)}}}
+function propsReorg(){const P=$("props"), sel=[...S.sel]; if(!P||!sel.length)return; const syms=sel.filter(e=>e.t==="sym"), allSym=syms.length===sel.length;
+ if(!(allSym||sel.every(e=>e.t==="sym"||e.t==="cable")))return;
+ const lay=$("pLay"), simB=$("pSim"); if(lay&&simB){const a=lay.closest(".row"), b=simB.closest(".pbtns"); if(a&&b&&a.parentNode===b.parentNode){const d=document.createElement("details"); d.className="pgen"; d.open=!!UX45.genOpen;
+  d.innerHTML='<summary>Camada, cor, linha e espessura</summary>'; a.parentNode.insertBefore(d,a); let n=a; while(n){const nx=n.nextSibling; d.appendChild(n); if(n===b)break; n=nx} d.addEventListener("toggle",()=>{UX45.genOpen=d.open; uxSave()})}}
+ if(!allSym)return;
+ const C=S.doc.circs||[], isQ=syms.every(isQuadro), ap=f=>{pushUndo(); f(); LC_VER++; rebuildIndex(); refreshUI(); draw(); saveLocal()};
+ let h='<div class="psec">Elétrico</div>';
+ if(!isQ){const cur=new Set(syms.map(e=>{const ci=C.find(c=>(c.objs||[]).includes(e.id)); return ci?String(ci.id):""})), v0=cur.size===1?[...cur][0]:"__";
+  h+=`<div class="row"><label>Circuito</label><select id="pxCirc">${cur.size>1?'<option value="__" selected>(vários)</option>':""}<option value="" ${v0===""?"selected":""}>(sem circuito)</option>${C.map(c=>{const q=circQ(c); return `<option value="${c.id}" ${v0===String(c.id)?"selected":""}>${uEsc(circName(c)||"(sem nome)")}${q?" · "+uEsc(quadroName(q)||"quadro"):""}</option>`}).join("")}</select></div>`;
+  if(v0&&v0!=="__"){const ci=C.find(c=>String(c.id)===v0), q=ci&&circQ(ci); h+=`<div class="pinfo"><span>Quadro</span><b>${uEsc(q?quadroName(q)||"(sem nome)":"—")}</b></div>`}}
+ // altura e IP para símbolos de tipos diferentes (os do mesmo tipo já têm as Opções)
+ const sameType=syms.every(e=>e.sym===syms[0].sym), lists=syms.map(e=>symOptList(e.sym)||[]), common=k=>lists.every(L=>L.some(f=>f.k===k));
+ if(!sameType){[["h","Altura de montagem (m)"],["ip","Índice de proteção"]].forEach(([k,l])=>{ if(!common(k))return; const vs=new Set(syms.map(e=>String(symOptVal(e)[k]??""))), mix=vs.size>1, v=mix?"":[...vs][0];
+  const f=lists[0].find(x=>x.k===k); h+=f.type==="select"?`<div class="row"><label>${l}</label><select class="pxOpt" data-k="${k}">${mix?'<option value="__" selected>(vários)</option>':""}${f.opts.map(o=>`<option value="${o[0]}" ${!mix&&v===o[0]?"selected":""}>${o[1]}</option>`).join("")}</select></div>`
+   :`<div class="row"><label>${l}</label><input type="text" inputmode="decimal" class="pxOpt" data-k="${k}" value="${uEsc(v)}" placeholder="${mix?"(vários)":""}"></div>`})}
+ if(syms.length>1){const rs=new Set(syms.map(e=>String(Math.round(e.rot||0)))), ss=new Set(syms.map(e=>String(e.scale||1)));
+  h+=`<div class="row"><label>Rotação (°)</label><input type="text" inputmode="decimal" id="pxRot" value="${rs.size===1?[...rs][0]:""}" placeholder="${rs.size>1?"(várias)":""}"></div><div class="row"><label>Escala</label><input type="text" inputmode="decimal" id="pxSc" value="${ss.size===1?[...ss][0]:""}" placeholder="${ss.size>1?"(várias)":""}"></div>`}
+ const sec=document.createElement("div"); sec.className="pelec"; sec.innerHTML=h;
+ // as opções elétricas que já existem (altura, IP) e a etiqueta sobem para esta secção
+ P.querySelectorAll('.pOpt[data-k="h"],.pOpt[data-k="ip"]').forEach(o=>{const r=o.closest(".row"); if(r)sec.appendChild(r)});
+ const lb=$("pLab"); if(lb&&lb.closest(".row"))sec.appendChild(lb.closest(".row"));
+ const first=P.querySelector(".pinfo"); if(first&&first.parentNode===P)P.insertBefore(sec,first.nextSibling); else P.insertBefore(sec,P.firstChild);
+ if($("pxCirc"))$("pxCirc").onchange=ev=>{const v=ev.target.value; if(v==="__")return; ap(()=>{const ids=new Set(syms.map(e=>e.id)); C.forEach(c=>c.objs=(c.objs||[]).filter(i=>!ids.has(i))); if(v){const ci=C.find(c=>String(c.id)===v); if(ci)ci.objs.push(...ids)}}); toast(v?syms.length+" objeto(s) no circuito "+circName(C.find(c=>String(c.id)===v))+".":"Tirados do circuito.",2200)};
+ sec.querySelectorAll(".pxOpt").forEach(el=>el.onchange=()=>{const k=el.dataset.k; if(el.value==="__")return; const raw=el.value.trim(), v=k==="h"?(raw===""?"":parseFloat(raw.replace(",","."))):raw; ap(()=>syms.forEach(e=>{e.opt=Object.assign({},e.opt||{},{[k]:v})}))});
+ if($("pxRot"))$("pxRot").onchange=ev=>{const v=parseFloat(String(ev.target.value).replace(",",".")); if(isFinite(v))ap(()=>syms.forEach(e=>e.rot=((v%360)+360)%360))};
+ if($("pxSc"))$("pxSc").onchange=ev=>{const v=parseFloat(String(ev.target.value).replace(",",".")); if(v>0)ap(()=>syms.forEach(e=>e.scale=v))}}
+
+// ---------- 7. painéis que se lembram (aberto/fechado, largura) e vistas guardadas por planta ----------
+function viewGet(){const W=cv.clientWidth,H=cv.clientHeight, c=S2W(W/2,H/2); return {c:[c[0],c[1]],s:S.view.s}}
+function viewSet(v,withLay){ if(!v)return; S.view.s=v.s; const W=cv.clientWidth,H=cv.clientHeight, q=toV(v.c[0],v.c[1]); S.view.ox=W/2-q[0]*v.s; S.view.oy=H/2+q[1]*v.s;
+ if(withLay&&v.lay){S.doc.layers.forEach(l=>{ if(v.lay[l.name]!=null)l.visible=v.lay[l.name]}); rebuildIndex(); refreshUI()} draw()}
+{const _ap=activatePlanta; activatePlanta=function(i,keepView){ if(S.doc&&PROJ&&PROJ.plantas.includes(S.doc))S.doc.lastView=viewGet(); const nd=PROJ&&PROJ.plantas[i], lv=nd&&nd.lastView;
+ const r=_ap.call(this,i,keepView||!!lv); if(lv&&!keepView)viewSet(lv,false); plTabs(); return r}}
+{const _up=updPlantaUI; updPlantaUI=function(){const r=_up.apply(this,arguments); plTabs(); return r}}
+function viewsDialog(){const V=S.doc.views||(S.doc.views=[]);
+ const html=`<div class="small" style="margin-bottom:6px">Vistas desta planta: o zoom, o sítio e (se quiser) as especialidades visíveis.</div>`+(V.length?'<div class="hlist">'+V.map((v,i)=>`<div class="hrow"><div><b>${uEsc(v.n)}</b>${v.lay?' <span class="small">· com camadas</span>':""}</div><button data-vg="${i}" class="on">Ir</button><button data-vd="${i}">✕</button></div>`).join("")+'</div>':'<div class="small">Ainda não há vistas guardadas.</div>')+
+  `<label style="margin-top:10px">Guardar a vista atual com o nome</label><input type="text" id="vwN" value="Vista ${V.length+1}"><label class="chk"><input type="checkbox" id="vwL" checked> Guardar também que especialidades estão visíveis</label>`;
+ xDlg("Vistas guardadas",html,()=>{const n=$("vwN").value.trim(); if(!n)return; const v=viewGet(); if($("vwL").checked){v.lay={}; S.doc.layers.forEach(l=>v.lay[l.name]=l.visible)} v.n=n; V.push(v); saveLocal(); toast("Vista «"+n+"» guardada.",2000)},"Guardar a vista atual");
+ const b=$("mbox"); b.querySelectorAll("[data-vg]").forEach(x=>x.onclick=()=>{$("modal").style.display="none"; viewSet(V[+x.dataset.vg],true)}); b.querySelectorAll("[data-vd]").forEach(x=>x.onclick=()=>{V.splice(+x.dataset.vd,1); saveLocal(); viewsDialog()})}
+function panelsInit(){
+ const wide=()=>innerWidth>760, P=UX45.pan||(UX45.pan={});
+ ["left","right"].forEach(id=>{const el=$(id); if(!el)return; if(P[id+"H"]!=null&&wide())el.classList.toggle("hide",!!P[id+"H"]); if(P[id+"W"]&&wide())el.style.width=P[id+"W"]+"px";
+  const h=document.createElement("div"); h.className="rsz"; h.id="rsz_"+id; h.style.position="fixed"; h.title="Arraste para mudar a largura do painel (fica guardada)"; document.body.appendChild(h);
+  h.addEventListener("pointerdown",ev=>{ if(!wide())return; ev.preventDefault(); h.setPointerCapture(ev.pointerId); h.classList.add("on"); const x0=ev.clientX, w0=el.getBoundingClientRect().width;
+   const mv=e=>{const w=Math.max(150,Math.min(560,w0+(id==="left"?1:-1)*(e.clientX-x0))); el.style.width=w+"px"; resize()};
+   const upf=()=>{h.classList.remove("on"); h.removeEventListener("pointermove",mv); h.removeEventListener("pointerup",upf); P[id+"W"]=Math.round(el.getBoundingClientRect().width); uxSave()};
+   h.addEventListener("pointermove",mv); h.addEventListener("pointerup",upf)})});
+ [["bL","left"],["bR","right"]].forEach(([b,id])=>{const bt=$(b); if(!bt)return; const f=bt.onclick; bt.onclick=function(){ if(f)f.apply(this,arguments); if(wide()){P[id+"H"]=$(id).classList.contains("hide"); uxSave()}}});
+ setTimeout(resize,0)}
+function rszPos(){[["left",1],["right",0]].forEach(([id,r])=>{const el=$(id), h=$("rsz_"+id); if(!el||!h)return; const b=el.getBoundingClientRect(); if(el.classList.contains("hide")||innerWidth<=760||!b.width){h.style.display="none"; return}
+ h.style.display="block"; h.style.top=b.top+"px"; h.style.height=b.height+"px"; h.style.bottom="auto"; h.style.left=(r?b.right-3:b.left-3)+"px"})}
+{const _rs=resize; resize=function(){const r=_rs.apply(this,arguments); try{rszPos()}catch(e){} return r}}
+
+// ---------- 8. arrastar e largar: símbolo da paleta, ficheiros, circuitos para outro quadro ----------
+{let D=null, noClick=false; const L=$("left");
+ if(L){L.addEventListener("pointerdown",ev=>{const s=ev.target.closest&&ev.target.closest(".sym"); if(!s||ev.button!==0||ev.pointerType==="touch")return; D={k:s.dataset.k,x:ev.clientX,y:ev.clientY,on:false}});
+  L.addEventListener("click",ev=>{ if(noClick){ev.stopPropagation(); ev.preventDefault(); noClick=false}},true)}
+ window.addEventListener("pointermove",ev=>{ if(!D)return; if(!D.on&&Math.hypot(ev.clientX-D.x,ev.clientY-D.y)<8)return; if(!D.on){D.on=true; let g=$("dndghost"); if(!g){g=document.createElement("div"); g.id="dndghost"; document.body.appendChild(g)} g.textContent=(SYM[D.k]?SYM[D.k].n:D.k)+" · largue no desenho"; g.style.display="block"}
+  const g=$("dndghost"); g.style.left=ev.clientX+"px"; g.style.top=ev.clientY+"px"});
+ window.addEventListener("pointerup",ev=>{ if(!D)return; const d=D; D=null; const g=$("dndghost"); if(g)g.style.display="none"; if(!d.on)return; noClick=true; setTimeout(()=>noClick=false,300);
+  const r=cv.getBoundingClientRect(); if(ev.clientX<r.left||ev.clientX>r.right||ev.clientY<r.top||ev.clientY>r.bottom||!SYM[d.k])return;
+  S.sel.clear(); S.sym=d.k; S.symRot=0; S.symFlip=false; setTool("sym"); S.sym=d.k; document.querySelectorAll(".sym").forEach(b=>b.classList.toggle("on",b.dataset.k===d.k));
+  const [x,y]=evW(ev); onMove(x,y,ev); onDown(x,y,0,ev); toast("«"+SYM[d.k].n+"» colocado. Clique para pôr mais; Esc termina.",2500)})}
+{let n=0; const ov=()=>{let o=$("dropov"); if(!o){o=document.createElement("div"); o.id="dropov"; o.textContent="Largue o ficheiro para o abrir (PDF, DWG, DXF, imagem ou projeto)"; document.body.appendChild(o)} return o};
+ const hasF=ev=>ev.dataTransfer&&[...(ev.dataTransfer.types||[])].includes("Files");
+ window.addEventListener("dragenter",ev=>{ if(!hasF(ev))return; n++; ov().style.display="flex"});
+ window.addEventListener("dragleave",ev=>{ if(!hasF(ev))return; n=Math.max(0,n-1); if(!n)ov().style.display="none"});
+ window.addEventListener("dragover",ev=>{ if(hasF(ev))ev.preventDefault()});
+ window.addEventListener("drop",ev=>{ if(!hasF(ev))return; ev.preventDefault(); n=0; ov().style.display="none"; const f=ev.dataTransfer.files&&ev.dataTransfer.files[0]; if(!f)return;
+  if(!/\.(pdf|dwg|dxf|json|png|jpe?g|webp|gif|bmp)$/i.test(f.name)){toast("Este tipo de ficheiro não se abre aqui: «"+f.name+"».",3500); return} openFile(f)})}
+{const _cl=circListDialog; circListDialog=function(){_cl.apply(this,arguments); const b=$("mbox"), C=circsOf(), Q=S.doc.ents.filter(isQuadro); if(!b||Q.length<2||!C.length)return;
+ const list=b.querySelector(".hlist"); if(!list)return; const bar=document.createElement("div"); bar.className="qchips"; bar.innerHTML='<span class="small" style="border:0;padding:4px 0">Arraste um circuito para outro quadro:</span>'+Q.map(q=>`<span data-qd="${q.id}">${uEsc(quadroName(q)||"(quadro sem nome)")}</span>`).join("");
+ list.parentNode.insertBefore(bar,list);
+ const move=(ci,qid)=>{const q=Q.find(x=>String(x.id)===String(qid)); if(!q||ci.q===q.id)return; pushUndo(); ci.q=q.id; LC_VER++; refreshUI(); draw(); saveLocal(); toast("Circuito "+circName(ci)+" passou para "+(quadroName(q)||"o quadro")+".",2500); circListDialog()};
+ [...list.children].forEach((row,i)=>{const ci=C[i]; if(!ci)return; row.draggable=true; row.addEventListener("dragstart",ev=>{ev.dataTransfer.setData("text/lc-circ",String(i)); ev.dataTransfer.effectAllowed="move"});
+  const sel=document.createElement("select"); sel.title="Mudar de quadro"; sel.style.maxWidth="92px"; sel.innerHTML=Q.map(q=>`<option value="${q.id}" ${q.id===ci.q?"selected":""}>${uEsc(quadroName(q)||"quadro")}</option>`).join(""); sel.onchange=()=>move(ci,sel.value); row.insertBefore(sel,row.querySelector("button"))});
+ bar.querySelectorAll("[data-qd]").forEach(ch=>{ch.addEventListener("dragover",ev=>{ev.preventDefault(); ch.classList.add("ov")}); ch.addEventListener("dragleave",()=>ch.classList.remove("ov"));
+  ch.addEventListener("drop",ev=>{ev.preventDefault(); ch.classList.remove("ov"); const i=+ev.dataTransfer.getData("text/lc-circ"); if(C[i])move(C[i],ch.dataset.qd)})})}}
+
+// ---------- 9. abas das plantas (com miniatura) e Ctrl+Tab ----------
+function plTabs(){const w=$("wrap"); if(!w||!PROJ)return; let bar=$("pltabs"); if(!bar){bar=document.createElement("div"); bar.id="pltabs"; w.appendChild(bar)}
+ if(PROJ.plantas.length<2){bar.style.display="none"; w.classList.remove("hastabs"); return} bar.style.display="flex"; w.classList.add("hastabs");
+ bar.innerHTML=PROJ.plantas.map((p,i)=>`<button data-pt="${i}" class="${i===PROJ.act?"on":""}">${uEsc(p.pname||("Planta "+(i+1)))}${p.esp&&p.esp!==p.pname&&!String(p.pname||"").includes(p.esp)?" · "+uEsc(p.esp):""}</button>`).join("")+'<button class="add" id="ptAdd" title="Nova planta neste projeto">+</button>';
+ bar.querySelectorAll("[data-pt]").forEach(b=>{b.onclick=()=>{const i=+b.dataset.pt; if(i!==PROJ.act)activatePlanta(i)}; b.onmouseenter=ev=>plThumb(+b.dataset.pt,b); b.onmouseleave=()=>{const t=$("plthumb"); if(t)t.style.display="none"}});
+ $("ptAdd").onclick=()=>newPlantaDialog()}
+function plThumb(i,btn){const p=PROJ.plantas[i]; if(!p)return; let t=$("plthumb"); if(!t){t=document.createElement("div"); t.id="plthumb"; t.innerHTML='<canvas width="320" height="220" style="width:160px;height:110px;display:block;border-radius:4px"></canvas><div class="ptx"></div>'; document.body.appendChild(t)}
+ const c=t.querySelector("canvas"), x=c.getContext("2d"), src=plantaRefSrc(p), R=(src.ref||[]).slice(0,6000), E=p.ents; let a=Infinity,b=Infinity,cc=-Infinity,d=-Infinity; const B=(X,Y)=>{ if(isFinite(X)&&isFinite(Y)){a=Math.min(a,X);b=Math.min(b,Y);cc=Math.max(cc,X);d=Math.max(d,Y)}};
+ const pts=e=>e.t==="line"?[[e.x1,e.y1],[e.x2,e.y2]]:(e.t==="pl"||e.t==="cable")?e.pts:e.x!=null?[[e.x,e.y]]:[]; R.forEach(e=>pts(e).forEach(q=>B(q[0],q[1]))); E.forEach(e=>pts(e).forEach(q=>B(q[0],q[1])));
+ x.fillStyle=getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim()||"#111"; x.fillRect(0,0,320,220);
+ if(a<Infinity){const s=Math.min(300/((cc-a)||1),200/((d-b)||1)), ox=(320-(cc-a)*s)/2, oy=(220-(d-b)*s)/2, P=(X,Y)=>[ox+(X-a)*s,220-oy-(Y-b)*s];
+  const dr=(e,col)=>{const Q=pts(e); x.strokeStyle=col; x.fillStyle=col; if(e.t==="sym"||e.t==="text"||e.t==="dim"||e.t==="tab"){const [u,v]=P(Q[0][0],Q[0][1]); x.fillRect(u-1.5,v-1.5,3,3); return} if(e.t==="circle"){const [u,v]=P(e.x,e.y); x.beginPath(); x.arc(u,v,Math.max(1,e.r*s),0,7); x.stroke(); return} if(Q.length<2)return; x.beginPath(); Q.forEach((q,k)=>{const [u,v]=P(q[0],q[1]); k?x.lineTo(u,v):x.moveTo(u,v)}); if(e.closed)x.closePath(); x.stroke()};
+  x.lineWidth=1; R.forEach(e=>dr(e,"#6b7280")); E.forEach(e=>{const l=p.layers.find(q=>q.name===e.layer); dr(e,l?l.color:"#e5e7eb")})}
+ t.querySelector(".ptx").textContent=(p.pname||("Planta "+(i+1)))+(p.esp?" · "+p.esp:"")+" · "+E.length+" objeto(s)"+(p.refOf?" · fundo partilhado":"");
+ const r=btn.getBoundingClientRect(); t.style.left=Math.min(innerWidth-180,r.left)+"px"; t.style.top=(r.bottom+4)+"px"; t.style.display="block"}
+function plNext(dir){ if(!PROJ||PROJ.plantas.length<2)return; const n=PROJ.plantas.length; activatePlanta((PROJ.act+dir+n)%n); toast(S.doc.pname||"Planta",1200)}
+
+// ---------- 10. atalhos de teclado personalizáveis e folha de atalhos ----------
+const KEYS_FIX=[["Ctrl+Z","Anular"],["Ctrl+Y","Refazer"],["Ctrl+C / Ctrl+X / Ctrl+V","Copiar, cortar, colar"],["Ctrl+D","Duplicar"],["Ctrl+A","Selecionar tudo"],["Ctrl+S","Guardar (Ctrl+Shift+S: guardar como)"],["Ctrl+O","Abrir"],["Ctrl+N","Novo"],["Ctrl+P","Imprimir / exportar folha"],["Enter / Espaço","Termina o comando; vazio repete o último"],["Esc","Cancela"],["Delete","Apagar"],["F2","Histórico da linha de comando"],["F3","Snap"],["F8","Orto"],["Ctrl+Tab / F6","Planta seguinte (Shift: anterior)"],["Espaço + arrastar","Deslocar a vista"],["Roda do rato","Zoom"]];
+const kcombo=ev=>{const k=ev.key; if(["Control","Shift","Alt","Meta"].includes(k))return ""; const n=k.length===1?k.toUpperCase():k==="Tab"?"Tab":k; return (ev.ctrlKey||ev.metaKey?"Ctrl+":"")+(ev.altKey?"Alt+":"")+(ev.shiftKey&&k.length!==1?"Shift+":ev.shiftKey&&/[A-Z]/i.test(k)?"Shift+":"")+n};
+function keysDialog(){const K=UX45.keys||(UX45.keys={}), inv={}; Object.entries(K).forEach(([c,id])=>inv[id]=c); const cmds=CMDS.filter(cmdAvail);
+ const html=`<div class="small" style="margin-bottom:6px">Clique em «Definir» e carregue na tecla ou combinação (por exemplo F5, Alt+L ou Ctrl+Shift+R). Uma letra sozinha deixa de servir para escrever esse comando na linha de comando; prefira F1 a F12 ou combinações com Ctrl ou Alt. Esc apaga.</div>
+  <input type="text" id="kyQ" placeholder="Procurar comando…" style="width:100%;margin-bottom:6px"><div id="kyL" style="max-height:48vh;overflow:auto"></div><div class="row" style="margin-top:8px"><button id="kyP" style="flex:1">Folha de atalhos para imprimir</button><button id="kyR" style="flex:1">Apagar os meus atalhos</button></div>`;
+ xDlg("Atalhos de teclado",html,()=>{uxSave()},"Fechar");
+ const draw2=()=>{const q=cNorm($("kyQ").value||""); $("kyL").innerHTML=cmds.filter(c=>!q||cNorm(c.n).includes(q)||c.a.some(a=>cNorm(a).includes(q))).map(c=>`<div class="hrow"><div>${uEsc(c.n.replace("…",""))}<br><span class="small">${uEsc(c.a.slice(0,3).join(", "))}</span></div><b style="min-width:76px;text-align:right">${uEsc(inv[c.id]||"")}</b><button data-ky="${c.id}">Definir</button></div>`).join("");
+  $("kyL").querySelectorAll("[data-ky]").forEach(b=>b.onclick=()=>{b.textContent="carregue…"; b.classList.add("on"); const f=ev=>{ev.preventDefault(); ev.stopPropagation(); const id=b.dataset.ky;
+   if(ev.key==="Escape"){ if(inv[id]){delete K[inv[id]]; delete inv[id]}} else {const c=kcombo(ev); if(!c)return; if(KEYS_FIX.some(x=>x[0].split(" / ").includes(c))){toast(c+" já é um atalho do programa.",2500)} else {if(K[c]&&K[c]!==id){toast(c+" deixou de servir «"+((CMDS.find(x=>x.id===K[c])||{}).n||K[c])+"».",3000); delete inv[K[c]]} if(inv[id])delete K[inv[id]]; K[c]=id; inv[id]=c}}
+   window.removeEventListener("keydown",f,true); uxSave(); draw2()}; window.addEventListener("keydown",f,true)})};
+ $("kyQ").oninput=draw2; $("kyQ").onkeydown=ev=>ev.stopPropagation(); draw2(); $("kyP").onclick=keysSheet; $("kyR").onclick=()=>{ if(!confirm("Apagar todos os atalhos que definiu?"))return; UX45.keys={}; uxSave(); $("modal").style.display="none"; keysDialog()}}
+function keysSheet(){const K=UX45.keys||{}, mine=Object.entries(K).map(([c,id])=>[c,((CMDS.find(x=>x.id===id)||{}).n||id).replace("…","")]), cmds=CMDS.filter(cmdAvail).filter(c=>c.a&&c.a.length).sort((a,b)=>a.a[0].localeCompare(b.a[0]));
+ const tr=r=>`<tr><td class="k">${uEsc(r[0])}</td><td>${uEsc(r[1])}</td></tr>`;
+ const html=`<!doctype html><html lang="pt"><head><meta charset="utf-8"><title>LevantaCAD · atalhos</title><style>@page{size:A4;margin:10mm}body{font:9pt Arial,sans-serif;color:#111;margin:0}h1{font-size:14pt;margin:0 0 2mm}h2{font-size:10pt;margin:4mm 0 1mm;border-bottom:1px solid #999}.cols{columns:3;column-gap:6mm}table{width:100%;border-collapse:collapse}td{padding:.4mm 1mm;vertical-align:top;border-bottom:1px solid #eee}td.k{font-weight:bold;white-space:nowrap;width:1%}.small{color:#666;font-size:8pt}</style></head><body>
+ <h1>LevantaCAD · atalhos e comandos</h1><div class="small">Escreva o comando (ou uma das abreviaturas) em qualquer lado e carregue Enter. Números: distância na direção do cursor; @dx;dy ou x;y em metros.</div>
+ <h2>Teclas</h2><table>${KEYS_FIX.map(tr).join("")}${mine.map(tr).join("")}</table><h2>Comandos escritos</h2><div class="cols"><table>${cmds.map(c=>tr([c.a.slice(0,2).join(", "),c.n.replace("…","")])).join("")}</table></div></body></html>`;
+ const fr=document.createElement("iframe"); fr.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0"; document.body.appendChild(fr); const d=fr.contentWindow.document; d.open(); d.write(html); d.close();
+ setTimeout(()=>{try{fr.contentWindow.focus(); fr.contentWindow.print()}catch(e){download("LevantaCAD_atalhos.html",html,"text/html")} setTimeout(()=>fr.remove(),60000)},300)}
+window.addEventListener("keydown",ev=>{ if($("modal").style.display==="flex"||($("plot")&&$("plot").style.display==="flex")||($("pe")&&$("pe").style.display==="flex")||($("uni")&&$("uni").style.display==="grid")||($("bed")&&$("bed").style.display==="grid"))return;
+ const tg=ev.target, inField=tg&&(tg.tagName==="INPUT"||tg.tagName==="TEXTAREA"||tg.tagName==="SELECT");
+ if((ev.key==="Tab"&&ev.ctrlKey)||ev.key==="F6"){ if(inField&&tg.id!=="cmd")return; ev.preventDefault(); ev.stopImmediatePropagation(); plNext(ev.shiftKey?-1:1); return}
+ const c=kcombo(ev); if(!c)return; const id=(UX45.keys||{})[c]; if(!id)return; if(inField&&!(tg.id==="cmd"&&(ev.ctrlKey||ev.altKey||/^F\d+$/.test(ev.key))))return;
+ const cmd=CMDS.find(x=>x.id===id); if(!cmd||!cmdAvail(cmd))return; ev.preventDefault(); ev.stopImmediatePropagation(); if(tg&&tg.id==="cmd")tg.blur(); cmdRun(cmd)},true);
+
+// ---------- 11. círculo: clicar no centro e arrastar até ao raio ----------
+{const _od=onDown; onDown=function(x,y,btn,ev){const fresh=S.tool==="circle"&&!S.tmp&&btn!==2; const r=_od.apply(this,arguments); if(fresh&&S.tmp&&S.tmp.c)S.circDn={x,y,sx:S.view.s}; else if(S.tool!=="circle")S.circDn=null; return r}}
+{const _ou=onUp; onUp=function(x,y){const d=S.circDn; if(S.tool==="circle"&&d&&S.tmp&&S.tmp.c){S.circDn=null; if(Math.hypot(x-d.x,y-d.y)*S.view.s>8){const p=snapPt(x,y,S.tmp.c), r=Math.hypot(p[0]-S.tmp.c[0],p[1]-S.tmp.c[1]); if(r>0){pushUndo(); addEnt({t:"circle",x:S.tmp.c[0],y:S.tmp.c[1],r}); rebuildIndex(); refreshQty(); saveLocal()} S.tmp=null; draw(); cmdLog("Círculo de raio "+uF(r*S.doc.unit,2)+" m"); return}} S.circDn=null; return _ou.apply(this,arguments)}}
+{const _dp=drawPastePreview; drawPastePreview=function(){_dp.apply(this,arguments); if(S.tool==="circle"&&S.tmp&&S.tmp.c&&S.mouse){const r=Math.hypot(S.mouse.x-S.tmp.c[0],S.mouse.y-S.tmp.c[1])*S.doc.unit; if(r>0){const [a,b]=W2S(S.mouse.x,S.mouse.y); G.save(); G.fillStyle="#e8742c"; G.font="12px Arial"; G.fillText("R = "+uF(r,2)+" m",a+10,b-10); G.restore()}}
+ if(S.scd)scdPrev()}}
+
+// ---------- 12. escalar com o rato (ou com a roda) ----------
+function scdStart(){ if(!S.sel.size){toast("Selecione primeiro os objetos.");return} const ents=[...S.sel];
+ xPick("Escalar com o rato: ponto base (o que fica parado).",null,null,b=>{let a=Infinity,c=Infinity,d=-Infinity,e=-Infinity; ents.forEach(o=>{const P=o.t==="line"?[[o.x1,o.y1],[o.x2,o.y2]]:o.pts?o.pts:[[o.x,o.y]]; P.forEach(q=>{a=Math.min(a,q[0]);c=Math.min(c,q[1]);d=Math.max(d,q[0]);e=Math.max(e,q[1])})});
+  const d0=Math.max(...[[a,c],[d,c],[d,e],[a,e]].map(q=>Math.hypot(q[0]-b[0],q[1]-b[1])))||U();
+  S.scd={ents,b,d0,f:1,wheel:false,mw:null};
+  const apply=f=>{S.scd=null; if(!(f>0)||Math.abs(f-1)<1e-9){draw(); return} pushUndo(); xformEnts(ents,(x,y)=>[b[0]+(x-b[0])*f,b[1]+(y-b[1])*f],{scale:f}); afterXform(ents); toast("Escalado ×"+uF(f,3)+".",2500)};
+  pickPoint("Escalar: afaste ou aproxime o rato (ou use a roda) e clique para aplicar; escreva um fator para o valor exato. Esc cancela.",()=>apply(S.scd?S.scd.f:1)); S.scd.apply=apply})}
+function scdFactor(){const s=S.scd; if(!s)return 1; if(!s.wheel&&S.mouse){const d=Math.hypot(S.mouse.x-s.b[0],S.mouse.y-s.b[1]); let f=d/s.d0; f=f>=1?Math.round(f*20)/20:Math.round(f*100)/100; s.f=Math.max(.01,f)} return s.f}
+function scdPrev(){const s=S.scd; if(!s||S.tool!=="pickpt"){ if(s&&S.tool!=="pickpt")S.scd=null; return} const f=scdFactor(), b=s.b, C=s.ents.map(e=>JSON.parse(JSON.stringify(e)));
+ xformEnts(C,(x,y)=>[b[0]+(x-b[0])*f,b[1]+(y-b[1])*f],{scale:f}); G.save(); G.setLineDash([]); G.strokeStyle=G.fillStyle="#e8742c"; G.lineWidth=1.2; G.globalAlpha=.8;
+ C.forEach(e=>{ if(e.t==="text"){drawText(e,"#e8742c");return} G.beginPath(); drawGeom(e,false); G.stroke()}); G.globalAlpha=1;
+ const [u,v]=W2S(b[0],b[1]), [m,n]=W2S(S.mouse.x,S.mouse.y); G.setLineDash([4,4]); G.beginPath(); G.moveTo(u,v); G.lineTo(m,n); G.stroke(); G.setLineDash([]); G.font="bold 13px Arial"; G.fillText("× "+uF(f,f<1?2:2)+(s.wheel?"  (roda)":""),m+12,n-12); G.restore()}
+window.addEventListener("wheel",ev=>{ if(!S.scd||ev.target!==cv||S.tool!=="pickpt")return; ev.preventDefault(); ev.stopImmediatePropagation(); const s=S.scd; if(!s.wheel){s.f=scdFactor(); s.wheel=true} s.f=Math.max(.01,Math.round(s.f*(ev.deltaY<0?1.05:1/1.05)*100)/100); s.mw=[S.mouse.x,S.mouse.y]; draw()},{capture:true,passive:false});
+cv.addEventListener("pointermove",()=>{const s=S.scd; if(s&&s.wheel&&s.mw&&Math.hypot(S.mouse.x-s.mw[0],S.mouse.y-s.mw[1])*S.view.s>40){s.wheel=false; s.mw=null}});
+{const _ci=cInput; cInput=function(txt){ if(S.scd&&S.tool==="pickpt"){const c=cParse(txt); if(c&&c.num&&c.d>0){const s=S.scd; S.pickPend=null; setTool("select"); s.apply(c.d); return true}} return _ci.apply(this,arguments)}}
+{const _es=escape; escape=function(){S.scd=null; kpClose(); lupaHide(); return _es.apply(this,arguments)}}
+{const _sd=scaleDialog; scaleDialog=function(){const r=_sd.apply(this,arguments); const b=$("mbox"); if(b&&$("modal").style.display==="flex"&&!$("scdB")){const d=document.createElement("div"); d.className="row"; d.style.marginBottom="6px"; d.innerHTML='<button id="scdB" style="flex:1" title="Clique no ponto base e escale afastando ou aproximando o rato, ou com a roda">Escalar com o rato (dinâmico)…</button>'; b.insertBefore(d,b.querySelector("h4").nextSibling); $("scdB").onclick=()=>{$("modal").style.display="none"; scdStart()}} return r}}
+
+// ---------- definições da interface (no painel Definições) e comandos ----------
+function uxPanel(){const cx=$("cExist"); if(!cx||$("uxSec"))return; const row=cx.closest(".row"); const d=document.createElement("div"); d.id="uxSec";
+ d.innerHTML=`<div class="small" style="margin:10px 10px 2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Interface</div>
+ <div class="row"><label>Dica no primeiro uso de cada comando</label><input type="checkbox" id="uxTips" ${UX45.tips?"checked":""}></div>
+ <div class="row"><label>Lupa ao tocar (tablet)</label><input type="checkbox" id="uxLupa" ${UX45.lupa?"checked":""}></div>
+ <div class="row"><label>Teclado numérico próprio</label><select id="uxKp"><option value="auto" ${UX45.kp==="auto"?"selected":""}>Só no tablet</option><option value="sempre" ${UX45.kp==="sempre"?"selected":""}>Sempre</option><option value="nunca" ${UX45.kp==="nunca"?"selected":""}>Nunca</option></select></div>
+ <div class="pbtns"><button id="uxKeys">Atalhos de teclado…</button><button id="uxViews">Vistas guardadas…</button></div><div class="pbtns"><button id="uxTipR">Voltar a mostrar as dicas</button><button id="uxSheet">Folha de atalhos</button></div>`;
+ row.parentNode.insertBefore(d,row.nextSibling);
+ $("uxTips").onchange=e=>{UX45.tips=e.target.checked; uxSave()}; $("uxLupa").onchange=e=>{UX45.lupa=e.target.checked; uxSave()}; $("uxKp").onchange=e=>{UX45.kp=e.target.value; uxSave(); kpBtn()};
+ $("uxKeys").onclick=keysDialog; $("uxViews").onclick=viewsDialog; $("uxSheet").onclick=keysSheet; $("uxTipR").onclick=()=>{TIPS={}; try{localStorage.removeItem("lc_tips")}catch(e){} UX45.tips=true; uxSave(); $("uxTips").checked=true; toast("As dicas voltam a aparecer nas duas primeiras vezes de cada comando.",3000)}}
+function kpBtn(){let b=$("bKp"); const ch=$("chips"); if(!ch)return; if(!b){b=document.createElement("button"); b.id="bKp"; b.className="chip"; b.textContent="123"; b.title="Teclado numérico para a linha de comando (comprimentos, coordenadas)"; b.onclick=kpCmd; ch.appendChild(b)} b.style.display=kpOn()?"":"none"}
+CMDS.push(
+ {id:"vistas",n:"Vistas guardadas desta planta…",g:"Vista",a:["VISTAS","VIEWS"],f:()=>viewsDialog()},
+ {id:"plnext",n:"Planta seguinte (Ctrl+Tab ou F6)",g:"Vista",a:["PLSEG","PLNEXT"],f:()=>plNext(1)},
+ {id:"atalhos",n:"Atalhos de teclado (personalizar)…",g:"Ajuda",a:["ATALHOS","TECLAS"],f:()=>keysDialog()},
+ {id:"folhatalhos",n:"Folha de atalhos para imprimir",g:"Ajuda",a:["FOLHATALHOS"],f:()=>keysSheet()},
+ {id:"dicas",n:"Dicas no primeiro uso (ligar / desligar)",g:"Ajuda",a:["DICAS"],f:()=>{UX45.tips=!UX45.tips; uxSave(); if($("uxTips"))$("uxTips").checked=UX45.tips; toast(UX45.tips?"Dicas ligadas.":"Dicas desligadas.",1800)}},
+ {id:"escalard",n:"Escalar com o rato (dinâmico)",g:"Modificar",a:["ESCD","ESCALARD","SCD"],f:()=>needSelThen("Escalar com o rato",scdStart)}
+);
+setTimeout(()=>{try{panelsInit(); uxPanel(); kpBtn(); plTabs()}catch(er){console.error(er)}},0);
+
+/*U45-END*/
 /* ================= Arranque ================= */
 </script>
 
